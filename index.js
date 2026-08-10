@@ -19,6 +19,16 @@ function openWhatsApp(message){
 }
 function fmtNaira(n){ return '₦' + n.toLocaleString('en-NG'); }
 
+/* ============================================================
+   MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather
+   than committed to this repo. Update R2_BASE_URL once the
+   bucket's public URL (r2.dev or a custom domain) is known.
+============================================================ */
+const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
+function mediaUrl(relPath){ return `${R2_BASE_URL}/${relPath}`; }
+
+document.getElementById('aboutPhoto').src = mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg');
+
 // Generic WhatsApp buttons (nav, hero, contact, floating)
 const genericWaMessage = `Hello ${CONFIG.businessName}! I'd like to enquire about your cakes and catering services.`;
 ['navWaBtn','heroWaBtn','contactWaBtn','floatWaBtn','contactWaIcon'].forEach(id=>{
@@ -91,12 +101,12 @@ const ICONS = {
    Leave image: null to keep the elegant placeholder frame.
 ============================================================ */
 const galleryItems = [
-  { caption: 'Wedding cake beneath the chandeliers', icon: ICONS.cake, tone:'', image: 'img/504807796_9099742323462413_1120354441484283313_n.jpg', cls:'g-1' },
-  { caption: 'Small chops platter — cocktail hour', icon: ICONS.platter, tone:'tone-b', image: 'img/123520380_2807744082662300_1396207157575276742_n.jpg', cls:'g-2' },
-  { caption: 'Birthday cake, made to order', icon: ICONS.cake, tone:'tone-c', image: 'img/503084596_9068281273275185_5558051441541664408_n.jpg', cls:'g-3' },
-  { caption: 'Crystal-base wedding tier', icon: ICONS.flower, tone:'tone-b', image: 'img/504685489_9085240854912560_3651136197304790624_n.jpg', cls:'g-5' },
-  { caption: 'The six-tier reveal, red & ivory', icon: ICONS.table, tone:'', image: 'img/503736309_9061189193984393_2635635431881218558_n.jpg', cls:'g-6' },
-  { caption: 'Custom novelty cakes, made to order', icon: ICONS.gift, tone:'tone-c', image: 'img/505753228_9109996449103667_9107171079224956350_n.jpg', cls:'g-7' },
+  { caption: 'Wedding cake beneath the chandeliers', icon: ICONS.cake, tone:'', image: mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg'), cls:'g-1' },
+  { caption: 'Small chops platter — cocktail hour', icon: ICONS.platter, tone:'tone-b', image: mediaUrl('img/123520380_2807744082662300_1396207157575276742_n.jpg'), cls:'g-2' },
+  { caption: 'Birthday cake, made to order', icon: ICONS.cake, tone:'tone-c', image: mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg'), cls:'g-3' },
+  { caption: 'Crystal-base wedding tier', icon: ICONS.flower, tone:'tone-b', image: mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg'), cls:'g-5' },
+  { caption: 'The six-tier reveal, red & ivory', icon: ICONS.table, tone:'', image: mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg'), cls:'g-6' },
+  { caption: 'Custom novelty cakes, made to order', icon: ICONS.gift, tone:'tone-c', image: mediaUrl('img/505753228_9109996449103667_9107171079224956350_n.jpg'), cls:'g-7' },
 ];
 
 const galleryGrid = document.getElementById('galleryGrid');
@@ -104,32 +114,41 @@ galleryItems.forEach((item, i)=>{
   const el = document.createElement('div');
   el.className = `media-frame ${item.tone} ${item.cls}`;
   el.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}"><div class="ring"></div>`
+    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div>`
     : `<div class="ring"></div>${item.icon}<span class="cap">${item.caption}</span>`;
   el.addEventListener('click', ()=> openLightbox(item));
   galleryGrid.appendChild(el);
 });
 
 /* ============================================================
-   VIDEO TESTIMONIAL REEL
-   Add a real video by setting `video: "your-video.mp4"` (or an
-   embeddable URL) — the play placeholder is swapped automatically.
+   VIDEO REEL — behind-the-scenes clips (silent, autoplay while
+   in view). Add a real video by setting `video: mediaUrl('videos/
+   your-clip.mp4')` — the play placeholder is swapped automatically.
 ============================================================ */
 const videoTestimonials = [
-  { name: 'Bride, Lekki Wedding', video: null, tone:'' },
-  { name: 'Host, 40th Birthday', video: null, tone:'tone-b' },
-  { name: 'Corporate Client', video: null, tone:'tone-c' },
-  { name: 'Naming Ceremony Family', video: null, tone:'' },
+  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
+  { name: 'Wedding Cake Reveal', video: mediaUrl('videos/InShot_20251120_224656122.mp4'), tone:'tone-b' },
+  { name: 'Wedding Day Moment', video: mediaUrl('videos/InShot_20251122_180814090.mp4'), tone:'tone-c' },
+  { name: 'Birthday Celebration', video: mediaUrl('videos/InShot_20251122_234645706.mp4'), tone:'' },
 ];
 const videoReel = document.getElementById('videoReel');
 videoTestimonials.forEach(v=>{
   const el = document.createElement('div');
   el.className = `media-frame reel-item ${v.tone}`;
   el.innerHTML = v.video
-    ? `<video src="${v.video}" controls playsinline></video>`
-    : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">Client testimonial video</div><span class="cap who">${v.name}</span>`;
+    ? `<video src="${v.video}" muted loop playsinline preload="metadata"></video><div class="cap"><span class="who">${v.name}</span></div>`
+    : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">${v.name}</div>`;
   videoReel.appendChild(el);
 });
+// Autoplay each clip only while it's actually in view (muted, so
+// autoplay is allowed cross-browser); pause it once scrolled away.
+const reelVideoObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting) entry.target.play().catch(()=>{});
+    else entry.target.pause();
+  });
+}, { threshold: 0.5 });
+videoReel.querySelectorAll('video').forEach(v=> reelVideoObserver.observe(v));
 
 /* ============================================================
    TESTIMONIAL QUOTES
@@ -155,7 +174,7 @@ const lightbox = document.getElementById('lightbox');
 const lightboxInner = document.getElementById('lightboxInner');
 function openLightbox(item){
   lightboxInner.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" style="border-radius:2px;">`
+    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy" style="border-radius:2px;">`
     : `<div class="media-frame ${item.tone}" style="aspect-ratio:4/5; border-radius:2px;"><div class="ring"></div>${item.icon}<span class="cap">${item.caption}</span></div>`;
   lightbox.classList.add('open');
 }
@@ -323,18 +342,18 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
    left untouched and the order continues right where it was.
 ============================================================ */
 const cakeGalleryItems = [
-  { caption: 'Under the Chandeliers', image: 'img/504807796_9099742323462413_1120354441484283313_n.jpg' },
-  { caption: 'The Six-Tier Reveal', image: 'img/503736309_9061189193984393_2635635431881218558_n.jpg' },
-  { caption: 'Crystal Base, Ivory Tiers', image: 'img/504685489_9085240854912560_3651136197304790624_n.jpg' },
-  { caption: 'For Mummy, With Love', image: 'img/503084596_9068281273275185_5558051441541664408_n.jpg' },
-  { caption: 'The Boss Cake', image: 'img/503416798_9068281249941854_7585160892651594669_n.jpg' },
-  { caption: 'A Pot Worth Celebrating', image: 'img/505753228_9109996449103667_9107171079224956350_n.jpg' },
+  { caption: 'Under the Chandeliers', image: mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg') },
+  { caption: 'The Six-Tier Reveal', image: mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg') },
+  { caption: 'Crystal Base, Ivory Tiers', image: mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg') },
+  { caption: 'For Mummy, With Love', image: mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg') },
+  { caption: 'The Boss Cake', image: mediaUrl('img/503416798_9068281249941854_7585160892651594669_n.jpg') },
+  { caption: 'A Pot Worth Celebrating', image: mediaUrl('img/505753228_9109996449103667_9107171079224956350_n.jpg') },
 ];
 const cakeGalleryGrid = document.getElementById('cakeGalleryGrid');
 cakeGalleryItems.forEach(item=>{
   const el = document.createElement('div');
   el.className = 'media-frame';
-  el.innerHTML = `<img src="${item.image}" alt="${item.caption}"><div class="ring"></div>`;
+  el.innerHTML = `<img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div>`;
   el.addEventListener('click', ()=> openLightbox(item));
   cakeGalleryGrid.appendChild(el);
 });

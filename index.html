@@ -22,12 +22,12 @@
      no + and no leading 0. e.g. Nigerian number 0803 123 4567
      becomes "2348031234567".
 
-  2. PHOTOS  — search for "PLACEHOLDER" in the galleryItems and
-     testimonials arrays in the <script>. Each gallery item has an
-     "image:" field — set it to a real photo path/URL (e.g.
-     "images/wedding-cake-01.jpg") and the placeholder frame is
-     automatically replaced with the real photo. Same pattern for
-     "video:" fields in testimonials.
+  2. PHOTOS — hosted on Cloudflare R2, not this repo. Upload a photo
+     to the bucket under "img/", then reference it as
+     image: mediaUrl('img/your-file.jpg') in index.js/gallery.js (see
+     R2_BASE_URL near the top of each <script>). Leave "image: null"
+     to keep the elegant placeholder frame. Same pattern for "video:"
+     fields in testimonials.
 
   3. MENU & PRICES — edit the fingerFoodMenu, cateringSoups,
      cateringRice and cateringProteins arrays in the <script>.
@@ -95,7 +95,7 @@
   <div class="container about-grid">
     <figure class="about-frame reveal">
       <div class="media-frame" style="position:absolute;inset:0;">
-        <img src="img/503736309_9061189193984393_2635635431881218558_n.jpg" alt="La Crème founder with a finished wedding cake">
+        <img id="aboutPhoto" alt="La Crème founder with a finished wedding cake" loading="lazy">
         <div class="ring"></div>
       </div>
       <figcaption>“Every plate carries a little of the celebration it was made for.”</figcaption>
@@ -126,7 +126,7 @@
     </div>
     <div class="gallery-grid reveal" id="galleryGrid"></div>
 
-    <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">In Their Own Words — Video</h3>
+    <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">Behind the Scenes — Video</h3>
     <div class="reel" id="videoReel"></div>
 
     <h3 class="testimonial-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">What Clients Say</h3>

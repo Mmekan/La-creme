@@ -21,10 +21,13 @@
 
   1. PHOTOS — search "galleryItems" in gallery.js. Each item has a
      "category" (used by the filter bar), an "aspect" ratio
-     (width÷height — sizes its masonry tile), and an "image:" path
-     (set to null to keep the elegant placeholder frame). The grid
-     is a real infinite-scroll masonry — batches load automatically
-     as the sentinel at the bottom of the page scrolls into view.
+     (width÷height — sizes its masonry tile), and an "image:" field
+     set via mediaUrl('img/your-file.jpg') (the photo itself lives on
+     Cloudflare R2, not this repo — see R2_BASE_URL near the top of
+     gallery.js; leave "image: null" to keep the elegant placeholder
+     frame). The grid is a real infinite-scroll masonry — batches
+     load automatically as the sentinel at the bottom of the page
+     scrolls into view.
 
   2. CATEGORIES — search "filterCategories" in gallery.js to add,
      rename or remove filter tabs. Keep each item's "category"
@@ -36,9 +39,10 @@
      item id, breaking the feed into visual sections as people
      scroll. Only shown in the "All" filter view.
 
-  4. CLOUDFLARE R2 — once the bucket is live, swap the static
-     "galleryItems" array for a fetch against a JSON manifest (or a
-     Worker endpoint listing the bucket). The comment directly
+  4. CLOUDFLARE R2 — the bucket is live and photos already load from
+     it via mediaUrl(). If hand-editing "galleryItems" ever gets
+     tedious, swap it for a fetch against a JSON manifest (or a
+     Worker endpoint listing the bucket) — the comment directly
      above "const galleryItems" in gallery.js has the exact hook
      point — nothing else on this page needs to change.
 
@@ -110,14 +114,14 @@
 </section>
 
 <!-- ============================================================
-     VIDEO TESTIMONIALS
+     VIDEO REEL — behind-the-scenes clips
 ============================================================ -->
 <section class="gallery">
   <div class="container">
     <div class="section-head center reveal">
-      <span class="eyebrow" style="justify-content:center;">In Their Own Words</span>
-      <h2>Hear it from the clients themselves</h2>
-      <p>Short video testimonials from recent weddings, birthdays and events.</p>
+      <span class="eyebrow" style="justify-content:center;">Behind the Scenes</span>
+      <h2>A closer look at recent weddings & events</h2>
+      <p>Short clips from cake reveals, catering setups and celebrations we've been part of.</p>
     </div>
     <div class="reel" id="videoReel"></div>
 

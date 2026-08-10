@@ -19,6 +19,15 @@ function openWhatsApp(message){
   window.open(waLink(message), '_blank');
 }
 
+/* ============================================================
+   MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather
+   than committed to this repo. Update R2_BASE_URL once the
+   bucket's public URL (r2.dev or a custom domain) is known.
+   (Same value as index.js — keep both in sync.)
+============================================================ */
+const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
+function mediaUrl(relPath){ return `${R2_BASE_URL}/${relPath}`; }
+
 const genericWaMessage = `Hello ${CONFIG.businessName}! I saw your gallery and I'd like to enquire about your cakes and catering services.`;
 ['navWaBtn','contactWaBtn','contactWaIcon'].forEach(id=>{
   const el = document.getElementById(id);
@@ -91,57 +100,389 @@ const ICONS = {
 const filterCategories = ['All', 'Weddings', 'Cakes', 'Catering & Events', 'Finger Foods'];
 
 /* ============================================================
-   GALLERY ITEMS — real La Crème photography, from /img.
-   `aspect` is width÷height and drives the masonry tile's height
-   (no cropping surprises — pick a number close to the photo's
-   real ratio: ~0.75-0.85 for portrait, ~1 for square, ~1.3-1.6
-   for landscape). `span2` stretches a tile across two columns
-   for the occasional full-bleed "spread" moment.
+   GALLERY ITEMS — real La Crème photography, hosted on the R2
+   bucket (see R2_BASE_URL / mediaUrl() above) rather than this
+   repo. `aspect` is width÷height and drives the masonry tile's
+   height (no cropping surprises — pick a number close to the
+   photo's real ratio: ~0.75-0.85 for portrait, ~1 for square,
+   ~1.3-1.6 for landscape). `span2` stretches a tile across two
+   columns for the occasional full-bleed "spread" moment.
    Leave `image` null to keep the elegant placeholder frame for
    categories that don't have real photos yet.
 
-   ------------------------------------------------------------
-   HOOKING THIS UP TO CLOUDFLARE R2 (once the bucket is live):
-   Replace the static `galleryItems` array below with an async
-   fetch against a small JSON manifest (or a Worker endpoint that
-   lists the bucket) — e.g.:
+   ADDING A NEW PHOTO: upload it to the R2 bucket under `img/`,
+   then add an entry below with `image: mediaUrl('img/your-file.jpg')`.
 
-     let galleryItems = [];
-     async function loadGalleryItems(){
-       const res = await fetch('https://<your-worker-or-cdn>/gallery-manifest.json');
-       galleryItems = await res.json();
-       resetGrid('All');
-     }
-
-   Everything below this point (masonry layout, infinite scroll,
-   filters, lightbox) already reads from `galleryItems` and
-   `itemsForFilter()`, so nothing else needs to change — the
-   manifest just needs the same shape as the objects below
-   (id, category, image, caption, sub, aspect).
-   ------------------------------------------------------------
+   GOING FURTHER: once there are enough photos that hand-editing
+   this array gets tedious, swap it for an async fetch against a
+   small JSON manifest (or a Worker endpoint that lists the
+   bucket) — everything below this point (masonry layout, infinite
+   scroll, filters, lightbox) already reads from `galleryItems`
+   and `itemsForFilter()`, so nothing else would need to change.
 ============================================================ */
 const galleryItems = [
   // — Weddings —
-  { id:1, category:'Weddings', span2:true, aspect:1.4, icon:ICONS.cake, tone:'', image:'img/504807796_9099742323462413_1120354441484283313_n.jpg', caption:'Under the Chandeliers', sub:'Reception centerpiece, styled with hanging florals & crystal light', label:'Featured' },
-  { id:2, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'tone-b', image:'img/503736309_9061189193984393_2635635431881218558_n.jpg', caption:'The Six-Tier Reveal', sub:'Red, black & ivory — a full family celebration' },
-  { id:3, category:'Weddings', aspect:0.8, icon:ICONS.heart, tone:'tone-c', image:'img/504388932_9085240524912593_6387128751467127027_n.jpg', caption:'Lilac, Slate & Sealed With Rings', sub:'Four-tier wedding cake, custom palette' },
-  { id:4, category:'Weddings', aspect:0.78, icon:ICONS.flower, tone:'', image:'img/504685489_9085240854912560_3651136197304790624_n.jpg', caption:'Crystal Base, Ivory Tiers', sub:'Wedding cake with crystal stand detail' },
+  { id:1, category:'Weddings', span2:true, aspect:1.4, icon:ICONS.cake, tone:'', image:mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg'), caption:'Under the Chandeliers', sub:'Reception centerpiece, styled with hanging florals & crystal light', label:'Featured' },
+  { id:2, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'tone-b', image:mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg'), caption:'The Six-Tier Reveal', sub:'Red, black & ivory — a full family celebration' },
+  { id:3, category:'Weddings', aspect:0.8, icon:ICONS.heart, tone:'tone-c', image:mediaUrl('img/504388932_9085240524912593_6387128751467127027_n.jpg'), caption:'Lilac, Slate & Sealed With Rings', sub:'Four-tier wedding cake, custom palette' },
+  { id:4, category:'Weddings', aspect:0.78, icon:ICONS.flower, tone:'', image:mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg'), caption:'Crystal Base, Ivory Tiers', sub:'Wedding cake with crystal stand detail' },
+  { id:14, category:'Weddings', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230912_173214343~2.jpg'), caption:'A Wedding Cake to Remember', sub:'Bespoke wedding cake, made to order' },
+  { id:15, category:'Weddings', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231001_193222881~3.jpg'), caption:'Tiered for the Big Day', sub:'Every tier, considered' },
+  { id:16, category:'Weddings', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231001_193558142~2.jpg'), caption:'The Reception Centerpiece', sub:'Designed around the couple\'s palette' },
+  { id:17, category:'Weddings', aspect:0.61, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231028_151210015.jpg'), caption:'Wedding Cake, Custom Palette', sub:'Bespoke wedding cake, made to order' },
+  { id:18, category:'Weddings', aspect:0.61, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231028_151210015~2.jpg'), caption:'Styled for \'I Do\'', sub:'Every tier, considered' },
+  { id:19, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231028_155626880.jpg'), caption:'A Wedding Cake to Remember', sub:'Designed around the couple\'s palette' },
+  { id:20, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231207_154250281~2.jpg'), caption:'Tiered for the Big Day', sub:'Bespoke wedding cake, made to order' },
+  { id:21, category:'Weddings', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231208_154325680.jpg'), caption:'The Reception Centerpiece', sub:'Every tier, considered' },
+  { id:22, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231211_105805670~2.jpg'), caption:'Wedding Cake, Custom Palette', sub:'Designed around the couple\'s palette' },
+  { id:23, category:'Weddings', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231213_092908873~3.jpg'), caption:'Styled for \'I Do\'', sub:'Bespoke wedding cake, made to order' },
+  { id:24, category:'Weddings', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231213_093315211~3.jpg'), caption:'A Wedding Cake to Remember', sub:'Every tier, considered' },
+  { id:25, category:'Weddings', aspect:0.57, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240728_224645730.jpg'), caption:'Tiered for the Big Day', sub:'Designed around the couple\'s palette' },
+  { id:26, category:'Weddings', aspect:0.63, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241006_181132962.jpg'), caption:'The Reception Centerpiece', sub:'Bespoke wedding cake, made to order' },
+  { id:27, category:'Weddings', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241109_190851349.jpg'), caption:'Wedding Cake, Custom Palette', sub:'Every tier, considered' },
+  { id:28, category:'Weddings', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250109_125728622.jpg'), caption:'Styled for \'I Do\'', sub:'Designed around the couple\'s palette' },
+  { id:29, category:'Weddings', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250109_125809896.jpg'), caption:'A Wedding Cake to Remember', sub:'Bespoke wedding cake, made to order' },
+  { id:30, category:'Weddings', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250126_193037744.jpg'), caption:'Tiered for the Big Day', sub:'Every tier, considered' },
+  { id:31, category:'Weddings', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250524_083518378.jpg'), caption:'The Reception Centerpiece', sub:'Designed around the couple\'s palette' },
+  { id:32, category:'Weddings', aspect:0.96, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250705_161650495.jpg'), caption:'Wedding Cake, Custom Palette', sub:'Bespoke wedding cake, made to order' },
+  { id:33, category:'Weddings', aspect:0.61, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251120_225707906.jpg'), caption:'Styled for \'I Do\'', sub:'Every tier, considered' },
+  { id:34, category:'Weddings', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260128_085430295~2.jpg'), caption:'A Wedding Cake to Remember', sub:'Designed around the couple\'s palette' },
 
   // — Cakes —
-  { id:5, category:'Cakes', aspect:0.85, icon:ICONS.flower, tone:'tone-b', image:'img/503084596_9068281273275185_5558051441541664408_n.jpg', caption:'For Mummy, With Love', sub:'Birthday cake, sugar-flower finish' },
-  { id:6, category:'Cakes', aspect:0.95, icon:ICONS.heart, tone:'tone-c', image:'img/503416798_9068281249941854_7585160892651594669_n.jpg', caption:'The Boss Cake', sub:'Chocolate birthday cake, loaded finish' },
-  { id:7, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:'img/505753228_9109996449103667_9107171079224956350_n.jpg', caption:'A Pot Worth Celebrating', sub:'Custom novelty cake, sculpted to order' },
+  { id:5, category:'Cakes', aspect:0.85, icon:ICONS.flower, tone:'tone-b', image:mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg'), caption:'For Mummy, With Love', sub:'Birthday cake, sugar-flower finish' },
+  { id:6, category:'Cakes', aspect:0.95, icon:ICONS.heart, tone:'tone-c', image:mediaUrl('img/503416798_9068281249941854_7585160892651594669_n.jpg'), caption:'The Boss Cake', sub:'Chocolate birthday cake, loaded finish' },
+  { id:7, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/505753228_9109996449103667_9107171079224956350_n.jpg'), caption:'A Pot Worth Celebrating', sub:'Custom novelty cake, sculpted to order' },
+  { id:35, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/IMG_20220210_101300_855.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:36, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230808_153643251~2.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:37, category:'Cakes', aspect:0.74, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230820_215803387~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:38, category:'Cakes', aspect:0.88, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230827_205934724~2.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:39, category:'Cakes', aspect:0.94, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230827_211616502~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:40, category:'Cakes', aspect:0.83, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230908_131731668~2.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:41, category:'Cakes', aspect:0.92, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230908_133358960~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:42, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230909_114116260~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:43, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230911_171147197~3.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:44, category:'Cakes', aspect:0.67, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20230912_174349364~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:45, category:'Cakes', aspect:0.9, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231001_174458726~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:46, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231001_184025905~2.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:47, category:'Cakes', aspect:0.51, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231004_150442404~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:48, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231004_150442404~3.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:49, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231008_203157136~3.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:50, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231009_180022223~2.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:51, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231013_203353401.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:52, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231015_183849160~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:53, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231017_165453371.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:54, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231018_150348728.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:55, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231031_210327169.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:56, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231101_093353282.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:57, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231106_180159725~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:58, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231106_193942122.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:59, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231108_134449992~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:60, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231110_094010052.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:61, category:'Cakes', aspect:0.87, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231110_094413759~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:62, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231111_112528493.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:63, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231121_152910036.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:64, category:'Cakes', aspect:0.93, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231125_011842460.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:65, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231125_174811635.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:66, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231204_122344145~4.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:67, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20231221_183123151.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:68, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240114_215042176.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:69, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240116_185612073.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:70, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240116_185852997.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:71, category:'Cakes', aspect:0.88, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240120_130211238.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:72, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240123_120635726.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:73, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240206_114056008.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:74, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240208_084431375.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:75, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240208_092144991.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:76, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240223_102046549.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:77, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240223_104137029~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:78, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240223_115700401~2.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:79, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240226_134428223.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:80, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240226_153856623~2.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:81, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240226_193653414.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:82, category:'Cakes', aspect:0.83, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240319_230953839~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:83, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240320_143224607.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:84, category:'Cakes', aspect:1.02, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240322_144554420~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:85, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240322_183944728~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:86, category:'Cakes', aspect:0.86, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240323_131603565~3.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:87, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240323_233427784.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:88, category:'Cakes', aspect:0.94, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240408_194622302.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:89, category:'Cakes', aspect:1.11, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240409_204357917.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:90, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240418_084747575~2.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:91, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240425_225336754~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:92, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240427_141703919.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:93, category:'Cakes', aspect:0.74, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240427_141850697.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:94, category:'Cakes', aspect:1.14, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240427_142047549~3.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:95, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240427_151739213.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:96, category:'Cakes', aspect:0.72, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240427_203201302.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:97, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240430_104447775~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:98, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240430_123656123.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:99, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240430_130218626~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:100, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240501_210114000.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:101, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240516_225022908.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:102, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240516_225139430~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:103, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240525_211014984~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:104, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240527_222838556.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:105, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240527_230548884.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:106, category:'Cakes', aspect:0.92, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240527_230957031.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:107, category:'Cakes', aspect:0.89, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240531_223206032.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:108, category:'Cakes', aspect:0.63, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240601_195013924.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:109, category:'Cakes', aspect:0.88, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240606_233326051~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:110, category:'Cakes', aspect:1.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_151428039.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:111, category:'Cakes', aspect:0.66, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_152259850.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:112, category:'Cakes', aspect:1.39, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_173956521.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:113, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_185800777.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:114, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_203348676.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:115, category:'Cakes', aspect:1.06, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_204331855.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:116, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_210201077.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:117, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240607_235300783.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:118, category:'Cakes', aspect:0.51, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240609_140455927.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:119, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240609_140455927~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:120, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240609_154541015~3.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:121, category:'Cakes', aspect:0.61, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240614_220655660~3.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:122, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240618_134702771.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:123, category:'Cakes', aspect:0.94, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240618_134733686~3.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:124, category:'Cakes', aspect:0.72, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240627_234424769.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:125, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240627_235324958.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:126, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240630_230418515~3.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:127, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240710_123502813~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:128, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240719_194247735~2.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:129, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240721_164225460.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:130, category:'Cakes', aspect:0.58, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240722_184737913~3.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:131, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240727_195822354~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:132, category:'Cakes', aspect:0.9, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240727_200110011.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:133, category:'Cakes', aspect:0.86, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240727_201054015.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:134, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240819_223423512.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:135, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240819_230219220.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:136, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240821_211416424.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:137, category:'Cakes', aspect:1.37, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240829_204627916.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:138, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240831_173459098.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:139, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240903_104026665.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:140, category:'Cakes', aspect:0.82, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240903_104242469.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:141, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240904_175847749~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:142, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240904_191937451~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:143, category:'Cakes', aspect:1.58, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240905_140925717.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:144, category:'Cakes', aspect:1.19, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240905_192959702.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:145, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240905_225827872~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:146, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240906_162354062.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:147, category:'Cakes', aspect:1.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240906_162354062~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:148, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240909_223141370~2.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:149, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240910_111844231.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:150, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_073857901.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:151, category:'Cakes', aspect:1.02, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_073857901~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:152, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_154424766.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:153, category:'Cakes', aspect:0.91, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_213850387~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:154, category:'Cakes', aspect:1.04, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_214620724~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:155, category:'Cakes', aspect:1, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_215408934~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:156, category:'Cakes', aspect:0.87, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240912_220638090~2.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:157, category:'Cakes', aspect:1.16, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240917_132356351.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:158, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20240919_180820600.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:159, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241001_105445559.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:160, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241010_133149786.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:161, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241011_114644164.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:162, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241014_193904884.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:163, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241024_225224097.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:164, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241028_231701736.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:165, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241031_184305047~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:166, category:'Cakes', aspect:0.54, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241104_175937511.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:167, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241109_191058335.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:168, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241111_135525364.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:169, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241113_182439956.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:170, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241115_233245547.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:171, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20241117_155045993.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:172, category:'Cakes', aspect:0.63, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250117_224011061.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:173, category:'Cakes', aspect:0.82, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250118_230538898.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:174, category:'Cakes', aspect:0.97, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250120_174358608.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:175, category:'Cakes', aspect:0.88, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250120_225314361.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:176, category:'Cakes', aspect:0.87, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250123_173517063.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:177, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250211_130000263.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:178, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250214_084040892.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:179, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250217_184423396.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:180, category:'Cakes', aspect:0.67, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250217_215710272.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:181, category:'Cakes', aspect:0.91, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250305_091918379.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:182, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250306_140726708.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:183, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250316_162212200.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:184, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250317_101640635.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:185, category:'Cakes', aspect:0.87, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250319_214733761.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:186, category:'Cakes', aspect:0.66, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250319_221339521.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:187, category:'Cakes', aspect:0.72, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250321_230103843.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:188, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250325_184111736.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:189, category:'Cakes', aspect:0.72, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250325_211049599.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:190, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250325_211401006.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:191, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250328_184725529.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:192, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250401_224537275.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:193, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250401_224537275~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:194, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250419_203203479.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:195, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250424_072606122.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:196, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250505_122616830.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:197, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250516_153022398.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:198, category:'Cakes', aspect:0.73, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250524_111525780.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:199, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250530_222800018.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:200, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250531_110226380.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:201, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250602_132346758.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:202, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250602_192302871~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:203, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250603_204706090.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:204, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250604_225526859.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:205, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250605_075807032.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:206, category:'Cakes', aspect:1.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250606_114625366.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:207, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_163448512.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:208, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_163706254.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:209, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_164528732.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:210, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_164817879.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:211, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_171251391.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:212, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250607_215640126.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:213, category:'Cakes', aspect:0.96, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250608_185325081.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:214, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250610_183222039.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:215, category:'Cakes', aspect:0.67, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250623_220925828.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:216, category:'Cakes', aspect:0.83, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250702_144009671.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:217, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250702_165646833.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:218, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250707_162126673.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:219, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250708_181539811.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:220, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250709_091108311.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:221, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250710_100712015.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:222, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250716_223823848.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:223, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250720_090505501~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:224, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250729_174155717.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:225, category:'Cakes', aspect:0.88, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250804_214909422.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:226, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250804_215631147.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:227, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250806_040024777.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:228, category:'Cakes', aspect:0.81, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250807_201508771.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:229, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250808_205249020.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:230, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250809_192050060.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:231, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250812_222631232.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:232, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250821_081947679.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:233, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250828_090813420.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:234, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250831_235858641~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:235, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250909_124713440.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:236, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250909_182935722.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:237, category:'Cakes', aspect:0.6, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250909_194937276~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:238, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250910_174753610.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:239, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250911_101135515.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:240, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250911_101135515~2.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:241, category:'Cakes', aspect:0.82, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250912_190121566~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:242, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250912_193701827.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:243, category:'Cakes', aspect:1.65, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250914_000546364.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:244, category:'Cakes', aspect:0.74, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250914_215641026~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:245, category:'Cakes', aspect:0.8, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250915_192156979~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:246, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250916_230604866.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:247, category:'Cakes', aspect:0.67, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250920_200759265.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:248, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250922_214714542.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:249, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250924_134653868.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:250, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250924_134805945.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:251, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250924_195655896~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:252, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20250927_114155874.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:253, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251003_131230775.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:254, category:'Cakes', aspect:0.91, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251004_082501652~2.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:255, category:'Cakes', aspect:0.67, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251006_144620574.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:256, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251006_175326755.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:257, category:'Cakes', aspect:0.94, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251021_144215611.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:258, category:'Cakes', aspect:1.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251029_113501096.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:259, category:'Cakes', aspect:0.59, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251029_114115354.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:260, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251030_103559710.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:261, category:'Cakes', aspect:0.74, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251102_224406026.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:262, category:'Cakes', aspect:1.27, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251102_224717434.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:263, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251102_230406391.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:264, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251102_230426906.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:265, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251107_204912802.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:266, category:'Cakes', aspect:0.68, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251107_233341685.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:267, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251109_185532393.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:268, category:'Cakes', aspect:0.77, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251109_185752635.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:269, category:'Cakes', aspect:0.63, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251111_215238835.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:270, category:'Cakes', aspect:0.71, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251111_220726250.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:271, category:'Cakes', aspect:0.62, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251111_223022393.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:272, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251111_223627934~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:273, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251111_224252052~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:274, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251112_134511651.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:275, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251113_104210605~2.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:276, category:'Cakes', aspect:0.64, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251123_170225468.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:277, category:'Cakes', aspect:0.84, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251124_144651440.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:278, category:'Cakes', aspect:0.59, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251124_151744433.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:279, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251124_152816883.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:280, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251124_161244830.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:281, category:'Cakes', aspect:0.86, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251124_193733353~2.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:282, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251127_083608444.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:283, category:'Cakes', aspect:0.69, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251127_083608444~2.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:284, category:'Cakes', aspect:0.9, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251201_214027373.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:285, category:'Cakes', aspect:1.07, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251218_214420995.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:286, category:'Cakes', aspect:0.97, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251218_214724347.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:287, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251226_185516134.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:288, category:'Cakes', aspect:1.46, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251229_155102182.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:289, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251229_192424381~2.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:290, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20251229_194548172.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:291, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260111_183926078.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
+  { id:292, category:'Cakes', aspect:0.76, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260116_100957094~2.jpg'), caption:'Crafted for the Guest of Honor', sub:'Every cake tells a celebration\'s story' },
+  { id:293, category:'Cakes', aspect:0.56, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260116_110627042.jpg'), caption:'A Sweet Centerpiece', sub:'Design brief, brought to life' },
+  { id:294, category:'Cakes', aspect:0.79, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260116_195831983.jpg'), caption:'Cake Design, Client Brief', sub:'Handpiped, hand-finished' },
+  { id:295, category:'Cakes', aspect:0.75, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260117_143302015.jpg'), caption:'A Cake Worth the Occasion', sub:'From the La Crème kitchen' },
+  { id:296, category:'Cakes', aspect:0.96, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260226_222600124.jpg'), caption:'Custom Cake, Made to Order', sub:'Custom flavors & finish, made to order' },
+  { id:297, category:'Cakes', aspect:0.7, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260228_083244095~2.jpg'), caption:'Handcrafted for the Celebration', sub:'Every cake tells a celebration\'s story' },
+  { id:298, category:'Cakes', aspect:0.78, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260307_203402729~2.jpg'), caption:'Every Detail, Considered', sub:'Design brief, brought to life' },
+  { id:299, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260429_190513421.jpg'), caption:'Made by Hand, Made to Remember', sub:'Handpiped, hand-finished' },
+  { id:300, category:'Cakes', aspect:0.85, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260520_183859026.jpg'), caption:'A Cake Built Around the Story', sub:'From the La Crème kitchen' },
+  { id:301, category:'Cakes', aspect:0.46, icon:ICONS.cake, tone:'', image:mediaUrl('img/offload/InShot_20260712_193120053.jpg'), caption:'Celebration Cake, Custom Design', sub:'Custom flavors & finish, made to order' },
 
-  // — Catering & Events — (no photos in the archive yet — placeholders
-  // until real ones are added; keep the category so the filter tab works)
-  { id:8, category:'Catering & Events', aspect:1.35, icon:ICONS.rice, tone:'tone-b', image:null, caption:'The Owambe Spread', sub:'Bulk jollof & fried rice, plated for 300 guests', label:'Coming Soon' },
-  { id:9, category:'Catering & Events', aspect:0.8, icon:ICONS.gift, tone:'tone-c', image:null, caption:'Dessert & Styling Table', sub:'Full dessert table + event styling', label:'Coming Soon' },
+  // — Catering & Events —
+  { id:302, category:'Catering & Events', aspect:0.56, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20230916_082943699~3.jpg'), caption:'Catering for Every Occasion', sub:'Rice, proteins & sides for every event size' },
+  { id:303, category:'Catering & Events', aspect:0.74, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20230920_163214120~2.jpg'), caption:'Bulk Catering, Freshly Prepared', sub:'Prepared fresh, delivered hot' },
+  { id:304, category:'Catering & Events', aspect:1, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20230921_153427079.png'), caption:'Event Catering, On Time & On Point', sub:'From an intimate table to a full spread' },
+  { id:305, category:'Catering & Events', aspect:0.86, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20231005_103233617~2.jpg'), caption:'Set Up for the Celebration', sub:'Rice, proteins & sides for every event size' },
+  { id:306, category:'Catering & Events', aspect:1.33, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20231107_133622375.jpg'), caption:'Catering, Served Your Way', sub:'Prepared fresh, delivered hot' },
+  { id:307, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20231119_155746249.jpg'), caption:'Catering for Every Occasion', sub:'From an intimate table to a full spread' },
+  { id:308, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20231128_175325401.jpg'), caption:'Bulk Catering, Freshly Prepared', sub:'Rice, proteins & sides for every event size' },
+  { id:309, category:'Catering & Events', aspect:0.62, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20240118_110953185.jpg'), caption:'Event Catering, On Time & On Point', sub:'Prepared fresh, delivered hot' },
+  { id:310, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20240118_111357746.jpg'), caption:'Set Up for the Celebration', sub:'From an intimate table to a full spread' },
+  { id:311, category:'Catering & Events', aspect:1.34, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20240617_193254053~2.jpg'), caption:'Catering, Served Your Way', sub:'Rice, proteins & sides for every event size' },
+  { id:312, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20240617_194716840.jpg'), caption:'Catering for Every Occasion', sub:'Prepared fresh, delivered hot' },
+  { id:313, category:'Catering & Events', aspect:1.78, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20240909_224729543.jpg'), caption:'Bulk Catering, Freshly Prepared', sub:'From an intimate table to a full spread' },
+  { id:314, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20250421_020311446~2.jpg'), caption:'Event Catering, On Time & On Point', sub:'Rice, proteins & sides for every event size' },
+  { id:315, category:'Catering & Events', aspect:0.75, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20250423_135608126.jpg'), caption:'Set Up for the Celebration', sub:'Prepared fresh, delivered hot' },
+  { id:316, category:'Catering & Events', aspect:0.56, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20250701_193325688.jpg'), caption:'Catering, Served Your Way', sub:'From an intimate table to a full spread' },
+  { id:317, category:'Catering & Events', aspect:0.55, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20250701_193529500.jpg'), caption:'Catering for Every Occasion', sub:'Rice, proteins & sides for every event size' },
+  { id:318, category:'Catering & Events', aspect:1.69, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20250910_180229706.jpg'), caption:'Bulk Catering, Freshly Prepared', sub:'Prepared fresh, delivered hot' },
+  { id:319, category:'Catering & Events', aspect:0.54, icon:ICONS.rice, tone:'', image:mediaUrl('img/offload/InShot_20251117_161731955~2.jpg'), caption:'Event Catering, On Time & On Point', sub:'From an intimate table to a full spread' },
 
   // — Finger Foods —
-  { id:10, category:'Finger Foods', span2:true, aspect:1.55, icon:ICONS.platter, tone:'', image:'img/123520380_2807744082662300_1396207157575276742_n.jpg', caption:'The Full Small Chops Platter', sub:'Spring rolls, samosas, drumettes & puff-puff' },
-  { id:11, category:'Finger Foods', aspect:1.3, icon:ICONS.meat, tone:'tone-b', image:'img/123515735_2807744542662254_376565533110552828_n.jpg', caption:'Boxed & Ready to Travel', sub:'Individually packed small chops trays' },
-  { id:12, category:'Finger Foods', aspect:1.3, icon:ICONS.platter, tone:'tone-c', image:'img/123525387_2807744419328933_5693730396838484112_n.jpg', caption:'Packed for Pickup', sub:'Small chops, prepped for a 100-guest order' },
-  { id:13, category:'Finger Foods', aspect:1.3, icon:ICONS.meat, tone:'', image:'img/123589705_2807744209328954_7226536928879259652_n.jpg', caption:'Ready for Cocktail Hour', sub:'Small chops trays, boxed and labeled' },
+  { id:10, category:'Finger Foods', span2:true, aspect:1.55, icon:ICONS.platter, tone:'', image:mediaUrl('img/123520380_2807744082662300_1396207157575276742_n.jpg'), caption:'The Full Small Chops Platter', sub:'Spring rolls, samosas, drumettes & puff-puff' },
+  { id:11, category:'Finger Foods', aspect:1.3, icon:ICONS.meat, tone:'tone-b', image:mediaUrl('img/123515735_2807744542662254_376565533110552828_n.jpg'), caption:'Boxed & Ready to Travel', sub:'Individually packed small chops trays' },
+  { id:12, category:'Finger Foods', aspect:1.3, icon:ICONS.platter, tone:'tone-c', image:mediaUrl('img/123525387_2807744419328933_5693730396838484112_n.jpg'), caption:'Packed for Pickup', sub:'Small chops, prepped for a 100-guest order' },
+  { id:13, category:'Finger Foods', aspect:1.3, icon:ICONS.meat, tone:'', image:mediaUrl('img/123589705_2807744209328954_7226536928879259652_n.jpg'), caption:'Ready for Cocktail Hour', sub:'Small chops trays, boxed and labeled' },
+  { id:320, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230508_124339492.jpg'), caption:'Small Chops, Party Ready', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:321, category:'Finger Foods', aspect:0.77, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230508_124339492~2.jpg'), caption:'Finger Foods for Every Guest List', sub:'Boxed and ready for pickup or delivery' },
+  { id:322, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230818_153329649.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Perfect for cocktail hours & parties' },
+  { id:323, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230819_160630324.jpg'), caption:'Cocktail Hour Favorites', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:324, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230819_161642147~2.jpg'), caption:'Small Chops, Freshly Fried', sub:'Boxed and ready for pickup or delivery' },
+  { id:325, category:'Finger Foods', aspect:0.74, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230828_150356270~3.jpg'), caption:'Small Chops, Party Ready', sub:'Perfect for cocktail hours & parties' },
+  { id:326, category:'Finger Foods', aspect:1.01, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230906_173529651~2.jpg'), caption:'Finger Foods for Every Guest List', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:327, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20230924_193517893.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Boxed and ready for pickup or delivery' },
+  { id:328, category:'Finger Foods', aspect:0.77, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231013_195426186~2.jpg'), caption:'Cocktail Hour Favorites', sub:'Perfect for cocktail hours & parties' },
+  { id:329, category:'Finger Foods', aspect:1.44, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231026_151247203~2.jpg'), caption:'Small Chops, Freshly Fried', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:330, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231124_070300127.jpg'), caption:'Small Chops, Party Ready', sub:'Boxed and ready for pickup or delivery' },
+  { id:331, category:'Finger Foods', aspect:1.41, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231127_114053284.jpg'), caption:'Finger Foods for Every Guest List', sub:'Perfect for cocktail hours & parties' },
+  { id:332, category:'Finger Foods', aspect:0.97, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231127_134957194.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:333, category:'Finger Foods', aspect:0.86, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231127_135327800.jpg'), caption:'Cocktail Hour Favorites', sub:'Boxed and ready for pickup or delivery' },
+  { id:334, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20231129_004648933.jpg'), caption:'Small Chops, Freshly Fried', sub:'Perfect for cocktail hours & parties' },
+  { id:335, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20240130_143737933.jpg'), caption:'Small Chops, Party Ready', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:336, category:'Finger Foods', aspect:1.01, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20240506_152755263~2.jpg'), caption:'Finger Foods for Every Guest List', sub:'Boxed and ready for pickup or delivery' },
+  { id:337, category:'Finger Foods', aspect:1.23, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20240713_123310448.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Perfect for cocktail hours & parties' },
+  { id:338, category:'Finger Foods', aspect:1.44, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20240905_170426994~2.jpg'), caption:'Cocktail Hour Favorites', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:339, category:'Finger Foods', aspect:1, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20240917_133956063~2.jpg'), caption:'Small Chops, Freshly Fried', sub:'Boxed and ready for pickup or delivery' },
+  { id:340, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20241216_222040981.jpg'), caption:'Small Chops, Party Ready', sub:'Perfect for cocktail hours & parties' },
+  { id:341, category:'Finger Foods', aspect:1.12, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250111_123943467.jpg'), caption:'Finger Foods for Every Guest List', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:342, category:'Finger Foods', aspect:0.99, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250122_152045218.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Boxed and ready for pickup or delivery' },
+  { id:343, category:'Finger Foods', aspect:0.81, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250122_152214144.jpg'), caption:'Cocktail Hour Favorites', sub:'Perfect for cocktail hours & parties' },
+  { id:344, category:'Finger Foods', aspect:0.81, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250122_204548048.jpg'), caption:'Small Chops, Freshly Fried', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:345, category:'Finger Foods', aspect:0.8, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250123_103549493.jpg'), caption:'Small Chops, Party Ready', sub:'Boxed and ready for pickup or delivery' },
+  { id:346, category:'Finger Foods', aspect:0.81, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250124_110916895.jpg'), caption:'Finger Foods for Every Guest List', sub:'Perfect for cocktail hours & parties' },
+  { id:347, category:'Finger Foods', aspect:0.81, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250210_143419624.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:348, category:'Finger Foods', aspect:1.54, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250331_145807939.jpg'), caption:'Cocktail Hour Favorites', sub:'Boxed and ready for pickup or delivery' },
+  { id:349, category:'Finger Foods', aspect:0.97, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20250627_052411426.jpg'), caption:'Small Chops, Freshly Fried', sub:'Perfect for cocktail hours & parties' },
+  { id:350, category:'Finger Foods', aspect:0.56, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20251106_205315101.jpg'), caption:'Small Chops, Party Ready', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:351, category:'Finger Foods', aspect:0.56, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20251106_205632816.jpg'), caption:'Finger Foods for Every Guest List', sub:'Boxed and ready for pickup or delivery' },
+  { id:352, category:'Finger Foods', aspect:0.95, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20260127_190647688.jpg'), caption:'Packed Fresh, Ready to Serve', sub:'Perfect for cocktail hours & parties' },
+  { id:353, category:'Finger Foods', aspect:1.02, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20260421_183320537.jpg'), caption:'Cocktail Hour Favorites', sub:'Puff puff, spring rolls, samosas & more' },
+  { id:354, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20260520_185648015.jpg'), caption:'Small Chops, Freshly Fried', sub:'Boxed and ready for pickup or delivery' },
+  { id:355, category:'Finger Foods', aspect:0.75, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/InShot_20260520_185648015~2.jpg'), caption:'Small Chops, Party Ready', sub:'Perfect for cocktail hours & parties' },
+  { id:356, category:'Finger Foods', aspect:0.89, icon:ICONS.platter, tone:'', image:mediaUrl('img/offload/Screenshot_20200827-182930.png'), caption:'Finger Foods for Every Guest List', sub:'Puff puff, spring rolls, samosas & more' },
+
 ];
 
 const categoryCounts = filterCategories.reduce((acc, cat)=>{
@@ -158,8 +499,8 @@ const categoryCounts = filterCategories.reduce((acc, cat)=>{
 const interstitials = [
   { beforeId:1, type:'break', cat:'Weddings', num:'01', text:'The Weddings' },
   { beforeId:5, type:'break', cat:'Cakes', num:'02', text:'The Cakes' },
-  { beforeId:8, type:'quote', quote:'The cake didn’t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
-  { beforeId:8, type:'break', cat:'Catering & Events', num:'03', text:'The Catering & Styling' },
+  { beforeId:302, type:'quote', quote:'The cake didn’t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
+  { beforeId:302, type:'break', cat:'Catering & Events', num:'03', text:'The Catering & Styling' },
   { beforeId:10, type:'break', cat:'Finger Foods', num:'04', text:'The Finger Foods' },
 ];
 
@@ -228,7 +569,14 @@ function makeTile(item){
   const media = document.createElement('div');
   media.className = `media-frame ${item.tone || ''}`;
   media.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy">`
+    // No `loading="lazy"` here: these tiles are absolutely positioned
+    // and sized a frame later (by layoutBlock, via requestAnimationFrame),
+    // so at insertion time the browser sees a 0x0 element and its native
+    // lazy-load heuristic never reconsiders it once resized — the tile
+    // never loads. The batched infinite-scroll (see loadMore()) already
+    // keeps unseen images from being requested, so eager-loading each
+    // batch's own images once it's created is fine.
+    ? `<img src="${item.image}" alt="${item.caption}">`
     : `<div class="ring"></div>${item.icon}`;
   el.appendChild(media);
 
@@ -379,22 +727,31 @@ resetGrid('All');
    VIDEO TESTIMONIALS
 ============================================================ */
 const videoTestimonials = [
-  { name:'Bride, Lekki Wedding', video:null, tone:'' },
-  { name:'Host, 40th Birthday', video:null, tone:'tone-b' },
-  { name:'Corporate Client', video:null, tone:'tone-c' },
-  { name:'Naming Ceremony Family', video:null, tone:'' },
-  { name:'Groom, Owerri Wedding', video:null, tone:'tone-b' },
-  { name:'Host, Baby Shower', video:null, tone:'tone-c' },
+  { name:'Dessert Table Detail', video:mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
+  { name:'Wedding Cake Reveal', video:mediaUrl('videos/InShot_20251120_224656122.mp4'), tone:'tone-b' },
+  { name:'Wedding Day Moment', video:mediaUrl('videos/InShot_20251122_180814090.mp4'), tone:'tone-c' },
+  { name:'Birthday Celebration', video:mediaUrl('videos/InShot_20251122_234645706.mp4'), tone:'' },
+  { name:'Cake & Champagne Reveal', video:mediaUrl('videos/InShot_20251213_115333572.mp4'), tone:'tone-b' },
+  { name:'Reception Cake Moment', video:mediaUrl('videos/InShot_20251217_202707600.mp4'), tone:'tone-c' },
 ];
 const videoReel = document.getElementById('videoReel');
 videoTestimonials.forEach(v=>{
   const el = document.createElement('div');
   el.className = `media-frame reel-item ${v.tone}`;
   el.innerHTML = v.video
-    ? `<video src="${v.video}" controls playsinline></video>`
-    : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">Client testimonial video</div><span class="cap who">${v.name}</span>`;
+    ? `<video src="${v.video}" muted loop playsinline preload="metadata"></video><div class="cap"><span class="who">${v.name}</span></div>`
+    : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">${v.name}</div>`;
   videoReel.appendChild(el);
 });
+// Autoplay each clip only while it's actually in view (muted, so
+// autoplay is allowed cross-browser); pause it once scrolled away.
+const reelVideoObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting) entry.target.play().catch(()=>{});
+    else entry.target.pause();
+  });
+}, { threshold: 0.5 });
+videoReel.querySelectorAll('video').forEach(v=> reelVideoObserver.observe(v));
 
 /* ============================================================
    TESTIMONIAL QUOTES
@@ -438,7 +795,7 @@ function renderLightbox(){
   const item = lbItems[lbIndex];
   if(!item) return;
   lightboxInner.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" style="border-radius:2px;">`
+    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy" style="border-radius:2px;">`
     : `<div class="media-frame ${item.tone}" style="aspect-ratio:4/5; border-radius:2px;"><div class="ring"></div>${item.icon}</div>`;
   lightboxCaption.textContent = item.caption;
   lightboxSub.textContent = item.sub;
