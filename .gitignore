@@ -1,0 +1,9 @@
+# Media assets — served from Cloudflare R2, not committed to the repo.
+# Upload photos/videos to the R2 bucket and reference them via R2_BASE_URL
+# (see index.js) instead of adding them here.
+img/
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+*.log
