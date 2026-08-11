@@ -59,6 +59,11 @@
 </head>
 <body>
 
+<!-- News Ticker — scrolling promos, content built in gallery.js from NEWS_ITEMS -->
+<div class="news-ticker" id="newsTicker" aria-label="Latest updates">
+  <div class="news-ticker-track" id="newsTickerTrack"></div>
+</div>
+
 <!-- ============================================================
      NAV
 ============================================================ -->
@@ -183,6 +188,23 @@
   </div>
   <button class="lightbox-nav lightbox-prev" id="lightboxPrev" aria-label="Previous">←</button>
   <button class="lightbox-nav lightbox-next" id="lightboxNext" aria-label="Next">→</button>
+</div>
+
+<!-- News Popup — auto-dismisses; content picked at random from NEWS_ITEMS -->
+<div class="news-modal" id="newsModal">
+  <div class="news-modal-backdrop" id="newsModalBackdrop"></div>
+  <div class="news-modal-panel">
+    <button type="button" class="news-modal-close" id="newsModalClose" aria-label="Close">&times;</button>
+    <div class="news-modal-gallery" id="newsModalGallery"></div>
+    <div class="news-modal-body">
+      <span class="news-modal-tag" id="newsModalTag">New Arrival</span>
+      <h3 id="newsModalTitle"></h3>
+      <p class="news-modal-price" id="newsModalPrice"></p>
+      <p class="news-modal-blurb" id="newsModalBlurb"></p>
+    </div>
+    <a href="#" class="btn btn-gold" id="newsModalCta">Order Now</a>
+    <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
+  </div>
 </div>
 
 <!-- Toast -->

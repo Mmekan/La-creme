@@ -46,6 +46,11 @@
 </head>
 <body>
 
+<!-- News Ticker — scrolling promos, content built in index.js from NEWS_ITEMS -->
+<div class="news-ticker" id="newsTicker" aria-label="Latest updates">
+  <div class="news-ticker-track" id="newsTickerTrack"></div>
+</div>
+
 <!-- ============================================================
      NAV
 ============================================================ -->
@@ -413,6 +418,23 @@
     <p class="cgm-sub">Browse past cake work for inspiration, then close this to continue your order — nothing you've entered will be lost.</p>
     <div class="cgm-grid" id="cakeGalleryGrid"></div>
     <a href="gallery.html" class="cgm-more" target="_blank" rel="noopener">See the full gallery →</a>
+  </div>
+</div>
+
+<!-- News Popup — auto-dismisses; content picked at random from NEWS_ITEMS -->
+<div class="news-modal" id="newsModal">
+  <div class="news-modal-backdrop" id="newsModalBackdrop"></div>
+  <div class="news-modal-panel">
+    <button type="button" class="news-modal-close" id="newsModalClose" aria-label="Close">&times;</button>
+    <div class="news-modal-gallery" id="newsModalGallery"></div>
+    <div class="news-modal-body">
+      <span class="news-modal-tag" id="newsModalTag">New Arrival</span>
+      <h3 id="newsModalTitle"></h3>
+      <p class="news-modal-price" id="newsModalPrice"></p>
+      <p class="news-modal-blurb" id="newsModalBlurb"></p>
+    </div>
+    <a href="#" class="btn btn-gold" id="newsModalCta">Order Now</a>
+    <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
   </div>
 </div>
 

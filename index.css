@@ -28,6 +28,7 @@ html {
   --font-body: 'Jost', sans-serif;
   --shadow-card: 0 24px 48px -24px rgba(24,19,15,0.35);
   --container: 1180px;
+  --ticker-h: 34px;
 }
 
 body{
@@ -72,7 +73,7 @@ h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; line-height
 .section-head p{ margin-top: 18px; color: var(--text-muted); font-size: 1.02rem; max-width: 52ch; }
 .section-head.center p{ margin-left:auto; margin-right:auto; }
 
-section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow-x: clip; }
+section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + var(--ticker-h)); overflow-x: clip; }
 
 /* Reveal-on-scroll */
 .reveal{ opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s ease; }
@@ -110,10 +111,40 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
 .crest.crest-lg .crest-core span{ font-size: 44px; }
 
 /* ============================================================
+   NEWS TICKER — scrolling promo strip, sits above the nav.
+   Content is built in JS from NEWS_ITEMS (see index.js/gallery.js),
+   shuffled on each load; the track is duplicated so the CSS loop
+   is seamless.
+============================================================ */
+.news-ticker{
+  position: fixed; top: 0; left: 0; right: 0; z-index: 260;
+  height: var(--ticker-h); overflow: hidden;
+  background: linear-gradient(90deg, var(--wine-deep), var(--wine) 55%, var(--wine-deep));
+  border-bottom: 1px solid var(--gold-line);
+  display:flex; align-items:center;
+}
+.news-ticker-track{
+  display:inline-flex; align-items:center; white-space:nowrap;
+  animation: news-ticker-scroll 34s linear infinite;
+  will-change: transform;
+}
+.news-ticker:hover .news-ticker-track{ animation-play-state: paused; }
+.news-ticker-item{
+  display:inline-flex; align-items:center; gap:10px; padding: 0 26px;
+  font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ivory); font-weight: 500; cursor: pointer;
+}
+.news-ticker-item:hover{ color: var(--gold-soft); }
+.news-ticker-item .tag{ color: var(--gold); font-weight:600; }
+.news-ticker-item .sep{ color: var(--gold-line); font-size: 0.7rem; }
+@keyframes news-ticker-scroll{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce){ .news-ticker-track{ animation: none; } }
+
+/* ============================================================
    NAV
 ============================================================ */
 .nav{
-  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  position: fixed; top: var(--ticker-h); left: 0; right: 0; z-index: 200;
   padding: 20px 0;
   transition: background .4s ease, padding .4s ease, box-shadow .4s ease;
 }
@@ -171,7 +202,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
      outside the document's box model instead of just visually
      offset, which avoids the extra scroll width entirely. */
   .nav-links{
-    position: fixed; top: 0; right: -100%; height: 100vh; width: min(320px, 80vw);
+    position: fixed; top: var(--ticker-h); right: -100%; height: calc(100vh - var(--ticker-h)); width: min(320px, 80vw);
     background: var(--ivory); flex-direction: column; align-items: flex-start;
     padding: 110px 32px 40px; gap: 26px;
     transition: right .4s ease;
@@ -200,7 +231,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
     radial-gradient(circle at 18% 22%, rgba(199,161,85,0.16), transparent 42%),
     radial-gradient(circle at 82% 78%, rgba(199,161,85,0.12), transparent 45%),
     linear-gradient(160deg, var(--wine-deep) 0%, var(--wine) 46%, var(--ink) 130%);
-  padding-top: 90px;
+  padding-top: calc(90px + var(--ticker-h));
 }
 .hero::before{
   content:"";
@@ -642,6 +673,57 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
 }
 
 /* ============================================================
+   NEWS POPUP — auto-dismissing announcement modal. Content comes
+   from a random pick out of NEWS_ITEMS (see index.js/gallery.js);
+   shows once per browser session, closes itself after a few
+   seconds (see the shrinking bar at the bottom), or on click.
+============================================================ */
+.news-modal{
+  position: fixed; inset:0; z-index: 700;
+  display:flex; align-items:center; justify-content:center; padding: 24px;
+  opacity:0; pointer-events:none; transition: opacity .35s ease;
+}
+.news-modal.open{ opacity:1; pointer-events:auto; }
+.news-modal-backdrop{ position:absolute; inset:0; background: rgba(24,19,15,0.78); }
+.news-modal-panel{
+  position: relative; background: var(--ivory); border-radius: 4px;
+  max-width: 420px; width:100%; overflow:hidden;
+  box-shadow: var(--shadow-card);
+  transform: translateY(10px); transition: transform .35s ease;
+}
+.news-modal.open .news-modal-panel{ transform: translateY(0); }
+.news-modal-close{
+  position:absolute; top: 10px; right: 12px; z-index: 2;
+  font-size: 1.4rem; color: var(--ivory); width: 32px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.5); transition: opacity .2s ease;
+}
+.news-modal-close:hover{ opacity: 0.7; }
+.news-modal-gallery{ display:flex; height: 150px; }
+.news-modal-gallery img{ flex:1; height:100%; object-fit:cover; min-width:0; }
+.news-modal-body{ padding: 26px 26px 0; }
+.news-modal-tag{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--wine); font-weight: 600;
+}
+.news-modal-tag::before{ content:""; width: 18px; height:1px; background: var(--wine); display:inline-block; }
+.news-modal-panel h3{ font-size: 1.7rem; margin: 10px 0 4px; }
+.news-modal-price{ color: var(--wine); font-family: var(--font-display); font-size: 1.15rem; }
+.news-modal-blurb{ color: var(--text-muted); font-size: 0.9rem; margin-top: 10px; }
+.news-modal-panel .btn{ margin: 20px 26px 26px; width: calc(100% - 52px); justify-content:center; }
+.news-modal-timer{ height: 3px; background: var(--gold-line); }
+.news-modal-timer span{
+  display:block; height:100%; width:100%; background: var(--wine);
+  transform-origin: left; transform: scaleX(1);
+}
+.news-modal.open .news-modal-timer span{ animation: news-timer-shrink 7s linear forwards; }
+@keyframes news-timer-shrink{ from{ transform: scaleX(1); } to{ transform: scaleX(0); } }
+@media (max-width: 480px){
+  .news-modal-gallery{ height: 120px; }
+}
+
+/* ============================================================
    TOAST (confirmation feedback)
 ============================================================ */
 .toast{
@@ -660,7 +742,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
   background:
     radial-gradient(circle at 18% 22%, rgba(199,161,85,0.16), transparent 42%),
     linear-gradient(160deg, var(--wine-deep) 0%, var(--wine) 46%, var(--ink) 130%);
-  color: var(--ivory); text-align:center; padding: 150px 0 70px;
+  color: var(--ivory); text-align:center; padding: calc(150px + var(--ticker-h)) 0 70px;
 }
 .gallery-hero .breadcrumb{ font-size: 0.76rem; letter-spacing: 0.06em; color: rgba(251,244,233,0.55); margin-bottom: 26px; }
 .gallery-hero .breadcrumb a{ color: var(--gold-soft); }
@@ -676,7 +758,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
   border-bottom: 1px solid rgba(24,19,15,0.08);
   display:flex; gap: 10px; flex-wrap: wrap; justify-content:center;
   padding: 18px 28px;
-  position: sticky; top: 0; z-index: 150;
+  position: sticky; top: var(--ticker-h); z-index: 150;
 }
 .gal-filter{
   padding: 9px 18px; border: 1px solid var(--gold-line); border-radius: 30px;
@@ -787,7 +869,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: 84px; overflow
 .gal-end-ctas{ display:flex; gap: 14px; justify-content:center; flex-wrap:wrap; margin-top: 30px; }
 
 @media (max-width: 560px){
-  .gal-filters{ padding: 14px 16px; justify-content:flex-start; overflow-x:auto; flex-wrap:nowrap; top: 0; }
+  .gal-filters{ padding: 14px 16px; justify-content:flex-start; overflow-x:auto; flex-wrap:nowrap; top: var(--ticker-h); }
   .gal-grid{ padding: 40px 16px 0; }
   .gal-break{ padding: 44px 4px 26px; gap:16px; }
   .gb-text{ white-space:normal; }

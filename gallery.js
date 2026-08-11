@@ -28,6 +28,85 @@ function openWhatsApp(message){
 const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
 function mediaUrl(relPath){ return `${R2_BASE_URL}/${relPath}`; }
 
+/* ============================================================
+   NEWS / PROMOTIONS — same data/logic as index.js (keep both in
+   sync). Add a new object here any time there's something to
+   announce — the ticker and popup both pick from this list and
+   shuffle the order automatically.
+============================================================ */
+const NEWS_ITEMS = [
+  {
+    tag: 'New Arrival',
+    title: 'Cake Slices',
+    price: '₦4,000 / slice',
+    blurb: 'Delicious cake slices for any occasion — now on the Finger Foods menu.',
+    images: [
+      mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg'),
+      mediaUrl('img/503416798_9068281249941854_7585160892651594669_n.jpg'),
+      mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg'),
+    ],
+    ctaLabel: 'Order Now',
+    ctaHref: 'index.html#finger-foods',
+  },
+];
+
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* ---- Scrolling ticker: builds one looping track from every item ---- */
+const newsTickerTrack = document.getElementById('newsTickerTrack');
+if(newsTickerTrack && NEWS_ITEMS.length){
+  const order = shuffleArray(NEWS_ITEMS);
+  const itemsHtml = order.map(n=>
+    `<span class="news-ticker-item" data-href="${n.ctaHref || ''}"><span class="tag">${n.tag}:</span>&nbsp;${n.title} — ${n.price}</span><span class="sep">✦</span>`
+  ).join('');
+  newsTickerTrack.innerHTML = itemsHtml + itemsHtml; // duplicated so the CSS scroll loop is seamless
+  newsTickerTrack.querySelectorAll('.news-ticker-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const href = el.dataset.href;
+      if(href) window.location.href = href;
+    });
+  });
+}
+
+/* ---- Auto-dismiss popup: one random item, shown once per session ---- */
+const newsModal = document.getElementById('newsModal');
+if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
+  const item = NEWS_ITEMS[Math.floor(Math.random() * NEWS_ITEMS.length)];
+  const AUTO_DISMISS_MS = 7000;
+
+  document.getElementById('newsModalTag').textContent = item.tag;
+  document.getElementById('newsModalTitle').textContent = item.title;
+  document.getElementById('newsModalPrice').textContent = item.price;
+  document.getElementById('newsModalBlurb').textContent = item.blurb;
+  document.getElementById('newsModalGallery').innerHTML = (item.images || []).slice(0, 3)
+    .map(src=> `<img src="${src}" alt="${item.title}">`).join('');
+  const ctaEl = document.getElementById('newsModalCta');
+  ctaEl.textContent = item.ctaLabel || 'Learn More';
+  ctaEl.href = item.ctaHref || '#';
+
+  let dismissTimer;
+  function closeNewsModal(){
+    newsModal.classList.remove('open');
+    clearTimeout(dismissTimer);
+  }
+  document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
+  document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
+  ctaEl.addEventListener('click', closeNewsModal);
+
+  sessionStorage.setItem('lcNewsSeen', '1');
+  setTimeout(()=>{
+    newsModal.classList.add('open');
+    dismissTimer = setTimeout(closeNewsModal, AUTO_DISMISS_MS);
+  }, 1200);
+}
+
 const genericWaMessage = `Hello ${CONFIG.businessName}! I saw your gallery and I'd like to enquire about your cakes and catering services.`;
 ['navWaBtn','contactWaBtn','contactWaIcon'].forEach(id=>{
   const el = document.getElementById(id);
