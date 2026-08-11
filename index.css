@@ -458,16 +458,24 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .tier-option.selected{ border-color: var(--wine); background: var(--wine); color: var(--ivory); }
 .tier-option.tier-option--disabled{ opacity: 0.35; pointer-events: none; }
 
+.tier-custom-field{ margin-top: 12px; margin-bottom: 0; max-width: 180px; }
+
 .tier-config{ margin-top: 14px; display:flex; flex-direction:column; gap: 12px; }
 .tier-config .tier-row{
-  display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap;
-  padding: 14px 16px; border: 1px solid rgba(24,19,15,0.1); border-radius: 3px; background: rgba(255,255,255,0.5);
+  position: relative; display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap;
+  padding: 14px 16px 34px; border: 1px solid rgba(24,19,15,0.1); border-radius: 3px; background: rgba(255,255,255,0.5);
 }
 .tier-config .tier-row-label{
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);
   width: 100%; margin-bottom: 2px; font-weight: 500;
 }
 .tier-config .tier-row .field{ margin-bottom: 0; flex:1; min-width: 130px; }
+.tier-preview-btn{
+  position: absolute; right:16px; bottom:10px;
+  font-size: 0.74rem; letter-spacing: 0.04em; color: var(--wine); text-decoration: underline;
+  text-underline-offset: 3px; background:none; border:none; padding:0; cursor:pointer;
+}
+.tier-preview-btn:hover{ color: var(--wine-bright); }
 
 .gallery-peek-btn{
   display:inline-flex; align-items:center; gap: 8px; margin-top: 10px;
@@ -520,6 +528,12 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .qty-control button{ width: 24px; height: 24px; display:flex; align-items:center; justify-content:center; font-size: 1.1rem; color: var(--wine); }
 .qty-control button:hover{ background: var(--ivory-dim); }
 .qty-control .qty-val{ width: 30px; text-align:center; font-size: 0.9rem; }
+
+.qty-with-label{ display:flex; align-items:center; gap: 10px; flex-shrink:0; }
+.qty-with-label .qty-label{ font-size: 0.8rem; color: var(--text-muted); }
+
+.sc-picker-row{ display:flex; gap: 28px; flex-wrap:wrap; }
+.sc-note{ font-size: 0.78rem; color: var(--text-muted); margin-top: 10px; max-width: 32ch; text-align:left; }
 
 .liter-chips{ display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0; }
 .liter-chip{

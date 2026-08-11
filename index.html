@@ -131,7 +131,7 @@
     </div>
     <div class="gallery-grid reveal" id="galleryGrid"></div>
 
-    <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">Behind the Scenes — Video</h3>
+    <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">Behind the Scenes</h3>
     <div class="reel" id="videoReel"></div>
 
     <h3 class="testimonial-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">What Clients Say</h3>
@@ -176,11 +176,16 @@
           <div class="field">
             <label>Tiers/Steps <span class="req">*</span></label>
             <div class="tier-select" id="tierSelect">
-              <label class="tier-option"><input type="radio" name="tier" value="1 Tier" data-count="1">1 Tier</label>
-              <label class="tier-option"><input type="radio" name="tier" value="2 Tiers" data-count="2">2 Tiers</label>
-              <label class="tier-option"><input type="radio" name="tier" value="3 Tiers" data-count="3">3 Tiers</label>
-              <label class="tier-option" id="tierOpt4"><input type="radio" name="tier" value="4 Tiers" data-count="4">4 Tiers</label>
-              <label class="tier-option" id="tierOpt5plus"><input type="radio" name="tier" value="5+ Tiers (Grand/Wedding)" data-count="5">5+ Tiers</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="1 Tier" data-count="1">1 Tier</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="2 Tiers" data-count="2">2 Tiers</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="3 Tiers" data-count="3">3 Tiers</label>
+              <label class="tier-option" id="tierOpt4"><input type="checkbox" name="tier" value="4 Tiers" data-count="4">4 Tiers</label>
+              <label class="tier-option" id="tierOpt5plus"><input type="checkbox" name="tier" value="5+ Tiers (Grand/Wedding)" data-count="5">5+ Tiers</label>
+              <label class="tier-option" id="tierOptCustom"><input type="checkbox" id="tierCustomCheckbox" value="Custom">Custom</label>
+            </div>
+            <div class="field tier-custom-field" id="tierCustomField" style="display:none;">
+              <label for="tierCustomCount">How many tiers?</label>
+              <input type="number" id="tierCustomCount" min="1" max="20" placeholder="e.g. 7">
             </div>
             <p class="form-note" id="birthdayTierNote" style="display:none; text-align:left; margin-top:10px;">Birthday cakes are available in 1–3 tiers/steps.</p>
             <div class="tier-config" id="tierConfig"></div>
@@ -194,24 +199,14 @@
               <label for="cakeDate">Date Needed <span class="req">*</span></label>
               <input type="date" id="cakeDate">
             </div>
-          </div>
-          <div class="field-row">
             <div class="field">
               <label for="cakeFlavor">Flavor <span class="req">*</span></label>
               <select id="cakeFlavor">
                 <option value="">Select flavor</option>
-                <option>Vanilla Bean</option><option>Red Velvet</option><option>Chocolate </option>
+                <option>Vanilla</option><option>Red Velvet</option><option>Chocolate </option>
                 <option>Banana bread</option><option>Marble</option>
                 <option>Coconut</option><option>Carrot</option>
                 <option>Strawberry</option><option>Rich-Fruit cake (Wedding)</option><option>Undecided — need guidance</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="cakeFilling">Filling</label>
-              <select id="cakeFilling">
-                <option value="">Select filling</option>
-                <option>Buttercream</option><option>Vanilla Custard</option><option>Chocolate Ganache</option>
-                <option>Fruit Preserve</option><option>Nutella</option><option>Caramel</option><option>Cream Cheese</option>
               </select>
             </div>
           </div>
@@ -219,7 +214,7 @@
             <label for="cakeFinish">Icing / Finish</label>
             <select id="cakeFinish">
               <option value="">Select finish</option>
-              <option>Classic Buttercream</option><option>Fondant</option><option>Semi-Naked</option>
+              <option>Classic Buttercream</option><option>Fondant</option><option>Semi-Naked</option><option>Whipped Cream</option>
               <!-- <option>Drip Finish</option><option>Fresh Floral</option><option>Edible Gold Leaf</option> -->
             </select>
           </div>
@@ -229,8 +224,8 @@
           </div>
           <div class="field">
             <label for="cakeDesign">Design Inspiration / Theme</label>
-            <textarea id="cakeDesign" placeholder="Describe the look, colors or theme you have in mind or view our gallery."></textarea>
-            <button type="button" class="gallery-peek-btn" id="viewCakeGalleryBtn">View Cake Designs in Our Gallery</button>
+            <textarea id="cakeDesign" placeholder="Describe the look, colors or theme you have in mind or VIEW OUR GALLERY."></textarea>
+            <button style="margin-top: 10px;" type="button" class="gallery-peek-btn" id="viewCakeGalleryBtn">View Cake Designs in Our Gallery</button>
           </div>
           <div class="field">
             <label>Delivery <span class="req">*</span></label>
@@ -352,7 +347,17 @@
             </div>
             <div class="field"><label for="catName">Your Name <span class="req">*</span></label><input type="text" id="catName" placeholder="Full name"></div>
             <div class="field"><label for="catPhone">WhatsApp Number <span class="req">*</span></label><input type="tel" id="catPhone" placeholder="080X XXX XXXX"></div>
-            <div class="field"><label for="catAddress">Venue / Delivery Location <span class="req">*</span></label><input type="text" id="catAddress" placeholder="Venue or delivery address"></div>
+            <div class="field">
+              <label>Delivery <span class="req">*</span></label>
+              <div class="chip-row" id="catDelivery">
+                <button type="button" class="chip" data-value="Delivery">Delivery</button>
+                <button type="button" class="chip" data-value="Pickup">Pickup</button>
+              </div>
+            </div>
+            <div class="field" id="catAddressField" style="display:none;">
+              <label for="catAddress">Venue / Delivery Location <span class="req">*</span></label>
+              <input type="text" id="catAddress" placeholder="Venue or delivery address">
+            </div>
             <div class="field"><label for="catNotes">Additional Notes</label><textarea id="catNotes" placeholder="Setup & serving needs, anything else"></textarea></div>
           </div>
           <button class="btn btn-wine" style="width:100%; justify-content:center;" id="catSubmit">Send Catering Request via WhatsApp</button>
@@ -376,7 +381,7 @@
     <div class="contact-info">
       <div class="c-block"><h4>WhatsApp</h4><p id="contactPhoneDisplay">+234 806 655 6677</p></div>
       <div class="c-block"><h4>Service Areas</h4><p>Available for indoor &amp; outdoor events across your city</p></div>
-      <div class="c-block"><h4>Hours</h4><p>Mon – Sat, 9am – 7pm</p></div>
+      <div class="c-block"><h4>Hours</h4><p>Mon – Sat, 8am – 8pm</p></div>
     </div>
 
     <div class="contact-social">
@@ -418,6 +423,22 @@
     <p class="cgm-sub">Browse past cake work for inspiration, then close this to continue your order — nothing you've entered will be lost.</p>
     <div class="cgm-grid" id="cakeGalleryGrid"></div>
     <a href="gallery.html" class="cgm-more" target="_blank" rel="noopener">See the full gallery →</a>
+  </div>
+</div>
+
+<!-- Tier Quick Look — shows 3 photos for whichever tier row's "Preview"
+     link was clicked. Closing it never touches #cakeForm. -->
+<div class="cake-gallery-modal" id="tierPreviewModal">
+  <div class="cgm-backdrop" id="tierPreviewBackdrop"></div>
+  <div class="cgm-panel">
+    <div class="cgm-head">
+      <div>
+        <span class="eyebrow">Quick Look</span>
+        <h3 id="tierPreviewTitle">Tier Preview</h3>
+      </div>
+      <button type="button" class="cgm-close" id="tierPreviewClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="cgm-grid" id="tierPreviewGrid"></div>
   </div>
 </div>
 

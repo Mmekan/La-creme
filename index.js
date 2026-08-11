@@ -206,10 +206,10 @@ galleryItems.forEach((item, i)=>{
    your-clip.mp4')` — the play placeholder is swapped automatically.
 ============================================================ */
 const videoTestimonials = [
-  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
-  { name: 'Wedding Cake Reveal', video: mediaUrl('videos/InShot_20251120_224656122.mp4'), tone:'tone-b' },
+  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20260612_184349227.mp4'), tone:'' },
+  { name: '12inch Cake Reveal', video: mediaUrl('videos/InShot_20251207_154703112.mp4'), tone:'tone-b' },
   { name: 'Wedding Day Moment', video: mediaUrl('videos/InShot_20251122_180814090.mp4'), tone:'tone-c' },
-  { name: 'Birthday Celebration', video: mediaUrl('videos/InShot_20251122_234645706.mp4'), tone:'' },
+  { name: 'Lunchpack Preparation', video: mediaUrl('videos/InShot_20251122_201354636.mp4'), tone:'' },
 ];
 const videoReel = document.getElementById('videoReel');
 videoTestimonials.forEach(v=>{
@@ -274,15 +274,20 @@ const tierSelectEl = document.getElementById('tierSelect');
 const tierConfigEl = document.getElementById('tierConfig');
 const tierOpt4 = document.getElementById('tierOpt4');
 const tierOpt5plus = document.getElementById('tierOpt5plus');
+const tierOptCustom = document.getElementById('tierOptCustom');
+const tierCustomCheckbox = document.getElementById('tierCustomCheckbox');
+const tierCustomField = document.getElementById('tierCustomField');
+const tierCustomCount = document.getElementById('tierCustomCount');
 const birthdayTierNote = document.getElementById('birthdayTierNote');
 const cakeOccasionEl = document.getElementById('cakeOccasion');
+const MAX_CUSTOM_TIERS = 20;
 
 function buildTierRow(index){
   const row = document.createElement('div');
   row.className = 'tier-row';
   row.dataset.index = index;
   row.innerHTML = `
-    <span class="tier-row-label">Tier ${index}</span>
+    <span class="tier-row-label">${index} Tier/ Step</span>
     <div class="field">
       <label for="tierInches-${index}">Inches</label>
       <select id="tierInches-${index}" class="tier-inches">
@@ -295,7 +300,8 @@ function buildTierRow(index){
       <select id="tierLayers-${index}" class="tier-layers" disabled>
         <option value="">Select inches first</option>
       </select>
-    </div>`;
+    </div>
+    <button type="button" class="tier-preview-btn" data-tier="${index}">Preview</button>`;
   const inchesSel = row.querySelector('.tier-inches');
   const layersSel = row.querySelector('.tier-layers');
   inchesSel.addEventListener('change', ()=>{
@@ -305,41 +311,86 @@ function buildTierRow(index){
       ? `<option value="">Select layers</option>` + opts.map(l=> `<option value="${l}">${l} Layers</option>`).join('')
       : `<option value="">Select inches first</option>`;
   });
+  row.querySelector('.tier-preview-btn').addEventListener('click', ()=> openTierPreview(index));
   return row;
 }
 
-function renderTierConfig(count){
-  tierConfigEl.innerHTML = '';
-  if(!count) return;
-  for(let i = 1; i <= count; i++) tierConfigEl.appendChild(buildTierRow(i));
+// Inserts a single tier's row in numeric order without touching the
+// others, so inches/layers already picked for other selected tiers
+// survive regardless of click order.
+function addTierRow(tierNumber){
+  if(tierConfigEl.querySelector(`.tier-row[data-index="${tierNumber}"]`)) return;
+  const row = buildTierRow(tierNumber);
+  const existingRows = Array.from(tierConfigEl.querySelectorAll('.tier-row'));
+  const nextRow = existingRows.find(r=> Number(r.dataset.index) > tierNumber);
+  if(nextRow) tierConfigEl.insertBefore(row, nextRow);
+  else tierConfigEl.appendChild(row);
+}
+function removeTierRow(tierNumber){
+  const row = tierConfigEl.querySelector(`.tier-row[data-index="${tierNumber}"]`);
+  if(row) row.remove();
+}
+
+// The full set of tier numbers that should currently have a row: every
+// checked preset (1/2/3/4/5+) contributes its own number, and a checked
+// Custom contributes 1..N for whatever count was typed.
+function getDesiredTierNumbers(){
+  const numbers = new Set();
+  tierSelectEl.querySelectorAll('.tier-option input[data-count]:checked').forEach(input=>{
+    numbers.add(Number(input.dataset.count));
+  });
+  if(tierCustomCheckbox.checked){
+    const n = Math.min(MAX_CUSTOM_TIERS, Math.max(0, Math.floor(Number(tierCustomCount.value)) || 0));
+    for(let i = 1; i <= n; i++) numbers.add(i);
+  }
+  return numbers;
+}
+
+// Reconciles rendered tier-rows with the desired set — removes rows no
+// longer wanted by anything, adds rows newly wanted, and leaves the rest
+// (and whatever inches/layers were already picked in them) untouched.
+function syncTierRows(){
+  const desired = getDesiredTierNumbers();
+  Array.from(tierConfigEl.querySelectorAll('.tier-row')).forEach(row=>{
+    if(!desired.has(Number(row.dataset.index))) row.remove();
+  });
+  Array.from(desired).sort((a,b)=> a - b).forEach(n=> addTierRow(n));
 }
 
 function updateTierAvailability(){
   const isBirthday = cakeOccasionEl.value === 'Birthday';
   birthdayTierNote.style.display = isBirthday ? 'block' : 'none';
-  [tierOpt4, tierOpt5plus].forEach(opt=>{
+  [tierOpt4, tierOpt5plus, tierOptCustom].forEach(opt=>{
     const input = opt.querySelector('input');
     opt.classList.toggle('tier-option--disabled', isBirthday);
     input.disabled = isBirthday;
     if(isBirthday && input.checked){
       input.checked = false;
       opt.classList.remove('selected');
-      renderTierConfig(0);
+      if(input === tierCustomCheckbox){
+        tierCustomField.style.display = 'none';
+        tierCustomCount.value = '';
+      }
     }
   });
+  syncTierRows();
 }
 cakeOccasionEl.addEventListener('change', updateTierAvailability);
 
-tierSelectEl.querySelectorAll('.tier-option').forEach(opt=>{
-  opt.addEventListener('click', ()=>{
-    const input = opt.querySelector('input');
-    if(input.disabled) return;
-    tierSelectEl.querySelectorAll('.tier-option').forEach(o=> o.classList.remove('selected'));
-    opt.classList.add('selected');
-    input.checked = true;
-    renderTierConfig(Number(input.dataset.count));
+tierSelectEl.querySelectorAll('.tier-option input[data-count]').forEach(input=>{
+  input.addEventListener('change', ()=>{
+    input.closest('.tier-option').classList.toggle('selected', input.checked);
+    syncTierRows();
   });
 });
+
+tierCustomCheckbox.addEventListener('change', ()=>{
+  tierOptCustom.classList.toggle('selected', tierCustomCheckbox.checked);
+  tierCustomField.style.display = tierCustomCheckbox.checked ? 'block' : 'none';
+  if(!tierCustomCheckbox.checked) tierCustomCount.value = '';
+  syncTierRows();
+});
+tierCustomCount.addEventListener('input', syncTierRows);
 
 const cakeDeliveryAddressField = document.getElementById('cakeDeliveryAddressField');
 const cakeDeliveryAddressInput = document.getElementById('cakeDeliveryAddress');
@@ -358,10 +409,9 @@ document.querySelectorAll('#cakeDelivery .chip').forEach(c=>{
 document.getElementById('cakeForm').addEventListener('submit', (e)=>{
   e.preventDefault();
   const occasion = document.getElementById('cakeOccasion').value;
-  const tierEl = document.querySelector('#tierSelect input:checked');
+  const tierInputs = Array.from(document.querySelectorAll('#tierSelect input:checked'));
   const date = document.getElementById('cakeDate').value;
   const flavor = document.getElementById('cakeFlavor').value;
-  const filling = document.getElementById('cakeFilling').value;
   const finish = document.getElementById('cakeFinish').value;
   const inscription = document.getElementById('cakeInscription').value;
   const design = document.getElementById('cakeDesign').value;
@@ -369,8 +419,13 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
   const phone = document.getElementById('cakePhone').value;
   const deliveryAddress = cakeDeliveryAddressInput.value.trim();
 
-  if(!occasion || !tierEl || !date || !flavor || !cakeDelivery || !name || !phone){
+  if(!occasion || !tierInputs.length || !date || !flavor || !cakeDelivery || !name || !phone){
     showToast('Please fill all required fields marked with *');
+    return;
+  }
+  if(tierCustomCheckbox.checked && !(Number(tierCustomCount.value) > 0)){
+    showToast('Please type how many tiers for your custom option.');
+    tierCustomCount.focus();
     return;
   }
   if(cakeDelivery === 'Delivery' && !deliveryAddress){
@@ -395,12 +450,11 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
     `Hello ${CONFIG.businessName}! I'd like to place a *Custom Cake* request.`,
     ``,
     `*Occasion:* ${occasion}`,
-    `*Tiers/Steps:* ${tierEl.value}`,
+    `*Tiers/Steps:* ${tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${tierCustomCount.value} Tiers)` : i.value).join(', ')}`,
     tierDetails.length ? `*Tier Details:*` : null,
     ...tierDetails.map(t=> `• ${t}`),
     `*Date Needed:* ${date}`,
     `*Flavor:* ${flavor}`,
-    filling ? `*Filling:* ${filling}` : null,
     finish ? `*Icing/Finish:* ${finish}` : null,
     inscription ? `*Inscription:* ${inscription}` : null,
     design ? `*Design Inspiration:* ${design}` : null,
@@ -445,33 +499,83 @@ document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> ca
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') cakeGalleryModal.classList.remove('open'); });
 
 /* ============================================================
+   TIER QUICK LOOK — 3 photos per tier count, shown when the
+   "Preview" link on a tier-row is clicked. Fill in the 3 images
+   you want for each number below by replacing `image: null` with
+   image: mediaUrl('img/your-file.jpg'). Leaving image: null keeps
+   an empty placeholder frame with the caption text.
+============================================================ */
+const TIER_PREVIEW_IMAGES = {
+  1: [
+    { image: null, caption: '1 Tier — photo 1' },
+    { image: null, caption: '1 Tier — photo 2' },
+    { image: null, caption: '1 Tier — photo 3' },
+  ],
+  2: [
+    { image: null, caption: '2 Tiers — photo 1' },
+    { image: null, caption: '2 Tiers — photo 2' },
+    { image: null, caption: '2 Tiers — photo 3' },
+  ],
+  3: [
+    { image: null, caption: '3 Tiers — photo 1' },
+    { image: null, caption: '3 Tiers — photo 2' },
+    { image: null, caption: '3 Tiers — photo 3' },
+  ],
+  4: [
+    { image: null, caption: '4 Tiers — photo 1' },
+    { image: null, caption: '4 Tiers — photo 2' },
+    { image: null, caption: '4 Tiers — photo 3' },
+  ],
+  5: [
+    { image: null, caption: '5+ Tiers — photo 1' },
+    { image: null, caption: '5+ Tiers — photo 2' },
+    { image: null, caption: '5+ Tiers — photo 3' },
+  ],
+};
+const tierPreviewModal = document.getElementById('tierPreviewModal');
+const tierPreviewGrid = document.getElementById('tierPreviewGrid');
+const tierPreviewTitle = document.getElementById('tierPreviewTitle');
+
+function openTierPreview(tierNumber){
+  const items = TIER_PREVIEW_IMAGES[tierNumber] || [];
+  tierPreviewTitle.textContent = `${tierNumber} Tier${tierNumber > 1 ? 's' : ''} — Quick Look`;
+  tierPreviewGrid.innerHTML = items.map(item=> item.image
+    ? `<div class="media-frame"><img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div></div>`
+    : `<div class="media-frame" style="aspect-ratio:4/5;"><div class="ring"></div><span class="cap">${item.caption}</span></div>`
+  ).join('');
+  tierPreviewModal.classList.add('open');
+}
+document.getElementById('tierPreviewClose').addEventListener('click', ()=> tierPreviewModal.classList.remove('open'));
+document.getElementById('tierPreviewBackdrop').addEventListener('click', ()=> tierPreviewModal.classList.remove('open'));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') tierPreviewModal.classList.remove('open'); });
+
+/* ============================================================
    FINGER FOOD MENU — data-driven
    Small Chops and Chin Chin are cascading composites: the item
    shows just its option buttons by default, and a quantity
    stepper only appears once a specific variant is chosen. Meat
    Pie and Cake Slices are simple always-visible qty-stepper rows.
 ============================================================ */
-const CAKE_FILLINGS = ['Buttercream', 'Vanilla Custard', 'Chocolate Ganache', 'Fruit Preserve', 'Nutella', 'Caramel', 'Cream Cheese'];
+const CAKE_SLICE_FLAVOURS = ['Red Velvet', 'Chocolate', 'Vanilla', 'Cookies & Cream', 'Triple Delight'];
 
 const SMALL_CHOPS_VARIANTS = [
-  { id:'sc-plate-standard', type:'Plate', style:'Standard', name:'Small Chops — Plate (Standard)', unit:'plate', price:6000 },
-  { id:'sc-plate-classic', type:'Plate', style:'Classic', name:'Small Chops — Plate (Classic)', unit:'plate', price:8000 },
-  { id:'sc-tray-standard', type:'Tray', style:'Standard', name:'Small Chops — Tray (Standard)', unit:'tray (30 pcs)', price:18000 },
-  { id:'sc-tray-classic', type:'Tray', style:'Classic', name:'Small Chops — Tray (Classic)', unit:'tray (30 pcs)', price:22000 },
-  { id:'sc-tray-premium', type:'Tray', style:'Premium', name:'Small Chops — Tray (Premium)', unit:'tray (30 pcs)', price:28000 },
+  { id:'sc-plate-standard', type:'Plate', style:'Standard', name:'Small Chops — Plate (Standard)', unit:'plate', price:2500, contents:'1 Spring roll, 1 Samosa, 5 puff-puff & 1 chicken' },
+  { id:'sc-plate-classic', type:'Plate', style:'Classic', name:'Small Chops — Plate (Classic)', unit:'plate', price:4000, contents:'2 Spring rolls, 2 Samosa, 10 puff-puff & 1 chicken' },
+  { id:'sc-tray-standard', type:'Tray', style:'Standard', name:'Small Chops — Tray (Standard)', unit:'tray', price:13000, contents:'5 Spring rolls, 5 Samosa, 25 puff-puff & 5 chicken' },
+  { id:'sc-tray-classic', type:'Tray', style:'Classic', name:'Small Chops — Tray (Classic)', unit:'tray', price:25000, contents:'10 Spring rolls, 10 Samosa, 50 puff-puff & 10 chicken' },
 ];
 const CHIN_CHIN_VARIANTS = [
-  { id:'cc-standard', name:'Chin Chin — Standard Pack', unit:'1 litre pack', price:4500 },
-  { id:'cc-bucket', name:'Chin Chin — Bucket', unit:'bucket', price:9000 },
+  { id:'cc-standard', name:'Chin Chin — Standard Pack', unit:'1 litre pack', price:2000 },
+  { id:'cc-bucket', name:'Chin Chin — Bucket', unit:'bucket', price:15000 },
 ];
 const fingerFoodMenu = [
-  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'pack of 12', price:9500, icon: ICONS.platter },
-  { id:'cake-slices', name:'Cake Slices', desc:'Delicious cake slices for any occasion', unit:'slice', price:4000, icon: ICONS.platter, needsFilling:true },
+  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'pack of 12', price:1000, icon: ICONS.platter },
+  { id:'cake-slices', name:'Cake Slices', desc:'Delicious cake slices for any occasion', unit:'slice', price:3500, icon: ICONS.platter, needsFlavour:true },
 ];
 const ALL_FF_ITEMS = [...SMALL_CHOPS_VARIANTS, ...CHIN_CHIN_VARIANTS, ...fingerFoodMenu];
 
 const ffState = {};
-const ffFillings = {};
+const ffFlavours = {};
 const ffWidgets = [];
 ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
 
@@ -489,31 +593,35 @@ function buildSmallChopsItem(){
         <p>Puff puff, spring rolls, samosa & sausage rolls — choose plate or tray</p>
       </div>
     </div>
-    <div class="m-extra">
-      <span class="m-extra-label">Plate or Tray?</span>
-      <div class="liter-chips" data-role="type">
-        <button type="button" class="liter-chip" data-value="Plate">Plate</button>
-        <button type="button" class="liter-chip" data-value="Tray">Tray</button>
+    <div class="m-extra sc-picker-row">
+      <div data-role="type-block">
+        <span class="m-extra-label">Plate or Tray?</span>
+        <div class="liter-chips" data-role="type">
+          <button type="button" class="liter-chip" data-value="Plate">Plate</button>
+          <button type="button" class="liter-chip" data-value="Tray">Tray</button>
+        </div>
       </div>
-    </div>
-    <div class="m-extra" data-role="style-wrap" style="display:none;">
-      <span class="m-extra-label">Style</span>
-      <div class="liter-chips" data-role="style"></div>
+      <div data-role="style-wrap" style="display:none;">
+        <span class="m-extra-label">Style</span>
+        <div class="liter-chips" data-role="style"></div>
+        <p class="form-note sc-note" data-role="note" style="display:none;"></p>
+      </div>
     </div>
     <div class="m-extra" data-role="qty-wrap" style="display:none;">
       <div class="m-qty-row">
         <div class="m-price" data-role="price"></div>
-        <div class="qty-control">
+        <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
           <button type="button" aria-label="Decrease" data-act="dec">−</button>
           <span class="qty-val" data-role="qty-val">0</span>
           <button type="button" aria-label="Increase" data-act="inc">+</button>
-        </div>
+        </div></div>
       </div>
     </div>`;
 
   const typeWrap = wrap.querySelector('[data-role="type"]');
   const styleWrap = wrap.querySelector('[data-role="style-wrap"]');
   const styleChipsEl = wrap.querySelector('[data-role="style"]');
+  const noteEl = wrap.querySelector('[data-role="note"]');
   const qtyWrap = wrap.querySelector('[data-role="qty-wrap"]');
   const qtyVal = wrap.querySelector('[data-role="qty-val"]');
   const priceEl = wrap.querySelector('[data-role="price"]');
@@ -524,6 +632,8 @@ function buildSmallChopsItem(){
     priceEl.textContent = `${fmtNaira(variant.price)} / ${variant.unit}`;
     qtyVal.textContent = ffState[variant.id];
     qtyWrap.style.display = 'block';
+    noteEl.textContent = `Contains: ${variant.contents}`;
+    noteEl.style.display = 'block';
   }
 
   typeWrap.querySelectorAll('.liter-chip').forEach(chip=>{
@@ -532,6 +642,7 @@ function buildSmallChopsItem(){
       chip.classList.add('selected');
       currentVariant = null;
       qtyWrap.style.display = 'none';
+      noteEl.style.display = 'none';
       const variants = SMALL_CHOPS_VARIANTS.filter(v=> v.type === chip.dataset.value);
       styleChipsEl.innerHTML = variants.map(v=> `<button type="button" class="liter-chip" data-id="${v.id}">${v.style}</button>`).join('');
       styleChipsEl.querySelectorAll('.liter-chip').forEach(sc=>{
@@ -577,11 +688,11 @@ function buildChinChinItem(){
     <div class="m-extra" data-role="qty-wrap" style="display:none;">
       <div class="m-qty-row">
         <div class="m-price" data-role="price"></div>
-        <div class="qty-control">
+        <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
           <button type="button" aria-label="Decrease" data-act="dec">−</button>
           <span class="qty-val" data-role="qty-val">0</span>
           <button type="button" aria-label="Increase" data-act="inc">+</button>
-        </div>
+        </div></div>
       </div>
     </div>`;
 
@@ -618,7 +729,7 @@ ffWidgets.forEach(w=> fingerFoodList.appendChild(w));
 
 fingerFoodMenu.forEach(item=>{
   const row = document.createElement('div');
-  row.className = 'menu-item' + (item.needsFilling ? ' has-extra' : '');
+  row.className = 'menu-item' + (item.needsFlavour ? ' has-extra' : '');
   row.innerHTML = `
     <div class="m-top">
       <span class="m-icon">${item.icon}</span>
@@ -627,27 +738,27 @@ fingerFoodMenu.forEach(item=>{
         <p>${item.desc}</p>
         <div class="m-price">${fmtNaira(item.price)} / ${item.unit}</div>
       </div>
-      <div class="qty-control">
+      <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
         <button type="button" aria-label="Decrease" data-act="dec">−</button>
         <span class="qty-val" id="ff-qty-${item.id}">0</span>
         <button type="button" aria-label="Increase" data-act="inc">+</button>
-      </div>
+      </div></div>
     </div>
-    ${item.needsFilling ? `
+    ${item.needsFlavour ? `
     <div class="m-extra" id="ff-extra-${item.id}" style="display:none;">
       <div class="field">
-        <label for="ff-filling-${item.id}">Filling <span class="req">*</span></label>
-        <select id="ff-filling-${item.id}">
-          <option value="">Select filling</option>
-          ${CAKE_FILLINGS.map(f=> `<option value="${f}">${f}</option>`).join('')}
+        <label for="ff-flavour-${item.id}">Flavour <span class="req">*</span></label>
+        <select id="ff-flavour-${item.id}">
+          <option value="">Select flavour</option>
+          ${CAKE_SLICE_FLAVOURS.map(f=> `<option value="${f}">${f}</option>`).join('')}
         </select>
       </div>
     </div>` : ''}`;
 
-  if(item.needsFilling){
-    ffFillings[item.id] = '';
-    row.querySelector(`#ff-filling-${item.id}`).addEventListener('change', (e)=>{
-      ffFillings[item.id] = e.target.value;
+  if(item.needsFlavour){
+    ffFlavours[item.id] = '';
+    row.querySelector(`#ff-flavour-${item.id}`).addEventListener('change', (e)=>{
+      ffFlavours[item.id] = e.target.value;
     });
   }
 
@@ -663,7 +774,7 @@ function renderFF(){
 
   fingerFoodMenu.forEach(item=>{
     document.getElementById(`ff-qty-${item.id}`).textContent = ffState[item.id];
-    if(item.needsFilling){
+    if(item.needsFlavour){
       document.getElementById(`ff-extra-${item.id}`).style.display = ffState[item.id] > 0 ? 'block' : 'none';
     }
   });
@@ -673,10 +784,10 @@ function renderFF(){
     const qty = ffState[item.id];
     if(qty > 0){
       count += qty; total += qty * item.price;
-      const fillingNote = item.needsFilling && ffFillings[item.id] ? ` — Filling: ${ffFillings[item.id]}` : '';
+      const flavourNote = item.needsFlavour && ffFlavours[item.id] ? ` — Flavour: ${ffFlavours[item.id]}` : '';
       const row = document.createElement('div');
       row.className = 'summary-row';
-      row.innerHTML = `<div><div class="s-name">${item.name} × ${qty}${fillingNote}</div><div class="s-meta">${fmtNaira(item.price * qty)}</div></div>
+      row.innerHTML = `<div><div class="s-name">${item.name} × ${qty}${flavourNote}</div><div class="s-meta">${fmtNaira(item.price * qty)}</div></div>
         <button type="button" class="s-remove" data-id="${item.id}">Remove</button>`;
       row.querySelector('.s-remove').addEventListener('click', ()=>{ ffState[item.id] = 0; renderFF(); });
       listEl.appendChild(row);
@@ -701,17 +812,17 @@ document.getElementById('ffSubmit').addEventListener('click', ()=>{
   if(!address){ showToast('Please add your delivery location.'); addressEl.focus(); return; }
 
   for(const item of ALL_FF_ITEMS){
-    if(item.needsFilling && ffState[item.id] > 0 && !ffFillings[item.id]){
-      showToast(`Please select a filling for ${item.name}.`);
-      document.getElementById(`ff-filling-${item.id}`).focus();
+    if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
+      showToast(`Please select a flavour for ${item.name}.`);
+      document.getElementById(`ff-flavour-${item.id}`).focus();
       return;
     }
   }
 
   const items = ALL_FF_ITEMS.filter(i=> ffState[i.id] > 0)
     .map(i=>{
-      const fillingNote = i.needsFilling && ffFillings[i.id] ? ` — Filling: ${ffFillings[i.id]}` : '';
-      return `• ${i.name} × ${ffState[i.id]} (${fmtNaira(i.price * ffState[i.id])})${fillingNote}`;
+      const flavourNote = i.needsFlavour && ffFlavours[i.id] ? ` — Flavour: ${ffFlavours[i.id]}` : '';
+      return `• ${i.name} × ${ffState[i.id]} (${fmtNaira(i.price * ffState[i.id])})${flavourNote}`;
     });
   let total = ALL_FF_ITEMS.reduce((sum,i)=> sum + i.price * ffState[i.id], 0);
 
@@ -747,7 +858,7 @@ const cateringSoups = [
 const literOptions = [
   { label:'3L', price:15000 }, { label:'5L', price:23000 }, { label:'10L', price:42000 },
 ];
-const SOUP_PROTEINS = ['Chicken', 'Turkey', 'Beef', 'Fish', 'Assorted (Mixed)'];
+const SOUP_PROTEINS = ['Goat meat', 'Beef', 'Fish', 'Cow Leg'];
 
 const cateringRice = [
   { id:'jollof', name:'Jollof Rice', desc:'Smoky party-style jollof', icon: ICONS.rice },
@@ -761,6 +872,10 @@ const RICE_SIDES = ['Salad', 'Plantain'];
 const RICE_PRICING = {
   Lunchpack: { Standard: 2500, Classic: 3000 },
   Tray: { Standard: 20000, Classic: 24000 },
+};
+const RICE_STYLE_NOTES = {
+  Standard: 'Standard has just Rice and Chicken.',
+  Classic: 'Classic has Rice, Chicken and Sides (Salad/Plantain).',
 };
 
 const cateringProteins = [
@@ -862,6 +977,7 @@ function buildRiceRow(item){
       <div class="liter-chips" data-role="style">
         ${RICE_STYLES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
       </div>
+      <p class="form-note sc-note" data-role="style-note" style="display:none;"></p>
     </div>
     <div class="m-extra" data-role="sides-wrap" style="display:none;">
       <span class="m-extra-label">Choose a Side</span>
@@ -874,6 +990,7 @@ function buildRiceRow(item){
   const typeChips = row.querySelector('[data-role="type"]');
   const styleWrap = row.querySelector('[data-role="style-wrap"]');
   const styleChips = row.querySelector('[data-role="style"]');
+  const styleNoteEl = row.querySelector('[data-role="style-note"]');
   const sidesWrap = row.querySelector('[data-role="sides-wrap"]');
   const sidesChips = row.querySelector('[data-role="sides"]');
 
@@ -897,6 +1014,7 @@ function buildRiceRow(item){
       sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       sel.style = ''; sel.sides = '';
       sidesWrap.style.display = 'none';
+      styleNoteEl.style.display = 'none';
       if(already){
         sel.type = '';
         styleWrap.style.display = 'none';
@@ -917,10 +1035,13 @@ function buildRiceRow(item){
       if(already){
         sel.style = '';
         sidesWrap.style.display = 'none';
+        styleNoteEl.style.display = 'none';
       } else {
         chip.classList.add('selected');
         sel.style = chip.dataset.value;
         sidesWrap.style.display = sel.style === 'Classic' ? 'block' : 'none';
+        styleNoteEl.textContent = RICE_STYLE_NOTES[sel.style];
+        styleNoteEl.style.display = 'block';
       }
       commit();
     });
@@ -952,11 +1073,11 @@ cateringProteins.forEach(item=>{
   row.innerHTML = `
     <span class="m-icon">${item.icon}</span>
     <div class="m-body"><h4>${item.name}</h4><div class="m-price">${fmtNaira(item.price)} ${item.unit}</div></div>
-    <div class="qty-control">
+    <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
       <button type="button" aria-label="Decrease" data-act="dec">−</button>
       <span class="qty-val" id="cat-qty-${item.id}">0</span>
       <button type="button" aria-label="Increase" data-act="inc">+</button>
-    </div>`;
+    </div></div>`;
   row.querySelector('[data-act="dec"]').addEventListener('click', ()=>{ if(catState.proteins[item.id] > 0){ catState.proteins[item.id]--; renderCatering(); } });
   row.querySelector('[data-act="inc"]').addEventListener('click', ()=>{ catState.proteins[item.id]++; renderCatering(); });
   proteinList.appendChild(row);
@@ -1007,18 +1128,31 @@ document.querySelectorAll('#catServiceType .chip').forEach(c=>{
   });
 });
 
+const catAddressField = document.getElementById('catAddressField');
+const catAddressInput = document.getElementById('catAddress');
+let catDelivery = '';
+document.querySelectorAll('#catDelivery .chip').forEach(c=>{
+  c.addEventListener('click', ()=>{
+    document.querySelectorAll('#catDelivery .chip').forEach(x=> x.classList.remove('active'));
+    c.classList.add('active');
+    catDelivery = c.dataset.value;
+    const needsAddress = catDelivery === 'Delivery';
+    catAddressField.style.display = needsAddress ? 'block' : 'none';
+    if(!needsAddress) catAddressInput.value = '';
+  });
+});
+
 document.getElementById('catSubmit').addEventListener('click', ()=>{
   const eventType = document.getElementById('catEventType').value;
   const guests = document.getElementById('catGuests').value;
   const date = document.getElementById('catDate').value;
   const name = document.getElementById('catName').value;
   const phone = document.getElementById('catPhone').value;
-  const addressEl = document.getElementById('catAddress');
-  const address = addressEl.value.trim();
+  const address = catAddressInput.value.trim();
   const notes = document.getElementById('catNotes').value;
 
-  if(!eventType || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
-  if(!address){ showToast('Please add your venue/delivery location.'); addressEl.focus(); return; }
+  if(!eventType || !catDelivery || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
+  if(catDelivery === 'Delivery' && !address){ showToast('Please add your venue/delivery location.'); catAddressInput.focus(); return; }
 
   const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label} (${fmtNaira(s.price)})`);
   const riceLines = Object.values(catState.rice).map(r=> `• ${r.name} — ${r.label} (${fmtNaira(r.price)})`);
@@ -1041,7 +1175,8 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
     proteinLines.length ? `*Proteins:*` : null, ...proteinLines,
     ``,
     `*Estimated Total:* ${fmtNaira(total)}`,
-    `*Venue/Delivery Location:* ${address}`,
+    `*Delivery:* ${catDelivery}`,
+    address ? `*Venue/Delivery Location:* ${address}` : null,
     notes ? `*Notes:* ${notes}` : null,
     ``,
     `*Name:* ${name}`,
