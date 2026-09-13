@@ -1,31 +1,9 @@
 /* ============================================================
-   CONFIG
+   CONFIG, waLink(), openWhatsApp(), fmtNaira(), R2_BASE_URL,
+   mediaUrl(), escapeHtml(), isValidPhone() now live in config.js
+   (loaded before this file) — single source of truth for both
+   index.html and gallery.html.
 ============================================================ */
-const CONFIG = {
-  // La Crème business WhatsApp number. Digits only, country code
-  // first, no + and no leading 0.
-  whatsappNumber: '2348066556677',
-  businessName: 'La Crème'
-};
-
-document.getElementById('contactPhoneDisplay').textContent =
-  '+' + CONFIG.whatsappNumber.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1 $2 $3 $4');
-
-function waLink(message){
-  return `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(message)}`;
-}
-function openWhatsApp(message){
-  window.open(waLink(message), '_blank');
-}
-function fmtNaira(n){ return '₦' + n.toLocaleString('en-NG'); }
-
-/* ============================================================
-   MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather
-   than committed to this repo. Update R2_BASE_URL once the
-   bucket's public URL (r2.dev or a custom domain) is known.
-============================================================ */
-const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
-function mediaUrl(relPath){ return `${R2_BASE_URL}/${relPath}`; }
 
 document.getElementById('aboutPhoto').src = mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg');
 
@@ -95,16 +73,17 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
 
   let dismissTimer;
   function closeNewsModal(){
-    newsModal.classList.remove('open');
+    closeModal(newsModal);
     clearTimeout(dismissTimer);
   }
   document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
   document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
   ctaEl.addEventListener('click', closeNewsModal);
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && newsModal.classList.contains('open')) closeNewsModal(); });
 
   sessionStorage.setItem('lcNewsSeen', '1');
   setTimeout(()=>{
-    newsModal.classList.add('open');
+    openModal(newsModal);
     dismissTimer = setTimeout(closeNewsModal, AUTO_DISMISS_MS);
   }, 1200);
 }
@@ -256,11 +235,11 @@ function openLightbox(item){
   lightboxInner.innerHTML = item.image
     ? `<img src="${item.image}" alt="${item.caption}" loading="lazy" style="border-radius:2px;">`
     : `<div class="media-frame ${item.tone}" style="aspect-ratio:4/5; border-radius:2px;"><div class="ring"></div>${item.icon}<span class="cap">${item.caption}</span></div>`;
-  lightbox.classList.add('open');
+  openModal(lightbox);
 }
-document.getElementById('lightboxClose').addEventListener('click', ()=> lightbox.classList.remove('open'));
-lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) lightbox.classList.remove('open'); });
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') lightbox.classList.remove('open'); });
+document.getElementById('lightboxClose').addEventListener('click', ()=> closeModal(lightbox));
+lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) closeModal(lightbox); });
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && lightbox.classList.contains('open')) closeModal(lightbox); });
 
 /* ============================================================
    CAKE FORM
@@ -423,6 +402,11 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
     showToast('Please fill all required fields marked with *');
     return;
   }
+  if(!isValidPhone(phone)){
+    showToast('Please enter a valid WhatsApp number.');
+    document.getElementById('cakePhone').focus();
+    return;
+  }
   if(tierCustomCheckbox.checked && !(Number(tierCustomCount.value) > 0)){
     showToast('Please type how many tiers for your custom option.');
     tierCustomCount.focus();
@@ -493,10 +477,10 @@ cakeGalleryItems.forEach(item=>{
 });
 
 const cakeGalleryModal = document.getElementById('cakeGalleryModal');
-document.getElementById('viewCakeGalleryBtn').addEventListener('click', ()=> cakeGalleryModal.classList.add('open'));
-document.getElementById('cakeGalleryClose').addEventListener('click', ()=> cakeGalleryModal.classList.remove('open'));
-document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> cakeGalleryModal.classList.remove('open'));
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') cakeGalleryModal.classList.remove('open'); });
+document.getElementById('viewCakeGalleryBtn').addEventListener('click', ()=> openModal(cakeGalleryModal));
+document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
+document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> closeModal(cakeGalleryModal));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && cakeGalleryModal.classList.contains('open')) closeModal(cakeGalleryModal); });
 
 /* ============================================================
    TIER QUICK LOOK — 3 photos per tier count, shown when the
@@ -543,11 +527,11 @@ function openTierPreview(tierNumber){
     ? `<div class="media-frame"><img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div></div>`
     : `<div class="media-frame" style="aspect-ratio:4/5;"><div class="ring"></div><span class="cap">${item.caption}</span></div>`
   ).join('');
-  tierPreviewModal.classList.add('open');
+  openModal(tierPreviewModal);
 }
-document.getElementById('tierPreviewClose').addEventListener('click', ()=> tierPreviewModal.classList.remove('open'));
-document.getElementById('tierPreviewBackdrop').addEventListener('click', ()=> tierPreviewModal.classList.remove('open'));
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') tierPreviewModal.classList.remove('open'); });
+document.getElementById('tierPreviewClose').addEventListener('click', ()=> closeModal(tierPreviewModal));
+document.getElementById('tierPreviewBackdrop').addEventListener('click', ()=> closeModal(tierPreviewModal));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && tierPreviewModal.classList.contains('open')) closeModal(tierPreviewModal); });
 
 /* ============================================================
    FINGER FOOD MENU — data-driven
@@ -799,6 +783,7 @@ function renderFF(){
   document.getElementById('ffEmpty').style.display = count ? 'none' : 'block';
   document.getElementById('ffCheckout').style.display = count ? 'block' : 'none';
   document.getElementById('fingerFoodSummary').style.display = count ? 'block' : 'none';
+  if(typeof refreshCartUI === 'function') refreshCartUI();
 }
 
 document.getElementById('ffSubmit').addEventListener('click', ()=>{
@@ -809,6 +794,11 @@ document.getElementById('ffSubmit').addEventListener('click', ()=>{
   const date = document.getElementById('ffDate').value;
   const notes = document.getElementById('ffNotes').value;
   if(!name || !phone){ showToast('Please add your name and WhatsApp number.'); return; }
+  if(!isValidPhone(phone)){
+    showToast('Please enter a valid WhatsApp number.');
+    document.getElementById('ffPhone').focus();
+    return;
+  }
   if(!address){ showToast('Please add your delivery location.'); addressEl.focus(); return; }
 
   for(const item of ALL_FF_ITEMS){
@@ -1117,6 +1107,7 @@ function renderCatering(){
   document.getElementById('catTotal').textContent = fmtNaira(total);
   document.getElementById('catEmpty').style.display = count ? 'none' : 'block';
   document.getElementById('catCheckout').style.display = count ? 'block' : 'none';
+  if(typeof refreshCartUI === 'function') refreshCartUI();
 }
 
 let catServiceType = '';
@@ -1152,6 +1143,11 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
   const notes = document.getElementById('catNotes').value;
 
   if(!eventType || !catDelivery || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
+  if(!isValidPhone(phone)){
+    showToast('Please enter a valid WhatsApp number.');
+    document.getElementById('catPhone').focus();
+    return;
+  }
   if(catDelivery === 'Delivery' && !address){ showToast('Please add your venue/delivery location.'); catAddressInput.focus(); return; }
 
   const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label} (${fmtNaira(s.price)})`);
@@ -1189,3 +1185,271 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
 
 renderFF();
 renderCatering();
+/* ============================================================
+   MINI CART — context-aware sticky bar + review sheet
+
+   Problem: at <=980px .menu-layout collapses to one column, which
+   stacks the order summary below the entire menu list. A customer
+   building an order has no idea what their running total is until
+   they've scrolled past every item — so they can't tell when to
+   stop adding. This keeps the total on screen permanently and
+   gives them a sheet to review/adjust mid-order.
+
+   Deliberately NOT a toast per tap: that's noise on mobile. The
+   only per-add feedback is in-place (digit pulse, badge pop, and a
+   persistent wine rule on cards already in the cart).
+============================================================ */
+const cartBar        = document.getElementById('cartBar');
+const cartSheet      = document.getElementById('cartSheet');
+const cartBarBadge   = document.getElementById('cartBarBadge');
+const cartBarLabel   = document.getElementById('cartBarLabel');
+const cartBarTotal   = document.getElementById('cartBarTotal');
+const cartBarCta     = document.getElementById('cartBarCta');
+const cartSheetList  = document.getElementById('cartSheetList');
+const cartSheetPanel = cartSheet.querySelector('.cart-sheet-panel');
+
+/* Each cart exposes the same shape so the bar/sheet stay generic. */
+const CART_SOURCES = {
+  ff: {
+    sectionId: 'finger-foods',
+    title: 'Finger Foods Order',
+    checkoutId: 'ffCheckout',
+    lines(){
+      return ALL_FF_ITEMS.filter(i=> ffState[i.id] > 0).map(i=>({
+        id: i.id,
+        name: i.name + (i.needsFlavour && ffFlavours[i.id] ? ` — ${ffFlavours[i.id]}` : ''),
+        qty: ffState[i.id],
+        unitPrice: i.price,
+        stepper: true
+      }));
+    },
+    setQty(id, qty){ ffState[id] = Math.max(0, qty); renderFF(); }
+  },
+  cat: {
+    sectionId: 'catering',
+    title: 'Catering Order',
+    checkoutId: 'catCheckout',
+    lines(){
+      const out = [];
+      // Soups and rice are a single size selection, not a quantity —
+      // so they get a remove action rather than a +/- stepper.
+      Object.entries(catState.soups).forEach(([key, s])=>
+        out.push({ id:`soup:${key}`, name:`${s.name} — ${s.label}`, qty:1, unitPrice:s.price, stepper:false }));
+      Object.entries(catState.rice).forEach(([key, r])=>
+        out.push({ id:`rice:${key}`, name:`${r.name} — ${r.label}`, qty:1, unitPrice:r.price, stepper:false }));
+      cateringProteins.forEach(p=>{
+        if(catState.proteins[p.id] > 0)
+          out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:p.price, stepper:true });
+      });
+      return out;
+    },
+    setQty(id, qty){
+      const sep = id.indexOf(':');
+      const kind = id.slice(0, sep), key = id.slice(sep + 1);
+      if(kind === 'protein') catState.proteins[key] = Math.max(0, qty);
+      else if(kind === 'soup') delete catState.soups[key];
+      else if(kind === 'rice') delete catState.rice[key];
+      renderCatering();
+    }
+  }
+};
+
+/* Which cart the bar is currently showing — decided by whichever
+   menu section is crossing the middle of the viewport. */
+let activeCart = null;
+['finger-foods','catering'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(!el) return;
+  new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(!e.isIntersecting) return;
+      activeCart = e.target.id === 'finger-foods' ? 'ff' : 'cat';
+      updateCartBar();
+    });
+  }, { rootMargin: '-45% 0px -45% 0px' }).observe(el);
+});
+
+let lastCartCount = 0;
+let cartAnnounceTimer;
+
+function announceCart(count, total){
+  // Debounced so rapid +/- taps don't flood a screen reader.
+  clearTimeout(cartAnnounceTimer);
+  cartAnnounceTimer = setTimeout(()=>{
+    document.getElementById('cartLive').textContent =
+      `${count} item${count === 1 ? '' : 's'} in your order. Estimated total ${fmtNaira(total)}.`;
+  }, 600);
+}
+
+function hideCartBar(){
+  cartBar.classList.remove('show');
+  document.body.classList.remove('cart-bar-visible');
+  setTimeout(()=>{ if(!cartBar.classList.contains('show')) cartBar.hidden = true; }, 450);
+}
+
+function updateCartBar(){
+  if(!activeCart){ hideCartBar(); return; }
+  const src = CART_SOURCES[activeCart];
+  const lines = src.lines();
+  const count = lines.reduce((n,l)=> n + l.qty, 0);
+  const total = lines.reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+
+  renderCartSheet();
+
+  if(!count){
+    hideCartBar();
+    lastCartCount = 0;
+    if(cartSheet.classList.contains('open')) closeCartSheet();
+    return;
+  }
+
+  cartBarBadge.textContent = count;
+  cartBarLabel.textContent = `${count} item${count === 1 ? '' : 's'} · tap to review`;
+  cartBarTotal.textContent = fmtNaira(total);
+
+  cartBar.hidden = false;
+  requestAnimationFrame(()=>{
+    cartBar.classList.add('show');
+    document.body.classList.add('cart-bar-visible');
+  });
+
+  if(count !== lastCartCount){
+    cartBarBadge.classList.remove('pop');
+    void cartBarBadge.offsetWidth; // force reflow so the animation re-runs
+    cartBarBadge.classList.add('pop');
+    announceCart(count, total);
+  }
+  lastCartCount = count;
+}
+
+function renderCartSheet(){
+  if(!activeCart) return;
+  const src = CART_SOURCES[activeCart];
+  const lines = src.lines();
+  const total = lines.reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+
+  document.getElementById('cartSheetTitle').textContent = src.title;
+  document.getElementById('cartSheetTotal').textContent = fmtNaira(total);
+  cartSheetList.innerHTML = '';
+
+  if(!lines.length){
+    const empty = document.createElement('p');
+    empty.className = 'cart-sheet-empty';
+    empty.textContent = 'Nothing added yet.';
+    cartSheetList.appendChild(empty);
+    return;
+  }
+
+  lines.forEach(line=>{
+    const row = document.createElement('div');
+    row.className = 'cart-line';
+
+    const body = document.createElement('div');
+    body.className = 'cart-line-body';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'cart-line-name';
+    nameEl.textContent = line.qty > 1 ? `${line.name} × ${line.qty}` : line.name;
+    const priceEl = document.createElement('div');
+    priceEl.className = 'cart-line-price';
+    priceEl.textContent = fmtNaira(line.qty * line.unitPrice);
+    body.append(nameEl, priceEl);
+    row.appendChild(body);
+
+    const ctrl = document.createElement('div');
+    ctrl.className = 'cart-line-qty';
+    if(line.stepper){
+      const dec = document.createElement('button');
+      dec.type = 'button'; dec.textContent = '−';
+      dec.setAttribute('aria-label', `Decrease ${line.name}`);
+      dec.addEventListener('click', ()=> src.setQty(line.id, line.qty - 1));
+      const val = document.createElement('span');
+      val.textContent = line.qty;
+      const inc = document.createElement('button');
+      inc.type = 'button'; inc.textContent = '+';
+      inc.setAttribute('aria-label', `Increase ${line.name}`);
+      inc.addEventListener('click', ()=> src.setQty(line.id, line.qty + 1));
+      ctrl.append(dec, val, inc);
+    } else {
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.textContent = '×';
+      rm.setAttribute('aria-label', `Remove ${line.name}`);
+      rm.addEventListener('click', ()=> src.setQty(line.id, 0));
+      ctrl.appendChild(rm);
+    }
+    row.appendChild(ctrl);
+    cartSheetList.appendChild(row);
+  });
+}
+
+function openCartSheet(){
+  renderCartSheet();
+  openModal(cartSheet);              // reuses the shared focus trap
+  document.body.classList.add('sheet-open');
+  cartBarCta.setAttribute('aria-expanded', 'true');
+}
+function closeCartSheet(){
+  closeModal(cartSheet);
+  document.body.classList.remove('sheet-open');
+  cartBarCta.setAttribute('aria-expanded', 'false');
+}
+
+cartBarCta.addEventListener('click', openCartSheet);
+document.getElementById('cartSheetClose').addEventListener('click', closeCartSheet);
+document.getElementById('cartSheetBackdrop').addEventListener('click', closeCartSheet);
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && cartSheet.classList.contains('open')) closeCartSheet();
+});
+
+document.getElementById('cartSheetCheckout').addEventListener('click', ()=>{
+  const src = CART_SOURCES[activeCart];
+  closeCartSheet();
+  const target = src && document.getElementById(src.checkoutId);
+  // Wait for the sheet's close transition before scrolling, or the
+  // browser measures the target while the sheet is still overlaying it.
+  if(target) setTimeout(()=> target.scrollIntoView({ behavior:'smooth', block:'start' }), 340);
+});
+
+/* Swipe-down-to-dismiss. Only engages when the list is scrolled to
+   the top, so it never fights the list's own scrolling. */
+let sheetTouchStartY = 0, sheetTouchDeltaY = 0;
+cartSheetPanel.addEventListener('touchstart', (e)=>{
+  sheetTouchStartY = e.touches[0].clientY;
+  sheetTouchDeltaY = 0;
+}, { passive: true });
+cartSheetPanel.addEventListener('touchmove', (e)=>{
+  if(cartSheetList.scrollTop > 0) return;
+  sheetTouchDeltaY = e.touches[0].clientY - sheetTouchStartY;
+  if(sheetTouchDeltaY > 0) cartSheetPanel.style.transform = `translateY(${sheetTouchDeltaY}px)`;
+}, { passive: true });
+cartSheetPanel.addEventListener('touchend', ()=>{
+  cartSheetPanel.style.transform = '';
+  if(sheetTouchDeltaY > 90) closeCartSheet();
+});
+
+/* In-place feedback: mark cards that are in the cart, and pulse the
+   quantity digit when it changes. Keyed off .qty-val so it covers
+   plain menu items, the small-chops/chin-chin widgets and the
+   catering protein rows without needing three separate hooks. */
+const prevCardQty = new WeakMap();
+function syncCartStates(){
+  document.querySelectorAll('.menu-item').forEach(card=>{
+    const val = card.querySelector('.qty-val');
+    if(!val){
+      // Soup/rice rows have no stepper — they're "in cart" once a
+      // size chip has been chosen.
+      card.classList.toggle('in-cart', !!card.querySelector('[data-role="size"] .liter-chip.selected'));
+      return;
+    }
+    const n = Number(val.textContent) || 0;
+    card.classList.toggle('in-cart', n > 0);
+    if(prevCardQty.has(card) && prevCardQty.get(card) !== n){
+      val.classList.remove('bump');
+      void val.offsetWidth;
+      val.classList.add('bump');
+    }
+    prevCardQty.set(card, n);
+  });
+}
+
+function refreshCartUI(){ syncCartStates(); updateCartBar(); }
+refreshCartUI();

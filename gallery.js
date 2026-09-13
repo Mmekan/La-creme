@@ -1,32 +1,9 @@
 /* ============================================================
-   CONFIG
-   (Same number as index.js — update both if you change it, or
-   see the note in gallery.html's top comment about consolidating
-   this later.)
+   CONFIG, waLink(), openWhatsApp(), R2_BASE_URL, mediaUrl(),
+   escapeHtml(), isValidPhone() now live in config.js (loaded
+   before this file) — single source of truth for both
+   index.html and gallery.html.
 ============================================================ */
-const CONFIG = {
-  whatsappNumber: '2348066556677',
-  businessName: 'La Crème'
-};
-
-document.getElementById('contactPhoneDisplay').textContent =
-  '+' + CONFIG.whatsappNumber.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1 $2 $3 $4');
-
-function waLink(message){
-  return `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(message)}`;
-}
-function openWhatsApp(message){
-  window.open(waLink(message), '_blank');
-}
-
-/* ============================================================
-   MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather
-   than committed to this repo. Update R2_BASE_URL once the
-   bucket's public URL (r2.dev or a custom domain) is known.
-   (Same value as index.js — keep both in sync.)
-============================================================ */
-const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
-function mediaUrl(relPath){ return `${R2_BASE_URL}/${relPath}`; }
 
 /* ============================================================
    NEWS / PROMOTIONS — same data/logic as index.js (keep both in
@@ -93,16 +70,17 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
 
   let dismissTimer;
   function closeNewsModal(){
-    newsModal.classList.remove('open');
+    closeModal(newsModal);
     clearTimeout(dismissTimer);
   }
   document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
   document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
   ctaEl.addEventListener('click', closeNewsModal);
+  document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && newsModal.classList.contains('open')) closeNewsModal(); });
 
   sessionStorage.setItem('lcNewsSeen', '1');
   setTimeout(()=>{
-    newsModal.classList.add('open');
+    openModal(newsModal);
     dismissTimer = setTimeout(closeNewsModal, AUTO_DISMISS_MS);
   }, 1200);
 }
@@ -868,7 +846,7 @@ function openLightbox(id){
   lbItems = galleryItems.filter(g=> activeFilter === 'All' || g.category === activeFilter);
   lbIndex = lbItems.findIndex(g=> g.id === id);
   renderLightbox();
-  lightbox.classList.add('open');
+  openModal(lightbox);
 }
 function renderLightbox(){
   const item = lbItems[lbIndex];
@@ -881,13 +859,13 @@ function renderLightbox(){
   lightboxPrev.style.opacity = lbIndex > 0 ? '1' : '0.25';
   lightboxNext.style.opacity = lbIndex < lbItems.length - 1 ? '1' : '0.25';
 }
-document.getElementById('lightboxClose').addEventListener('click', ()=> lightbox.classList.remove('open'));
-lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) lightbox.classList.remove('open'); });
+document.getElementById('lightboxClose').addEventListener('click', ()=> closeModal(lightbox));
+lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) closeModal(lightbox); });
 lightboxPrev.addEventListener('click', ()=>{ if(lbIndex > 0){ lbIndex--; renderLightbox(); } });
 lightboxNext.addEventListener('click', ()=>{ if(lbIndex < lbItems.length - 1){ lbIndex++; renderLightbox(); } });
 document.addEventListener('keydown', (e)=>{
   if(!lightbox.classList.contains('open')) return;
-  if(e.key === 'Escape') lightbox.classList.remove('open');
+  if(e.key === 'Escape') closeModal(lightbox);
   if(e.key === 'ArrowLeft' && lbIndex > 0){ lbIndex--; renderLightbox(); }
   if(e.key === 'ArrowRight' && lbIndex < lbItems.length - 1){ lbIndex++; renderLightbox(); }
 });

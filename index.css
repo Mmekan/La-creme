@@ -896,3 +896,140 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .mt-lg{ margin-top: 60px; }
 .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 :focus-visible{ outline: 2px solid var(--gold); outline-offset: 3px; }
+/* ============================================================
+   MINI CART — sticky bar + review sheet (mobile-first)
+
+   Why this exists: .menu-layout collapses to a single column at
+   980px, which stacks the order summary BELOW the whole menu
+   list. On a phone that means a customer can't see their running
+   total until they've scrolled past every item. The bar keeps the
+   total on screen at all times; the sheet lets them review and
+   adjust mid-order without losing their place.
+============================================================ */
+
+/* Desktop: keep the existing summary panel in view while scrolling */
+@media (min-width: 981px){
+  .order-summary{ position: sticky; top: calc(96px + var(--ticker-h)); }
+}
+
+.cart-bar{
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 320;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--ivory);
+  border-top: 1px solid var(--gold-line);
+  box-shadow: 0 -12px 32px -20px rgba(24,19,15,0.5);
+  transform: translateY(105%);
+  transition: transform .45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cart-bar.show{ transform: translateY(0); }
+@media (min-width: 981px){ .cart-bar{ display: none; } }
+
+.cart-bar-badge{
+  flex: none; min-width: 30px; height: 30px; padding: 0 9px;
+  border-radius: 999px; background: var(--wine); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.82rem; font-weight: 500; font-variant-numeric: tabular-nums;
+}
+.cart-bar-badge.pop{ animation: cartPop .34s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes cartPop{ 0%{transform:scale(1);} 40%{transform:scale(1.24);} 100%{transform:scale(1);} }
+
+.cart-bar-meta{ flex: 1; min-width: 0; line-height: 1.22; }
+.cart-bar-label{
+  display:block; font-size: 0.64rem; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.cart-bar-total{
+  display:block; font-family: var(--font-display); font-size: 1.2rem;
+  color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 2px;
+}
+.cart-bar-cta{
+  flex: none; min-height: 44px; padding: 11px 20px;
+  background: var(--wine); color: #fff; border-radius: 2px;
+  font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
+  transition: background .3s ease;
+}
+.cart-bar-cta:hover{ background: var(--wine-deep); }
+
+/* Keep the bar clear of the floating WhatsApp button and toasts */
+.wa-float{ transition: transform .25s ease, bottom .4s cubic-bezier(0.16, 1, 0.3, 1); }
+body.cart-bar-visible .wa-float{ bottom: 102px; }
+body.cart-bar-visible .toast{ bottom: 176px; }
+/* ...and make sure the last menu item is never hidden underneath it */
+body.cart-bar-visible{ padding-bottom: 84px; }
+
+/* ---- Review sheet ---- */
+.cart-sheet{ position: fixed; inset: 0; z-index: 360; pointer-events: none; }
+.cart-sheet.open{ pointer-events: auto; }
+.cart-sheet-backdrop{
+  position:absolute; inset:0; background: rgba(24,19,15,0.5);
+  opacity:0; transition: opacity .4s ease;
+}
+.cart-sheet.open .cart-sheet-backdrop{ opacity:1; }
+.cart-sheet-panel{
+  position:absolute; left:0; right:0; bottom:0;
+  max-height: 78vh; display:flex; flex-direction:column;
+  background: var(--ivory);
+  border-top: 1px solid var(--gold-line);
+  border-radius: 14px 14px 0 0;
+  transform: translateY(100%);
+  transition: transform .45s cubic-bezier(0.16, 1, 0.3, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.cart-sheet.open .cart-sheet-panel{ transform: translateY(0); }
+.cart-sheet-handle{
+  width:42px; height:4px; border-radius:999px; flex:none;
+  background: var(--gold-line); margin: 10px auto 2px;
+}
+.cart-sheet-head{
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding: 12px 20px 14px; flex:none; border-bottom: 1px solid var(--gold-line);
+}
+.cart-sheet-head h3{ font-size: 1.25rem; }
+.cart-sheet-close{
+  font-size:0.7rem; letter-spacing:0.16em; text-transform:uppercase;
+  color: var(--text-muted); min-height:44px; padding: 0 4px;
+}
+.cart-sheet-list{
+  flex:1; overflow-y:auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; padding: 4px 20px;
+}
+.cart-line{
+  display:flex; align-items:center; gap:14px; padding: 14px 0;
+  border-bottom: 1px solid rgba(199,161,85,0.18);
+}
+.cart-line:last-child{ border-bottom:none; }
+.cart-line-body{ flex:1; min-width:0; }
+.cart-line-name{ font-size:0.92rem; }
+.cart-line-price{
+  font-size:0.8rem; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; margin-top:3px;
+}
+.cart-line-qty{ display:flex; align-items:center; gap:2px; flex:none; }
+.cart-line-qty button{
+  width:38px; height:38px; border:1px solid var(--gold-line);
+  color: var(--ink); font-size:1rem; transition: border-color .25s ease, color .25s ease;
+}
+.cart-line-qty button:hover{ border-color: var(--wine); color: var(--wine); }
+.cart-line-qty span{
+  min-width:32px; text-align:center; font-size:0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.cart-sheet-foot{ flex:none; padding: 16px 20px 20px; border-top:1px solid var(--gold-line); }
+.cart-sheet-total{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px; }
+.cart-sheet-total strong{
+  font-family: var(--font-display); font-size:1.45rem;
+  font-variant-numeric: tabular-nums;
+}
+.cart-sheet-empty{ padding: 44px 20px; text-align:center; color: var(--text-muted); font-size:0.9rem; }
+body.sheet-open{ overflow: hidden; }
+
+/* ---- In-place add feedback (no toast) ---- */
+.menu-item.in-cart{ border-left: 2px solid var(--wine); }
+.qty-val.bump{ display:inline-block; animation: qtyBump .24s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes qtyBump{ 0%{transform:scale(1);} 45%{transform:scale(1.24);} 100%{transform:scale(1);} }
+
+.sr-only{
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}

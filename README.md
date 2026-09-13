@@ -7,33 +7,38 @@ personally.
 
 ## 1. Set the WhatsApp number (required)
 
-Open `index.html`, search for `TODO: WHATSAPP NUMBER`, and replace the
-placeholder number with the real La Crème business WhatsApp number:
+Open `config.js`, find `whatsappNumber` near the top, and replace it
+with the real La Crème business WhatsApp number:
 
 ```js
-whatsappNumber: '2348000000000',
+whatsappNumber: '2348066556677',
 ```
 
 Format: country code + number, digits only. No `+`, no leading `0`.
 Example: `0803 123 4567` → `2348031234567`.
 
-Every WhatsApp button on the site (nav, hero, floating button, contact,
-and all three order forms) reads from this one line — you only need to
-change it once.
+`config.js` is loaded by both `index.html` and `gallery.html`, so
+every WhatsApp button on the site (nav, hero, floating button,
+contact, and all three order forms, on both pages) reads from this
+one line — you only need to change it here, once.
 
 ## 2. Add real photos and videos
 
-Search for `galleryItems` and `videoTestimonials` inside the `<script>`
-block. Each item currently has `image: null` / `video: null`, which shows
-an elegant placeholder frame. To use a real file:
+Photos/videos are hosted on Cloudflare R2, not committed to this repo.
+`R2_BASE_URL` in `config.js` points at the bucket — update it once if
+the bucket's public URL changes.
+
+Search for `galleryItems` and `videoTestimonials` in `index.js` /
+`gallery.js`. Each item currently has `image: null` / `video: null`,
+which shows an elegant placeholder frame. To use a real file, upload
+it to the bucket under `img/` and reference it with `mediaUrl()`:
 
 ```js
-{ caption: 'Three-tier wedding cake — ivory & gold', image: 'images/cake-01.jpg', ... }
+{ caption: 'Three-tier wedding cake — ivory & gold', image: mediaUrl('img/cake-01.jpg'), ... }
 ```
 
-Put your photos/videos in an `images/` (or `videos/`) folder next to
-`index.html`, and reference them by filename. You can also use a full
-URL (e.g. an Instagram CDN link or a link from your own hosting).
+You can also use a full URL directly (e.g. an Instagram CDN link or a
+link from your own hosting) instead of `mediaUrl()`.
 
 ## 3. Update the menu & prices
 

@@ -11,26 +11,28 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="index.css">
+<script src="config.js" defer></script>
 <script src="index.js" defer></script>
 <!--
 ====================================================================
   LA CRÈME — HOW TO CUSTOMIZE THIS SITE
 ====================================================================
-  1. WHATSAPP NUMBER  — search for "TODO: WHATSAPP NUMBER" below
-     (near the top of the <script> block) and replace with the real
-     business number. Format: country code + number, digits only,
-     no + and no leading 0. e.g. Nigerian number 0803 123 4567
-     becomes "2348031234567".
+  1. WHATSAPP NUMBER — open config.js, find "whatsappNumber" near
+     the top, and replace it with the real business number. Format:
+     country code + number, digits only, no + and no leading 0.
+     e.g. Nigerian number 0803 123 4567 becomes "2348031234567".
+     config.js is shared by this page and gallery.html — change it
+     once, both pages update.
 
   2. PHOTOS — hosted on Cloudflare R2, not this repo. Upload a photo
      to the bucket under "img/", then reference it as
      image: mediaUrl('img/your-file.jpg') in index.js/gallery.js (see
-     R2_BASE_URL near the top of each <script>). Leave "image: null"
+     R2_BASE_URL near the top of config.js). Leave "image: null"
      to keep the elegant placeholder frame. Same pattern for "video:"
      fields in testimonials.
 
   3. MENU & PRICES — edit the fingerFoodMenu, cateringSoups,
-     cateringRice and cateringProteins arrays in the <script>.
+     cateringRice and cateringProteins arrays in index.js.
      All prices are indicative placeholders — update freely.
 
   4. BRAND VOICE / COPY — section headlines and body copy live
@@ -403,14 +405,14 @@
 </a>
 
 <!-- Lightbox -->
-<div class="lightbox" id="lightbox">
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo preview">
   <button class="lightbox-close" id="lightboxClose" aria-label="Close">&times;</button>
   <div class="lightbox-inner" id="lightboxInner"></div>
 </div>
 
 <!-- Cake Gallery Picker — closing this never resets #cakeForm; it's a
      separate overlay that only toggles its own "open" class. -->
-<div class="cake-gallery-modal" id="cakeGalleryModal">
+<div class="cake-gallery-modal" id="cakeGalleryModal" role="dialog" aria-modal="true" aria-label="Cake designs">
   <div class="cgm-backdrop" id="cakeGalleryBackdrop"></div>
   <div class="cgm-panel">
     <div class="cgm-head">
@@ -428,7 +430,7 @@
 
 <!-- Tier Quick Look — shows 3 photos for whichever tier row's "Preview"
      link was clicked. Closing it never touches #cakeForm. -->
-<div class="cake-gallery-modal" id="tierPreviewModal">
+<div class="cake-gallery-modal" id="tierPreviewModal" role="dialog" aria-modal="true" aria-label="Tier preview">
   <div class="cgm-backdrop" id="tierPreviewBackdrop"></div>
   <div class="cgm-panel">
     <div class="cgm-head">
@@ -443,7 +445,7 @@
 </div>
 
 <!-- News Popup — auto-dismisses; content picked at random from NEWS_ITEMS -->
-<div class="news-modal" id="newsModal">
+<div class="news-modal" id="newsModal" role="dialog" aria-modal="true" aria-label="Announcement">
   <div class="news-modal-backdrop" id="newsModalBackdrop"></div>
   <div class="news-modal-panel">
     <button type="button" class="news-modal-close" id="newsModalClose" aria-label="Close">&times;</button>
@@ -458,6 +460,41 @@
     <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
   </div>
 </div>
+
+<!-- ============================================================
+     MINI CART — sticky bar + review sheet (mobile)
+     Gives the running total a permanent home on screen and lets
+     customers review/adjust mid-order without scrolling to the
+     bottom of the menu. Hidden at >=981px, where the .order-summary
+     panel is already visible in the right-hand column.
+============================================================ -->
+<div class="cart-bar" id="cartBar" hidden>
+  <span class="cart-bar-badge" id="cartBarBadge">0</span>
+  <span class="cart-bar-meta">
+    <span class="cart-bar-label" id="cartBarLabel">Your order</span>
+    <span class="cart-bar-total" id="cartBarTotal">&#8358;0</span>
+  </span>
+  <button type="button" class="cart-bar-cta" id="cartBarCta" aria-haspopup="dialog" aria-expanded="false">Review</button>
+</div>
+
+<div class="cart-sheet" id="cartSheet" role="dialog" aria-modal="true" aria-labelledby="cartSheetTitle">
+  <div class="cart-sheet-backdrop" id="cartSheetBackdrop"></div>
+  <div class="cart-sheet-panel">
+    <div class="cart-sheet-handle"></div>
+    <div class="cart-sheet-head">
+      <h3 id="cartSheetTitle">Your Order</h3>
+      <button type="button" class="cart-sheet-close" id="cartSheetClose">Close</button>
+    </div>
+    <div class="cart-sheet-list" id="cartSheetList"></div>
+    <div class="cart-sheet-foot">
+      <div class="cart-sheet-total"><span>Estimated Total</span><strong id="cartSheetTotal">&#8358;0</strong></div>
+      <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="cartSheetCheckout">Go to Checkout</button>
+    </div>
+  </div>
+</div>
+
+<!-- Debounced announcements for screen readers -->
+<div class="sr-only" id="cartLive" aria-live="polite" aria-atomic="true"></div>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
