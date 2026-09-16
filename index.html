@@ -67,6 +67,26 @@
       <a href="#catering">Catering</a>
       <!-- <a href="#" class="nav-cta" id="navWaBtn">Chat on WhatsApp</a> -->
     </nav>
+
+    <!-- Finger Foods + Catering cart. Hidden until something's in it;
+         cakes go straight to WhatsApp so they never appear here. -->
+    <div class="cart-widget" id="cartWidget" hidden>
+      <button type="button" class="cart-icon-btn" id="cartIconBtn" aria-haspopup="true" aria-expanded="false" aria-label="View your order">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 8h12l-1.1 11.2a2 2 0 0 1-2 1.8H9.1a2 2 0 0 1-2-1.8L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
+        <span class="cart-icon-badge" id="cartIconBadge">0</span>
+      </button>
+      <div class="cart-dropdown" id="cartDropdown" hidden>
+        <div class="cart-dropdown-head">
+          <h3>Your Order</h3>
+          <button type="button" class="cart-dropdown-close" id="cartDropdownClose" aria-label="Close">&times;</button>
+        </div>
+        <div class="cart-dropdown-body" id="cartDropdownBody"></div>
+        <div class="cart-dropdown-foot">
+          <span>Estimated Total</span>
+          <strong id="cartDropdownTotal">&#8358;0</strong>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -74,19 +94,21 @@
      HERO
 ============================================================ -->
 <section class="hero" id="home">
-  <div class="hero-tags">
-    <span>Confectionery &amp; Catering</span>
-    <span>Indoor &amp; Outdoor</span>
-  </div>
-  <div class="hero-inner">
-    <h1>From the first bite to the last plate, we've got it covered.</h1>
-    <div class="divider"></div>
-    <p class="lede">Tell us what you're after and we'll take you straight there.</p>
-    <div class="hero-ctas">
-      <a href="#cakes" class="btn btn-gold">Order a Cake</a>
-      <a href="#finger-foods" class="btn btn-outline">Finger Foods</a>
-      <a href="#catering" class="btn btn-outline">Soups</a>
-      <a href="#about" class="btn btn-outline">Let Me Decide</a>
+  <div class="hero-content">
+    <div class="hero-tags">
+      <span>Confectionery &amp; Catering</span>
+      <span>Indoor &amp; Outdoor</span>
+    </div>
+    <div class="hero-inner">
+      <h1>From the first bite to the last plate, we've got it covered.</h1>
+      <div class="divider"></div>
+      <p class="lede">Tell us what you're after and we'll take you straight there.</p>
+      <div class="hero-ctas">
+        <a href="#cakes" class="btn btn-gold">Order a Cake</a>
+        <a href="#finger-foods" class="btn btn-outline">Finger Foods</a>
+        <a href="#catering" class="btn btn-outline">Soups</a>
+        <a href="#about" class="btn btn-outline">Let Me Decide</a>
+      </div>
     </div>
   </div>
   <div class="scroll-cue"><span>Scroll</span><span class="line"></span></div>
@@ -439,38 +461,6 @@
     </div>
     <a href="#" class="btn btn-gold" id="newsModalCta">Order Now</a>
     <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
-  </div>
-</div>
-
-<!-- ============================================================
-     MINI CART — sticky bar + review sheet (mobile)
-     Gives the running total a permanent home on screen and lets
-     customers review/adjust mid-order without scrolling to the
-     bottom of the menu. Hidden at >=981px, where the .order-summary
-     panel is already visible in the right-hand column.
-============================================================ -->
-<div class="cart-bar" id="cartBar" hidden>
-  <span class="cart-bar-badge" id="cartBarBadge">0</span>
-  <span class="cart-bar-meta">
-    <span class="cart-bar-label" id="cartBarLabel">Your order</span>
-    <span class="cart-bar-total" id="cartBarTotal">&#8358;0</span>
-  </span>
-  <button type="button" class="cart-bar-cta" id="cartBarCta" aria-haspopup="dialog" aria-expanded="false">Review</button>
-</div>
-
-<div class="cart-sheet" id="cartSheet" role="dialog" aria-modal="true" aria-labelledby="cartSheetTitle">
-  <div class="cart-sheet-backdrop" id="cartSheetBackdrop"></div>
-  <div class="cart-sheet-panel">
-    <div class="cart-sheet-handle"></div>
-    <div class="cart-sheet-head">
-      <h3 id="cartSheetTitle">Your Order</h3>
-      <button type="button" class="cart-sheet-close" id="cartSheetClose">Close</button>
-    </div>
-    <div class="cart-sheet-list" id="cartSheetList"></div>
-    <div class="cart-sheet-foot">
-      <div class="cart-sheet-total"><span>Estimated Total</span><strong id="cartSheetTotal">&#8358;0</strong></div>
-      <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="cartSheetCheckout">Go to Checkout</button>
-    </div>
   </div>
 </div>
 

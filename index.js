@@ -1160,29 +1160,30 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
 });
 
 /* ============================================================
-   MINI CART — context-aware sticky bar + review sheet
+   CART WIDGET — nav icon + dropdown (Finger Foods + Catering only;
+   cakes go straight to WhatsApp so they never appear here)
 
    Problem: at <=980px .menu-layout collapses to one column, which
    stacks the order summary below the entire menu list. A customer
    building an order has no idea what their running total is until
    they've scrolled past every item — so they can't tell when to
-   stop adding. This keeps the total on screen permanently and
-   gives them a sheet to review/adjust mid-order.
+   stop adding. This keeps a running total + review panel reachable
+   from the nav at all times, on any screen size.
 
-   Deliberately NOT a toast per tap: that's noise on mobile. The
-   only per-add feedback is in-place (digit pulse, badge pop, and a
-   persistent wine rule on cards already in the cart).
+   Deliberately NOT a toast per tap: that's noise on mobile. Per-add
+   feedback is in-place (digit pulse, badge pop, wine rule on cards
+   already in the cart) plus — desktop only — the dropdown itself
+   popping open briefly. See updateCartIcon() below.
 ============================================================ */
-const cartBar        = document.getElementById('cartBar');
-const cartSheet      = document.getElementById('cartSheet');
-const cartBarBadge   = document.getElementById('cartBarBadge');
-const cartBarLabel   = document.getElementById('cartBarLabel');
-const cartBarTotal   = document.getElementById('cartBarTotal');
-const cartBarCta     = document.getElementById('cartBarCta');
-const cartSheetList  = document.getElementById('cartSheetList');
-const cartSheetPanel = cartSheet.querySelector('.cart-sheet-panel');
+const cartWidget        = document.getElementById('cartWidget');
+const cartIconBtn       = document.getElementById('cartIconBtn');
+const cartIconBadge     = document.getElementById('cartIconBadge');
+const cartDropdown      = document.getElementById('cartDropdown');
+const cartDropdownBody  = document.getElementById('cartDropdownBody');
+const cartDropdownTotal = document.getElementById('cartDropdownTotal');
 
-/* Each cart exposes the same shape so the bar/sheet stay generic. */
+/* Each cart exposes the same shape so the dropdown can render both
+   sections generically. */
 const CART_SOURCES = {
   ff: {
     sectionId: 'finger-foods',
@@ -1228,23 +1229,13 @@ const CART_SOURCES = {
   }
 };
 
-/* Which cart the bar is currently showing — decided by whichever
-   menu section is crossing the middle of the viewport. */
-let activeCart = null;
-['finger-foods','catering'].forEach(id=>{
-  const el = document.getElementById(id);
-  if(!el) return;
-  new IntersectionObserver((entries)=>{
-    entries.forEach(e=>{
-      if(!e.isIntersecting) return;
-      activeCart = e.target.id === 'finger-foods' ? 'ff' : 'cat';
-      updateCartBar();
-    });
-  }, { rootMargin: '-45% 0px -45% 0px' }).observe(el);
-});
+const isDesktopCart = ()=> window.matchMedia('(min-width: 981px)').matches;
 
 let lastCartCount = 0;
 let cartAnnounceTimer;
+let cartAutoDismissTimer;
+let cartDropdownHovered = false;
+const CART_AUTO_DISMISS_MS = 4500;
 
 function announceCart(count, total){
   // Debounced so rapid +/- taps don't flood a screen reader.
@@ -1255,150 +1246,169 @@ function announceCart(count, total){
   }, 600);
 }
 
-function hideCartBar(){
-  cartBar.classList.remove('show');
-  document.body.classList.remove('cart-bar-visible');
-  setTimeout(()=>{ if(!cartBar.classList.contains('show')) cartBar.hidden = true; }, 450);
+function buildCartLineRow(line, src){
+  const row = document.createElement('div');
+  row.className = 'cart-dd-line';
+
+  const body = document.createElement('div');
+  body.className = 'cart-dd-line-body';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'cart-dd-line-name';
+  nameEl.textContent = line.qty > 1 ? `${line.name} × ${line.qty}` : line.name;
+  const priceEl = document.createElement('div');
+  priceEl.className = 'cart-dd-line-price';
+  priceEl.textContent = fmtNaira(line.qty * line.unitPrice);
+  body.append(nameEl, priceEl);
+  row.appendChild(body);
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'cart-dd-line-qty';
+  if(line.stepper){
+    const dec = document.createElement('button');
+    dec.type = 'button'; dec.textContent = '−';
+    dec.setAttribute('aria-label', `Decrease ${line.name}`);
+    dec.addEventListener('click', ()=> src.setQty(line.id, line.qty - 1));
+    const val = document.createElement('span');
+    val.textContent = line.qty;
+    const inc = document.createElement('button');
+    inc.type = 'button'; inc.textContent = '+';
+    inc.setAttribute('aria-label', `Increase ${line.name}`);
+    inc.addEventListener('click', ()=> src.setQty(line.id, line.qty + 1));
+    ctrl.append(dec, val, inc);
+  } else {
+    const rm = document.createElement('button');
+    rm.type = 'button'; rm.textContent = '×';
+    rm.setAttribute('aria-label', `Remove ${line.name}`);
+    rm.addEventListener('click', ()=> src.setQty(line.id, 0));
+    ctrl.appendChild(rm);
+  }
+  row.appendChild(ctrl);
+  return row;
 }
 
-function updateCartBar(){
-  if(!activeCart){ hideCartBar(); return; }
-  const src = CART_SOURCES[activeCart];
+// One section per source that actually has items — omitted entirely
+// when empty, so a customer with only a Finger Foods order doesn't
+// see a blank "Catering Order" heading.
+function buildCartSection(key){
+  const src = CART_SOURCES[key];
   const lines = src.lines();
-  const count = lines.reduce((n,l)=> n + l.qty, 0);
-  const total = lines.reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+  if(!lines.length) return null;
 
-  renderCartSheet();
+  const section = document.createElement('div');
+  section.className = 'cart-dd-section';
+  section.innerHTML = `
+    <div class="cart-dd-section-head">
+      <span>${src.title}</span>
+      <button type="button" class="cart-dd-goto">Checkout →</button>
+    </div>`;
+  section.querySelector('.cart-dd-goto').addEventListener('click', ()=>{
+    closeCartDropdown();
+    const target = document.getElementById(src.checkoutId);
+    // Wait for the close transition before scrolling, or the browser
+    // measures the target while the dropdown is still overlaying it.
+    if(target) setTimeout(()=> target.scrollIntoView({ behavior:'smooth', block:'start' }), 260);
+  });
+  const linesWrap = document.createElement('div');
+  linesWrap.className = 'cart-dd-lines';
+  lines.forEach(line=> linesWrap.appendChild(buildCartLineRow(line, src)));
+  section.appendChild(linesWrap);
+  return section;
+}
+
+function renderCartDropdown(){
+  cartDropdownBody.innerHTML = '';
+  const sections = ['ff','cat'].map(buildCartSection).filter(Boolean);
+  if(!sections.length){
+    const empty = document.createElement('p');
+    empty.className = 'cart-dropdown-empty';
+    empty.textContent = 'Nothing added yet.';
+    cartDropdownBody.appendChild(empty);
+    return;
+  }
+  sections.forEach(s=> cartDropdownBody.appendChild(s));
+}
+
+function getCartTotals(){
+  const allLines = [...CART_SOURCES.ff.lines(), ...CART_SOURCES.cat.lines()];
+  return {
+    count: allLines.reduce((n,l)=> n + l.qty, 0),
+    total: allLines.reduce((n,l)=> n + l.qty * l.unitPrice, 0)
+  };
+}
+
+function scheduleCartAutoDismiss(){
+  clearTimeout(cartAutoDismissTimer);
+  if(cartDropdownHovered) return; // don't count down while the cursor is on it
+  cartAutoDismissTimer = setTimeout(closeCartDropdown, CART_AUTO_DISMISS_MS);
+}
+cartDropdown.addEventListener('mouseenter', ()=>{
+  cartDropdownHovered = true;
+  clearTimeout(cartAutoDismissTimer);
+});
+cartDropdown.addEventListener('mouseleave', ()=>{
+  cartDropdownHovered = false;
+  if(cartDropdown.classList.contains('open')) scheduleCartAutoDismiss();
+});
+
+function openCartDropdown(){
+  renderCartDropdown();
+  cartDropdown.hidden = false;
+  requestAnimationFrame(()=> cartDropdown.classList.add('open'));
+  cartIconBtn.setAttribute('aria-expanded', 'true');
+}
+function closeCartDropdown(){
+  cartDropdown.classList.remove('open');
+  cartIconBtn.setAttribute('aria-expanded', 'false');
+  clearTimeout(cartAutoDismissTimer);
+  setTimeout(()=>{ if(!cartDropdown.classList.contains('open')) cartDropdown.hidden = true; }, 240);
+}
+function toggleCartDropdown(){
+  if(cartDropdown.classList.contains('open')) closeCartDropdown();
+  else openCartDropdown();
+}
+
+cartIconBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleCartDropdown(); });
+document.getElementById('cartDropdownClose').addEventListener('click', closeCartDropdown);
+document.addEventListener('click', (e)=>{
+  if(!cartDropdown.classList.contains('open')) return;
+  if(cartWidget.contains(e.target)) return; // clicks on the icon/panel itself aren't "outside"
+  closeCartDropdown();
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && cartDropdown.classList.contains('open')) closeCartDropdown();
+});
+
+function updateCartIcon(){
+  const { count, total } = getCartTotals();
 
   if(!count){
-    hideCartBar();
+    cartWidget.hidden = true;
     lastCartCount = 0;
-    if(cartSheet.classList.contains('open')) closeCartSheet();
+    if(cartDropdown.classList.contains('open')) closeCartDropdown();
     return;
   }
 
-  cartBarBadge.textContent = count;
-  cartBarLabel.textContent = `${count} item${count === 1 ? '' : 's'} · tap to review`;
-  cartBarTotal.textContent = fmtNaira(total);
-
-  cartBar.hidden = false;
-  requestAnimationFrame(()=>{
-    cartBar.classList.add('show');
-    document.body.classList.add('cart-bar-visible');
-  });
+  cartWidget.hidden = false;
+  cartIconBadge.textContent = count;
+  cartDropdownTotal.textContent = fmtNaira(total);
+  if(cartDropdown.classList.contains('open')) renderCartDropdown();
 
   if(count !== lastCartCount){
-    cartBarBadge.classList.remove('pop');
-    void cartBarBadge.offsetWidth; // force reflow so the animation re-runs
-    cartBarBadge.classList.add('pop');
+    cartIconBadge.classList.remove('pop');
+    void cartIconBadge.offsetWidth; // force reflow so the animation re-runs
+    cartIconBadge.classList.add('pop');
     announceCart(count, total);
+
+    // Auto-pop the dropdown on desktop, only when an item was just
+    // added (not on removals) — mobile stays click-only so nothing
+    // pops open unexpectedly on a small screen.
+    if(count > lastCartCount && isDesktopCart()){
+      openCartDropdown();
+      scheduleCartAutoDismiss();
+    }
   }
   lastCartCount = count;
 }
-
-function renderCartSheet(){
-  if(!activeCart) return;
-  const src = CART_SOURCES[activeCart];
-  const lines = src.lines();
-  const total = lines.reduce((n,l)=> n + l.qty * l.unitPrice, 0);
-
-  document.getElementById('cartSheetTitle').textContent = src.title;
-  document.getElementById('cartSheetTotal').textContent = fmtNaira(total);
-  cartSheetList.innerHTML = '';
-
-  if(!lines.length){
-    const empty = document.createElement('p');
-    empty.className = 'cart-sheet-empty';
-    empty.textContent = 'Nothing added yet.';
-    cartSheetList.appendChild(empty);
-    return;
-  }
-
-  lines.forEach(line=>{
-    const row = document.createElement('div');
-    row.className = 'cart-line';
-
-    const body = document.createElement('div');
-    body.className = 'cart-line-body';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'cart-line-name';
-    nameEl.textContent = line.qty > 1 ? `${line.name} × ${line.qty}` : line.name;
-    const priceEl = document.createElement('div');
-    priceEl.className = 'cart-line-price';
-    priceEl.textContent = fmtNaira(line.qty * line.unitPrice);
-    body.append(nameEl, priceEl);
-    row.appendChild(body);
-
-    const ctrl = document.createElement('div');
-    ctrl.className = 'cart-line-qty';
-    if(line.stepper){
-      const dec = document.createElement('button');
-      dec.type = 'button'; dec.textContent = '−';
-      dec.setAttribute('aria-label', `Decrease ${line.name}`);
-      dec.addEventListener('click', ()=> src.setQty(line.id, line.qty - 1));
-      const val = document.createElement('span');
-      val.textContent = line.qty;
-      const inc = document.createElement('button');
-      inc.type = 'button'; inc.textContent = '+';
-      inc.setAttribute('aria-label', `Increase ${line.name}`);
-      inc.addEventListener('click', ()=> src.setQty(line.id, line.qty + 1));
-      ctrl.append(dec, val, inc);
-    } else {
-      const rm = document.createElement('button');
-      rm.type = 'button'; rm.textContent = '×';
-      rm.setAttribute('aria-label', `Remove ${line.name}`);
-      rm.addEventListener('click', ()=> src.setQty(line.id, 0));
-      ctrl.appendChild(rm);
-    }
-    row.appendChild(ctrl);
-    cartSheetList.appendChild(row);
-  });
-}
-
-function openCartSheet(){
-  renderCartSheet();
-  openModal(cartSheet);              // reuses the shared focus trap
-  document.body.classList.add('sheet-open');
-  cartBarCta.setAttribute('aria-expanded', 'true');
-}
-function closeCartSheet(){
-  closeModal(cartSheet);
-  document.body.classList.remove('sheet-open');
-  cartBarCta.setAttribute('aria-expanded', 'false');
-}
-
-cartBarCta.addEventListener('click', openCartSheet);
-document.getElementById('cartSheetClose').addEventListener('click', closeCartSheet);
-document.getElementById('cartSheetBackdrop').addEventListener('click', closeCartSheet);
-document.addEventListener('keydown', (e)=>{
-  if(e.key === 'Escape' && cartSheet.classList.contains('open')) closeCartSheet();
-});
-
-document.getElementById('cartSheetCheckout').addEventListener('click', ()=>{
-  const src = CART_SOURCES[activeCart];
-  closeCartSheet();
-  const target = src && document.getElementById(src.checkoutId);
-  // Wait for the sheet's close transition before scrolling, or the
-  // browser measures the target while the sheet is still overlaying it.
-  if(target) setTimeout(()=> target.scrollIntoView({ behavior:'smooth', block:'start' }), 340);
-});
-
-/* Swipe-down-to-dismiss. Only engages when the list is scrolled to
-   the top, so it never fights the list's own scrolling. */
-let sheetTouchStartY = 0, sheetTouchDeltaY = 0;
-cartSheetPanel.addEventListener('touchstart', (e)=>{
-  sheetTouchStartY = e.touches[0].clientY;
-  sheetTouchDeltaY = 0;
-}, { passive: true });
-cartSheetPanel.addEventListener('touchmove', (e)=>{
-  if(cartSheetList.scrollTop > 0) return;
-  sheetTouchDeltaY = e.touches[0].clientY - sheetTouchStartY;
-  if(sheetTouchDeltaY > 0) cartSheetPanel.style.transform = `translateY(${sheetTouchDeltaY}px)`;
-}, { passive: true });
-cartSheetPanel.addEventListener('touchend', ()=>{
-  cartSheetPanel.style.transform = '';
-  if(sheetTouchDeltaY > 90) closeCartSheet();
-});
 
 /* In-place feedback: mark cards that are in the cart, and pulse the
    quantity digit when it changes. Keyed off .qty-val so it covers
@@ -1425,11 +1435,11 @@ function syncCartStates(){
   });
 }
 
-function refreshCartUI(){ syncCartStates(); updateCartBar(); }
+function refreshCartUI(){ syncCartStates(); updateCartIcon(); }
 
 // Both call refreshCartUI() internally — must run after every const/
-// function above is initialized (cartBar, prevCardQty, etc.), or the
-// page throws a TDZ ReferenceError on load and the mini-cart never
-// initializes. See git history for the incident.
+// function above is initialized (cartWidget, prevCardQty, etc.), or
+// the page throws a TDZ ReferenceError on load and the cart widget
+// never initializes. See git history for the incident.
 renderFF();
 renderCatering();

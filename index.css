@@ -200,6 +200,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
     linear-gradient(160deg, var(--wine-deep) 0%, var(--wine) 46%, var(--ink) 130%);
   padding-top: calc(90px + var(--ticker-h));
   padding-left: clamp(28px, 8vw, 100px);
+  padding-right: clamp(28px, 8vw, 100px);
 }
 .hero::before{
   content:"";
@@ -207,15 +208,21 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 44px);
   pointer-events:none;
 }
-/* Positioned absolutely, independent of .hero-inner's own flow, so
-   adding this never shifts the H1 down. */
+/* .hero-content is the thing .hero actually vertically centers — tags
+   and hero-inner both live in its normal document flow (not absolute),
+   so hero-tags always renders a real margin above the H1 no matter the
+   viewport height or how many lines the H1 wraps to. Previously
+   .hero-tags was position:absolute at a guessed offset from the nav,
+   which overlapped .hero-inner on shorter viewports since centering
+   made .hero-inner's own position height-dependent. */
+.hero-content{ position: relative; z-index: 2; width: 100%; display:flex; flex-direction:column; }
 .hero-tags{
-  position:absolute; top: calc(90px + var(--ticker-h) + 28px); right: clamp(28px, 8vw, 100px);
-  z-index: 2; display:flex; flex-direction:column; align-items:flex-end; gap: 6px;
+  align-self: flex-end; margin-bottom: 44px;
+  display:flex; flex-direction:column; align-items:flex-end; gap: 6px;
   font-family: var(--font-body); font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--gold-soft); opacity:0; animation: fadeUp .8s ease .35s forwards;
 }
-.hero-inner{ position: relative; z-index: 2; max-width: 780px; padding: 0 28px 0 0; }
+.hero-inner{ max-width: 780px; }
 .hero .eyebrow{ color: var(--gold-soft); opacity:0; animation: fadeUp .8s ease .5s forwards; }
 .hero h1{
   color: var(--ivory); font-size: clamp(2.6rem, 6vw, 4.6rem); margin-top: 20px;
@@ -852,14 +859,19 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); }
 :focus-visible{ outline: 2px solid var(--gold); outline-offset: 3px; }
 /* ============================================================
-   MINI CART — sticky bar + review sheet (mobile-first)
+   CART WIDGET — nav icon + dropdown, shared by Finger Foods and
+   Catering (cakes skip this entirely — that flow goes straight to
+   WhatsApp). One combined cart across both menus, since a customer
+   can be building both at once.
 
-   Why this exists: .menu-layout collapses to a single column at
-   980px, which stacks the order summary BELOW the whole menu
-   list. On a phone that means a customer can't see their running
-   total until they've scrolled past every item. The bar keeps the
-   total on screen at all times; the sheet lets them review and
-   adjust mid-order without losing their place.
+   Desktop (>=981px): the icon is click-to-toggle like normal, but
+   adding an item also auto-opens the dropdown and self-dismisses a
+   few seconds later — see scheduleCartAutoDismiss()/cartDropdown
+   mouseenter-mouseleave in index.js, which pauses the countdown
+   while the cursor is over it.
+   Mobile: identical icon/dropdown, just without the auto-open —
+   nothing should pop open uninvited on a small screen.
+   Both: click outside the widget, or Escape, closes it.
 ============================================================ */
 
 /* Desktop: keep the existing summary panel in view while scrolling */
@@ -867,117 +879,79 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   .order-summary{ position: sticky; top: calc(96px + var(--ticker-h)); }
 }
 
-.cart-bar{
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 320;
-  display: flex; align-items: center; gap: 14px;
-  padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: var(--ivory);
-  border-top: 1px solid var(--gold-line);
-  box-shadow: 0 -12px 32px -20px rgba(24,19,15,0.5);
-  transform: translateY(105%);
-  transition: transform .45s cubic-bezier(0.16, 1, 0.3, 1);
+.cart-widget{ position: relative; margin-left: 4px; }
+.cart-icon-btn{
+  position: relative; width: 38px; height: 38px; border-radius: 50%;
+  display:flex; align-items:center; justify-content:center;
+  color: var(--ivory); transition: color .3s ease, background .2s ease;
 }
-.cart-bar.show{ transform: translateY(0); }
-@media (min-width: 981px){ .cart-bar{ display: none; } }
+.cart-icon-btn:hover{ background: rgba(251,244,233,0.12); }
+.nav.scrolled .cart-icon-btn{ color: var(--ink); }
+.nav.scrolled .cart-icon-btn:hover{ background: rgba(24,19,15,0.06); }
 
-.cart-bar-badge{
-  flex: none; min-width: 30px; height: 30px; padding: 0 9px;
+.cart-icon-badge{
+  position:absolute; top:-2px; right:-4px; min-width: 18px; height: 18px; padding: 0 4px;
   border-radius: 999px; background: var(--wine); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.82rem; font-weight: 500; font-variant-numeric: tabular-nums;
+  display:flex; align-items:center; justify-content:center;
+  font-size: 0.64rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  border: 2px solid var(--wine-deep);
 }
-.cart-bar-badge.pop{ animation: cartPop .34s cubic-bezier(0.16, 1, 0.3, 1); }
+.cart-icon-badge.pop{ animation: cartPop .34s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes cartPop{ 0%{transform:scale(1);} 40%{transform:scale(1.24);} 100%{transform:scale(1);} }
 
-.cart-bar-meta{ flex: 1; min-width: 0; line-height: 1.22; }
-.cart-bar-label{
-  display:block; font-size: 0.64rem; letter-spacing: 0.2em;
-  text-transform: uppercase; color: var(--text-muted);
+.cart-dropdown{
+  position:absolute; top: calc(100% + 16px); right: 0; z-index: 250;
+  width: min(360px, 88vw); max-height: 72vh; display:flex; flex-direction:column;
+  background: var(--ivory); border-radius: 6px; border: 1px solid var(--gold-line);
+  box-shadow: var(--shadow-card);
+  opacity:0; transform: translateY(-8px); pointer-events:none;
+  transition: opacity .22s ease, transform .22s ease;
 }
-.cart-bar-total{
-  display:block; font-family: var(--font-display); font-size: 1.2rem;
-  color: var(--ink); font-variant-numeric: tabular-nums; margin-top: 2px;
+.cart-dropdown.open{ opacity:1; transform: translateY(0); pointer-events:auto; }
+.cart-dropdown[hidden]{ display:none; } /* .cart-dropdown's own display:flex otherwise wins over the UA [hidden] rule */
+.cart-dropdown-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 16px 18px; flex:none; border-bottom: 1px solid var(--gold-line);
 }
-.cart-bar-cta{
-  flex: none; min-height: 44px; padding: 11px 20px;
-  background: var(--wine); color: #fff; border-radius: 2px;
-  font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase;
-  transition: background .3s ease;
+.cart-dropdown-head h3{ font-size: 1.05rem; }
+.cart-dropdown-close{
+  font-size: 1.3rem; color: var(--text-muted); width: 28px; height: 28px;
+  display:flex; align-items:center; justify-content:center; transition: color .2s ease;
 }
-.cart-bar-cta:hover{ background: var(--wine-deep); }
+.cart-dropdown-close:hover{ color: var(--wine); }
+.cart-dropdown-body{ flex:1; overflow-y:auto; overscroll-behavior: contain; padding: 8px 18px; }
+.cart-dropdown-empty{ padding: 40px 18px; text-align:center; color: var(--text-muted); font-size: 0.9rem; }
 
-/* Keep the bar clear of the floating WhatsApp button and toasts */
-.wa-float{ transition: transform .25s ease, bottom .4s cubic-bezier(0.16, 1, 0.3, 1); }
-body.cart-bar-visible .wa-float{ bottom: 102px; }
-body.cart-bar-visible .toast{ bottom: 176px; }
-/* ...and make sure the last menu item is never hidden underneath it */
-body.cart-bar-visible{ padding-bottom: 84px; }
+.cart-dd-section + .cart-dd-section{ margin-top: 18px; padding-top: 16px; border-top: 1px dashed rgba(24,19,15,0.12); }
+.cart-dd-section-head{ display:flex; align-items:baseline; justify-content:space-between; gap: 10px; margin-bottom: 8px; }
+.cart-dd-section-head span{ font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); font-weight: 500; }
+.cart-dd-goto{ font-size: 0.72rem; color: var(--wine); text-decoration: underline; text-underline-offset: 2px; flex-shrink:0; }
+.cart-dd-goto:hover{ color: var(--wine-bright); }
 
-/* ---- Review sheet ---- */
-.cart-sheet{ position: fixed; inset: 0; z-index: 360; pointer-events: none; }
-.cart-sheet.open{ pointer-events: auto; }
-.cart-sheet-backdrop{
-  position:absolute; inset:0; background: rgba(24,19,15,0.5);
-  opacity:0; transition: opacity .4s ease;
+.cart-dd-line{ display:flex; align-items:center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(24,19,15,0.06); }
+.cart-dd-line:last-child{ border-bottom: none; }
+.cart-dd-line-body{ flex:1; min-width:0; }
+.cart-dd-line-name{ font-size: 0.88rem; }
+.cart-dd-line-price{ font-size: 0.76rem; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.cart-dd-line-qty{ display:flex; align-items:center; gap: 2px; flex:none; }
+.cart-dd-line-qty button{
+  width: 30px; height: 30px; border: 1px solid var(--gold-line);
+  color: var(--ink); font-size: 0.95rem; transition: border-color .25s ease, color .25s ease;
 }
-.cart-sheet.open .cart-sheet-backdrop{ opacity:1; }
-.cart-sheet-panel{
-  position:absolute; left:0; right:0; bottom:0;
-  max-height: 78vh; display:flex; flex-direction:column;
-  background: var(--ivory);
+.cart-dd-line-qty button:hover{ border-color: var(--wine); color: var(--wine); }
+.cart-dd-line-qty span{ min-width: 26px; text-align:center; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+
+.cart-dropdown-foot{
+  flex:none; padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--gold-line);
-  border-radius: 14px 14px 0 0;
-  transform: translateY(100%);
-  transition: transform .45s cubic-bezier(0.16, 1, 0.3, 1);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display:flex; justify-content:space-between; align-items:baseline;
+  font-size: 0.86rem; color: var(--text-muted);
 }
-.cart-sheet.open .cart-sheet-panel{ transform: translateY(0); }
-.cart-sheet-handle{
-  width:42px; height:4px; border-radius:999px; flex:none;
-  background: var(--gold-line); margin: 10px auto 2px;
+.cart-dropdown-foot strong{ font-family: var(--font-display); font-size: 1.15rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 400px){
+  .cart-dropdown{ right: -8px; }
 }
-.cart-sheet-head{
-  display:flex; align-items:baseline; justify-content:space-between;
-  padding: 12px 20px 14px; flex:none; border-bottom: 1px solid var(--gold-line);
-}
-.cart-sheet-head h3{ font-size: 1.25rem; }
-.cart-sheet-close{
-  font-size:0.7rem; letter-spacing:0.16em; text-transform:uppercase;
-  color: var(--text-muted); min-height:44px; padding: 0 4px;
-}
-.cart-sheet-list{
-  flex:1; overflow-y:auto; overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch; padding: 4px 20px;
-}
-.cart-line{
-  display:flex; align-items:center; gap:14px; padding: 14px 0;
-  border-bottom: 1px solid rgba(199,161,85,0.18);
-}
-.cart-line:last-child{ border-bottom:none; }
-.cart-line-body{ flex:1; min-width:0; }
-.cart-line-name{ font-size:0.92rem; }
-.cart-line-price{
-  font-size:0.8rem; color: var(--text-muted);
-  font-variant-numeric: tabular-nums; margin-top:3px;
-}
-.cart-line-qty{ display:flex; align-items:center; gap:2px; flex:none; }
-.cart-line-qty button{
-  width:38px; height:38px; border:1px solid var(--gold-line);
-  color: var(--ink); font-size:1rem; transition: border-color .25s ease, color .25s ease;
-}
-.cart-line-qty button:hover{ border-color: var(--wine); color: var(--wine); }
-.cart-line-qty span{
-  min-width:32px; text-align:center; font-size:0.9rem;
-  font-variant-numeric: tabular-nums;
-}
-.cart-sheet-foot{ flex:none; padding: 16px 20px 20px; border-top:1px solid var(--gold-line); }
-.cart-sheet-total{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px; }
-.cart-sheet-total strong{
-  font-family: var(--font-display); font-size:1.45rem;
-  font-variant-numeric: tabular-nums;
-}
-.cart-sheet-empty{ padding: 44px 20px; text-align:center; color: var(--text-muted); font-size:0.9rem; }
-body.sheet-open{ overflow: hidden; }
 
 /* ---- In-place add feedback (no toast) ---- */
 .menu-item.in-cart{ border-left: 2px solid var(--wine); }
