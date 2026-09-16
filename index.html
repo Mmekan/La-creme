@@ -9,7 +9,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23C8102E'/%3E%3Ctext x='50' y='62' font-family='Georgia,serif' font-size='40' fill='%23C7A155' text-anchor='middle'%3ELC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400..500&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="index.css">
 <script src="config.js" defer></script>
 <script src="index.js" defer></script>
@@ -56,24 +56,17 @@
 <!-- ============================================================
      NAV
 ============================================================ -->
-<header class="nav" id="siteNav">
+<header class="nav hero-toggle" id="siteNav">
   <div class="container">
     <a href="#home" class="nav-brand">
-      <span class="crest"><span class="crest-ring"></span><span class="crest-core"><span>LC</span></span></span>
       <span class="name">LA'CR<em>È</em>ME</span>
     </a>
     <nav class="nav-links" id="navLinks">
-      <a href="#about">Our Story</a>
       <a href="gallery.html">Gallery</a>
       <a href="#cakes">Cakes</a>
-      <a href="#finger-foods">Finger Foods</a>
       <a href="#catering">Catering</a>
-      <a href="#contact">Contact</a>
       <!-- <a href="#" class="nav-cta" id="navWaBtn">Chat on WhatsApp</a> -->
     </nav>
-    <button class="nav-toggle" id="navToggle" aria-label="Toggle menu" aria-expanded="false">
-      <span></span><span></span><span></span>
-    </button>
   </div>
 </header>
 
@@ -81,15 +74,19 @@
      HERO
 ============================================================ -->
 <section class="hero" id="home">
+  <div class="hero-tags">
+    <span>Confectionery &amp; Catering</span>
+    <span>Indoor &amp; Outdoor</span>
+  </div>
   <div class="hero-inner">
-    <div class="crest-wrap"><span class="crest crest-lg"><span class="crest-ring"></span><span class="crest-core"><span>LC</span></span></span></div>
-    <span class="eyebrow">Bespoke Cakes · Confectionery · Catering</span>
-    <h1>The <em>crème</em> of every celebration, served in style</h1>
+    <h1>From the first bite to the last plate, we've got it covered.</h1>
     <div class="divider"></div>
-    <p class="lede">From custom wedding cakes to full catering spreads and finger foods, La Crème brings delicious, handcrafted menus directly to your special event.</p>
+    <p class="lede">Tell us what you're after and we'll take you straight there.</p>
     <div class="hero-ctas">
-      <a href="#cakes" class="btn btn-gold">Order Your Cake</a>
-      <!-- <a href="#" class="btn btn-outline" id="heroWaBtn">Order on WhatsApp</a> -->
+      <a href="#cakes" class="btn btn-gold">Order a Cake</a>
+      <a href="#finger-foods" class="btn btn-outline">Finger Foods</a>
+      <a href="#catering" class="btn btn-outline">Soups</a>
+      <a href="#about" class="btn btn-outline">Let Me Decide</a>
     </div>
   </div>
   <div class="scroll-cue"><span>Scroll</span><span class="line"></span></div>
@@ -127,13 +124,10 @@
 <section class="gallery" id="gallery">
   <div class="container">
     <div class="section-head center reveal">
-      <span class="eyebrow" style="justify-content:center;">The Gallery</span>
+      <span class="eyebrow" style="justify-content:center;">A Closer Look</span>
       <h2>Real tables, real clients, real celebrations</h2>
-      <p>A look at recent work — swap these frames for your own photography whenever you're ready.</p>
     </div>
-    <div class="gallery-grid reveal" id="galleryGrid"></div>
-
-    <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">Behind the Scenes</h3>
+    <!-- <h3 class="reel-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">Behind the Scenes</h3> -->
     <div class="reel" id="videoReel"></div>
 
     <h3 class="testimonial-title" style="color:var(--ivory); font-size:1.6rem; text-align:center;">What Clients Say</h3>
@@ -147,8 +141,7 @@
 <section class="menu-section" id="cakes">
   <div class="container">
     <div class="section-head reveal">
-      <span class="eyebrow">The Cake Menu</span>
-      <h2>Order a cake worth the occasion</h2>
+      <span class="eyebrow">Cake Menu</span>
       <!-- <p>Every cake is built to order. Tell us the occasion, size and style below, and we'll confirm flavors, design and pricing directly on WhatsApp — reference photos welcome once we're chatting.</p> -->
     </div>
 
@@ -178,11 +171,11 @@
           <div class="field">
             <label>Tiers/Steps <span class="req">*</span></label>
             <div class="tier-select" id="tierSelect">
-              <label class="tier-option"><input type="checkbox" name="tier" value="1 Tier" data-count="1">1 Tier</label>
-              <label class="tier-option"><input type="checkbox" name="tier" value="2 Tiers" data-count="2">2 Tiers</label>
-              <label class="tier-option"><input type="checkbox" name="tier" value="3 Tiers" data-count="3">3 Tiers</label>
-              <label class="tier-option" id="tierOpt4"><input type="checkbox" name="tier" value="4 Tiers" data-count="4">4 Tiers</label>
-              <label class="tier-option" id="tierOpt5plus"><input type="checkbox" name="tier" value="5+ Tiers (Grand/Wedding)" data-count="5">5+ Tiers</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="One Tier" data-count="1">One Tier</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="Two Tiers" data-count="2">Two Tiers</label>
+              <label class="tier-option"><input type="checkbox" name="tier" value="Three Tiers" data-count="3">Three Tiers</label>
+              <label class="tier-option" id="tierOpt4"><input type="checkbox" name="tier" value="Four Tiers" data-count="4">Four Tiers</label>
+              <label class="tier-option" id="tierOpt5plus"><input type="checkbox" name="tier" value="Five+ Tiers (Grand/Wedding)" data-count="5">Five+ Tiers</label>
               <label class="tier-option" id="tierOptCustom"><input type="checkbox" id="tierCustomCheckbox" value="Custom">Custom</label>
             </div>
             <div class="field tier-custom-field" id="tierCustomField" style="display:none;">
@@ -226,7 +219,7 @@
           </div>
           <div class="field">
             <label for="cakeDesign">Design Inspiration / Theme</label>
-            <textarea id="cakeDesign" placeholder="Describe the look, colors or theme you have in mind or VIEW OUR GALLERY."></textarea>
+            <textarea id="cakeDesign" placeholder="Describe the look, colors or theme you have in mind or See Our Gallery"></textarea>
             <button style="margin-top: 10px;" type="button" class="gallery-peek-btn" id="viewCakeGalleryBtn">View Cake Designs in Our Gallery</button>
           </div>
           <div class="field">
@@ -255,18 +248,6 @@
             <p class="form-note">You'll be redirected to WhatsApp with your request pre-filled, nothing is charged here.</p>
           </div>
         </form>
-      </div>
-
-      <div class="reveal">
-        <div class="order-card" style="background:transparent; border:none; box-shadow:none; padding:0;">
-          <h3 style="font-size:1.3rem;">How Cake Orders Work</h3>
-          <div class="about-points" style="margin-top:22px;">
-            <div class="about-point"><span class="dot"></span><div><strong>1. Tell us the brief</strong><span>Occasion, size, flavor and style — the form does the heavy lifting.</span></div></div>
-            <div class="about-point"><span class="dot"></span><div><strong>2. We confirm on WhatsApp</strong><span>We'll discuss design details, share past work, and agree on pricing.</span></div></div>
-            <div class="about-point"><span class="dot"></span><div><strong>3. Deposit secures your date</strong><span>Cake dates fill quickly, especially for weekend weddings.</span></div></div>
-            <div class="about-point"><span class="dot"></span><div><strong>4. Delivered or ready for pickup</strong><span>Fresh, boxed, and on time for your celebration.</span></div></div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -374,7 +355,7 @@
 ============================================================ -->
 <section class="contact" id="contact">
   <div class="container">
-    <div class="crest-wrap"><span class="crest crest-lg"><span class="crest-ring"></span><span class="crest-core"><span>LC</span></span></span></div>
+    <div class="crest-wrap"><img class="logo-img logo-lg" src="assets/logo.png" alt="La Crème"></div>
     <span class="eyebrow">Get In Touch</span>
     <h2>Let's plan your next celebration</h2>
     <p class="lede">Message us directly on WhatsApp — it's the fastest way to reach us and get a real answer, not an automated one.</p>
@@ -394,7 +375,7 @@
 
     <div class="footer-bottom">
       <span>© <span id="year"></span> La Crème. All rights reserved.</span>
-      <span>Bespoke Cakes · Confectionery · Catering</span>
+      <span>Bespoke Cakes · Catering · Confectionery</span>
     </div>
   </div>
 </section>

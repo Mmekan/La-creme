@@ -24,8 +24,8 @@ html {
   --gold-soft: #E8D9B5;
   --gold-line: rgba(199,161,85,0.4);
   --text-muted: #6b5f52;
-  --font-display: 'Cormorant Garamond', serif;
-  --font-body: 'Jost', sans-serif;
+  --font-display: 'Fraunces', serif;
+  --font-body: 'Public Sans', sans-serif;
   --shadow-card: 0 24px 48px -24px rgba(24,19,15,0.35);
   --container: 1180px;
   --ticker-h: 34px;
@@ -51,7 +51,7 @@ ul { list-style: none; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 input, select, textarea { font-family: inherit; font-size: 1rem; }
 
-h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 500; line-height: 1.15; color: var(--ink); }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; font-variation-settings: "WONK" 0; line-height: 1.15; color: var(--ink); }
 
 .container{ max-width: var(--container); margin: 0 auto; padding: 0 28px; }
 
@@ -80,35 +80,12 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .reveal.is-visible{ opacity: 1; transform: translateY(0); }
 
 /* ============================================================
-   CREST — signature mark
+   LOGO — signature mark
 ============================================================ */
-.crest{
-  --size: 54px;
-  width: var(--size); height: var(--size);
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  position: relative;
-  flex-shrink: 0;
+.logo-img{
+  height: 44px; width: auto; flex-shrink: 0; display: block;
 }
-.crest .crest-ring{
-  position:absolute; inset:0; border-radius:50%;
-  border: 2px dashed var(--gold-line);
-}
-.crest .crest-core{
-  width: 82%; height: 82%; border-radius: 50%;
-  background: radial-gradient(circle at 32% 28%, var(--wine-bright), var(--wine) 60%, var(--wine-deep) 100%);
-  display:flex; align-items:center; justify-content:center;
-  box-shadow: inset 0 0 0 1px var(--gold-line);
-}
-.crest .crest-core span{
-  font-family: var(--font-display);
-  color: var(--gold);
-  font-size: calc(var(--size) * 0.4);
-  letter-spacing: 0.02em;
-  transform: translateY(-1px);
-}
-.crest.crest-lg{ --size: 108px; }
-.crest.crest-lg .crest-core span{ font-size: 44px; }
+.logo-img.logo-lg{ height: 108px; }
 
 /* ============================================================
    NEWS TICKER — scrolling promo strip, sits above the nav.
@@ -154,15 +131,28 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   padding: 12px 0;
   box-shadow: 0 8px 30px -18px rgba(24,19,15,0.4);
 }
-.nav .container{ display:flex; align-items:center; justify-content: space-between; }
+.nav .container{ max-width: none; display:flex; align-items:center; justify-content: space-between; }
+/* Only index.html's nav carries .hero-toggle — the brand text shows
+   alone while the hero question is in view, and past-hero (toggled
+   in index.js via an IntersectionObserver on #home) swaps it for the
+   nav links. gallery.html's nav lacks .hero-toggle, so this never
+   applies there and both stay visible as normal. Fades via opacity;
+   the hidden one is also pulled out of flow with position:absolute
+   so it stops reserving flex space in .nav .container — otherwise
+   the visible one stays pinned in the space-between layout as if
+   the hidden element were still there. */
+.nav-brand, .nav-links{ opacity: 1; transition: opacity .35s ease; }
+.nav.hero-toggle.past-hero .nav-brand,
+.nav.hero-toggle:not(.past-hero) .nav-links{
+  opacity: 0; visibility: hidden; pointer-events: none; position: absolute;
+}
 .nav-brand{ display:flex; align-items:center; gap:14px; }
-.nav-brand .crest{ --size: 42px; }
 .nav-brand .name{
   font-family: var(--font-display); font-size: 1.4rem; letter-spacing: 0.04em;
   color: var(--ivory); transition: color .3s ease;
 }
 .nav-brand .name em{ font-style: normal; color: var(--gold-soft); transition: color .3s ease; }
-.nav-links{ display:flex; align-items:center; gap: 38px; }
+.nav-links{ display:flex; align-items:center; gap: 32px; }
 .nav-links a{
   font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--ivory); position: relative; padding: 4px 0; transition: color .3s ease;
@@ -172,6 +162,9 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   background: var(--gold-soft); transform: scaleX(0); transform-origin: left; transition: transform .3s ease;
 }
 .nav-links a:hover::after{ transform: scaleX(1); }
+.nav-links a.active{ color: var(--gold-soft); }
+.nav-links a.active::after{ transform: scaleX(1); }
+.nav.scrolled .nav-links a.active{ color: var(--wine); }
 .nav-cta{
   display:flex; align-items:center; gap:8px;
   background: var(--wine); color: var(--ivory);
@@ -180,8 +173,6 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   transition: background .3s ease, color .3s ease, transform .2s ease;
 }
 .nav-cta:hover{ background: var(--wine-bright); transform: translateY(-1px); }
-.nav-toggle{ display:none; flex-direction:column; gap:5px; width: 30px; }
-.nav-toggle span{ height:1px; background: var(--ivory); width:100%; transition: transform .3s ease, opacity .3s ease, background-color .3s ease; }
 
 /* Once scrolled, the nav gets its solid ivory background (see
    .nav.scrolled above) — switch all this text back to the dark
@@ -190,48 +181,25 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .nav.scrolled .nav-brand .name em{ color: var(--wine); }
 .nav.scrolled .nav-links a{ color: var(--ink); }
 .nav.scrolled .nav-links a::after{ background: var(--wine); }
-.nav.scrolled .nav-toggle span{ background: var(--ink); }
 
-@media (max-width: 920px){
-  /* FIX: the old version positioned this off-canvas panel with
-     `right: 0` + `transform: translateX(100%)`, which in several
-     browsers still counts toward the page's scrollable width even
-     though the panel is visually hidden — that reserved, invisible
-     strip is exactly what shows up as a "gap" on the side of the
-     page. Anchoring with `right: -100%` keeps the whole panel
-     outside the document's box model instead of just visually
-     offset, which avoids the extra scroll width entirely. */
-  .nav-links{
-    position: fixed; top: var(--ticker-h); right: -100%; height: calc(100vh - var(--ticker-h)); width: min(320px, 80vw);
-    background: var(--ivory); flex-direction: column; align-items: flex-start;
-    padding: 110px 32px 40px; gap: 26px;
-    transition: right .4s ease;
-    box-shadow: -20px 0 40px rgba(0,0,0,0.15);
-  }
-  .nav-links.open{ right: 0; }
-  /* The open panel always has a solid ivory background (regardless
-     of .nav.scrolled), so its text always stays dark for readability
-     — this overrides the white default used in the top bar. */
-  .nav-links a{ font-size: 0.95rem; color: var(--ink); }
-  .nav-links a::after{ background: var(--wine); }
-  .nav-cta{ margin-top: 10px; }
-  .nav-toggle{ display:flex; z-index: 210; }
-  .nav-toggle.open span:nth-child(1){ transform: translateY(6px) rotate(45deg); }
-  .nav-toggle.open span:nth-child(2){ opacity: 0; }
-  .nav-toggle.open span:nth-child(3){ transform: translateY(-6px) rotate(-45deg); }
+@media (max-width: 480px){
+  .nav .container{ flex-direction: column; align-items:center; row-gap: 12px; }
+  .nav-links{ gap: 18px; }
+  .nav-links a{ font-size: 0.68rem; letter-spacing: 0.08em; }
 }
 
 /* ============================================================
    HERO
 ============================================================ */
 .hero{
-  min-height: 100vh; display:flex; align-items:center; justify-content:center;
-  text-align:center; position: relative; overflow: hidden;
+  min-height: 100vh; display:flex; align-items:center; justify-content:flex-start;
+  text-align:left; position: relative; overflow: hidden;
   background:
     radial-gradient(circle at 18% 22%, rgba(199,161,85,0.16), transparent 42%),
     radial-gradient(circle at 82% 78%, rgba(199,161,85,0.12), transparent 45%),
     linear-gradient(160deg, var(--wine-deep) 0%, var(--wine) 46%, var(--ink) 130%);
   padding-top: calc(90px + var(--ticker-h));
+  padding-left: clamp(28px, 8vw, 100px);
 }
 .hero::before{
   content:"";
@@ -239,13 +207,15 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 44px);
   pointer-events:none;
 }
-.hero-inner{ position: relative; z-index: 2; max-width: 780px; padding: 0 28px; }
-.hero .crest-wrap{
-  display:flex; justify-content:center; margin-bottom: 30px;
-  opacity: 0; transform: scale(0.6);
-  animation: stampIn 1s cubic-bezier(.2,.8,.2,1) 0.15s forwards;
+/* Positioned absolutely, independent of .hero-inner's own flow, so
+   adding this never shifts the H1 down. */
+.hero-tags{
+  position:absolute; top: calc(90px + var(--ticker-h) + 28px); right: clamp(28px, 8vw, 100px);
+  z-index: 2; display:flex; flex-direction:column; align-items:flex-end; gap: 6px;
+  font-family: var(--font-body); font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold-soft); opacity:0; animation: fadeUp .8s ease .35s forwards;
 }
-@keyframes stampIn{ to{ opacity:1; transform: scale(1); } }
+.hero-inner{ position: relative; z-index: 2; max-width: 780px; padding: 0 28px 0 0; }
 .hero .eyebrow{ color: var(--gold-soft); opacity:0; animation: fadeUp .8s ease .5s forwards; }
 .hero h1{
   color: var(--ivory); font-size: clamp(2.6rem, 6vw, 4.6rem); margin-top: 20px;
@@ -254,16 +224,16 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 }
 .hero h1 em{ font-style: italic; color: var(--gold-soft); }
 .hero .divider{
-  width: 70px; height: 1px; background: var(--gold); margin: 26px auto;
+  width: 70px; height: 1px; background: var(--gold); margin: 26px 0;
   opacity:0; animation: fadeUp .8s ease .9s forwards;
 }
 .hero p.lede{
-  color: rgba(251,244,233,0.82); font-size: 1.08rem; max-width: 46ch; margin: 0 auto;
+  color: rgba(251,244,233,0.82); font-size: 1.08rem; max-width: 46ch; margin: 0;
   opacity:0; animation: fadeUp .8s ease 1.05s forwards;
 }
 @keyframes fadeUp{ from{ opacity:0; transform: translateY(16px);} to{ opacity:1; transform: translateY(0);} }
 .hero-ctas{
-  display:flex; gap:18px; justify-content:center; margin-top: 42px; flex-wrap: wrap;
+  display:flex; gap:18px; justify-content:flex-start; margin-top: 42px; flex-wrap: wrap;
   opacity:0; animation: fadeUp .8s ease 1.2s forwards;
 }
 .btn{
@@ -329,7 +299,17 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 }
 .media-frame.tone-b{ background: linear-gradient(155deg, #2a201a 0%, var(--ink) 100%); }
 .media-frame.tone-c{ background: linear-gradient(155deg, var(--wine-bright) 0%, var(--wine-deep) 100%); }
-.media-frame img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.media-frame img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:1; transition: opacity .35s ease; }
+/* Skeleton shimmer shown from the moment a dynamically-inserted
+   .media-frame gains its <img>/<video> until that media actually
+   finishes loading — see bindMediaSkeleton() in config.js. */
+.media-frame.skel{
+  background: linear-gradient(100deg, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.05) 70%);
+  background-size: 200% 100%;
+  animation: skeletonShine 1.4s ease-in-out infinite;
+}
+.media-frame.skel img, .media-frame.skel video{ opacity: 0; }
+@keyframes skeletonShine{ 0%{ background-position: 200% 0; } 100%{ background-position: -200% 0; } }
 .media-frame .cap{
   color: var(--gold-soft); font-size: 0.72rem; letter-spacing: 0.06em; text-align:center; padding: 0 16px;
   font-style: italic; font-family: var(--font-display); font-size: 0.95rem;
@@ -347,24 +327,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .gallery .section-head p{ color: rgba(251,244,233,0.65); }
 .gallery .eyebrow{ color: var(--gold); }
 
-.gallery-grid{
-  display:grid; grid-template-columns: repeat(4, 1fr); gap: 16px; grid-auto-rows: 190px;
-}
-.gallery-grid .media-frame{ cursor: pointer; }
-.gallery-grid .g-1{ grid-column: span 2; grid-row: span 2; }
-.gallery-grid .g-2{ grid-column: span 2; }
-.gallery-grid .g-3{ grid-column: span 1; }
-.gallery-grid .g-4{ grid-column: span 1; }
-.gallery-grid .g-5{ grid-column: span 2; }
-.gallery-grid .g-6{ grid-column: span 2; grid-row: span 2; }
-.gallery-grid .g-7{ grid-column: span 2; }
-
-@media (max-width: 860px){
-  .gallery-grid{ grid-template-columns: repeat(2, 1fr); grid-auto-rows: 160px; }
-  .gallery-grid > div{ grid-column: span 1 !important; grid-row: span 1 !important; }
-}
-
-.reel-title{ margin-top: 96px; }
+.reel-title{ margin-top: 0; }
 .reel{
   display:flex; gap: 20px; overflow-x: auto; padding-bottom: 20px; scroll-snap-type: x mandatory;
 }
@@ -391,10 +354,6 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .t-card .quote-mark{ font-family: var(--font-display); font-size: 3rem; color: var(--gold); line-height: 0.5; display:block; margin-bottom: 14px; }
 .t-card p{ font-family: var(--font-display); font-style: italic; font-size: 1.12rem; color: rgba(251,244,233,0.9); }
 .t-card .who{ margin-top: 20px; display:flex; align-items:center; gap: 12px; }
-.t-card .who .initial{
-  width:38px; height:38px; border-radius:50%; background: var(--wine); color: var(--gold-soft);
-  display:flex; align-items:center; justify-content:center; font-family: var(--font-display); font-size:1rem;
-}
 .t-card .who .name{ font-size: 0.85rem; letter-spacing: 0.04em; }
 .t-card .who .event{ font-size: 0.74rem; color: rgba(251,244,233,0.5); }
 
@@ -451,7 +410,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .tier-select{ display:flex; gap:10px; flex-wrap: wrap; }
 .tier-option{
   flex:1; min-width: 64px; text-align:center; padding: 14px 8px; border: 1px solid rgba(24,19,15,0.16);
-  border-radius: 2px; font-size: 0.85rem; transition: all .2s ease; background:#fff;
+  border-radius: 8px; font-size: 0.85rem; transition: all .2s ease; background:#fff;
 }
 .tier-option:hover{ border-color: var(--wine); }
 .tier-option input{ display:none; }
@@ -497,10 +456,6 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   transition: border-color .2s ease;
 }
 .menu-item:hover{ border-color: var(--gold-line); }
-.menu-item .m-icon{
-  width: 52px; height:52px; border-radius: 50%; background: var(--wine); flex-shrink:0;
-  display:flex; align-items:center; justify-content:center; color: var(--gold-soft);
-}
 .menu-item .m-body{ flex: 1; min-width:0; }
 .menu-item .m-body h4{ font-size: 1.12rem; font-weight: 600; }
 .menu-item .m-body p{ color: var(--text-muted); font-size: 0.86rem; margin-top: 2px; }

@@ -62,6 +62,22 @@ function isValidPhone(value){
 }
 
 /* ============================================================
+   MEDIA SKELETON — shared shimmer-loading state for any <img>/
+   <video> inserted dynamically into a .media-frame. Call right
+   after inserting the element; it adds the shimmer (the "skel"
+   class, styled in index.css) and clears it once the media has
+   actually loaded, or failed, so slow network image loads never
+   just show a blank/empty frame.
+============================================================ */
+function bindMediaSkeleton(frameEl, mediaEl){
+  frameEl.classList.add('skel');
+  const clear = ()=> frameEl.classList.remove('skel');
+  if(mediaEl.tagName === 'IMG' && mediaEl.complete && mediaEl.naturalWidth > 0){ clear(); return; }
+  mediaEl.addEventListener(mediaEl.tagName === 'VIDEO' ? 'loadeddata' : 'load', clear, { once:true });
+  mediaEl.addEventListener('error', clear, { once:true });
+}
+
+/* ============================================================
    MODAL FOCUS MANAGEMENT — shared by every overlay on both pages
    (lightbox, cake gallery, tier preview, news popup). openModal()
    moves focus in and traps Tab/Shift+Tab inside the modal;

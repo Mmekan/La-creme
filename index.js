@@ -5,7 +5,9 @@
    index.html and gallery.html.
 ============================================================ */
 
-document.getElementById('aboutPhoto').src = mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg');
+const aboutPhotoEl = document.getElementById('aboutPhoto');
+bindMediaSkeleton(aboutPhotoEl.closest('.media-frame'), aboutPhotoEl);
+aboutPhotoEl.src = mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg');
 
 /* ============================================================
    NEWS / PROMOTIONS — shared data for the scrolling ticker and
@@ -114,16 +116,30 @@ const siteNav = document.getElementById('siteNav');
 window.addEventListener('scroll', ()=>{
   siteNav.classList.toggle('scrolled', window.scrollY > 40);
 });
-const navToggle = document.getElementById('navToggle');
-const navLinks = document.getElementById('navLinks');
-navToggle.addEventListener('click', ()=>{
-  const open = navLinks.classList.toggle('open');
-  navToggle.classList.toggle('open', open);
-  navToggle.setAttribute('aria-expanded', open);
-});
-navLinks.querySelectorAll('a').forEach(a=> a.addEventListener('click', ()=>{
-  navLinks.classList.remove('open'); navToggle.classList.remove('open');
-}));
+// Brand text shows alone while the "what would you like today?" hero
+// question is on screen; once the user scrolls past it, the brand
+// swaps out for the Gallery/Cakes/Catering links (see .nav.past-hero
+// in index.css).
+const heroSection = document.getElementById('home');
+const heroObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=> siteNav.classList.toggle('past-hero', !entry.isIntersecting));
+}, { threshold: 0 });
+heroObserver.observe(heroSection);
+
+// Highlights the matching nav link (Cakes/Catering) while its section
+// is centered in the viewport, so the navbar tracks where the user is
+// as they scroll.
+const navSectionLinks = [
+  { section: document.getElementById('cakes'), link: document.querySelector('#navLinks a[href="#cakes"]') },
+  { section: document.getElementById('catering'), link: document.querySelector('#navLinks a[href="#catering"]') },
+];
+const navSectionObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    const match = navSectionLinks.find(item=> item.section === entry.target);
+    if(match) match.link.classList.toggle('active', entry.isIntersecting);
+  });
+}, { threshold: 0, rootMargin: '-50% 0px -50% 0px' });
+navSectionLinks.forEach(item=> navSectionObserver.observe(item.section));
 
 /* ============================================================
    SCROLL REVEAL
@@ -140,44 +156,9 @@ document.getElementById('year').textContent = new Date().getFullYear();
    ICONS (small inline set reused for placeholders & menu items)
 ============================================================ */
 const ICONS = {
-  cake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="22" height="22"><path d="M4 21v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7M4 21h16M8 12V8a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4M12 6V3M9 3.5l1.5 1.5M15 3.5 13.5 5"/></svg>',
-  platter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="22" height="22"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>',
-  bowl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="22" height="22"><path d="M3 12h18a9 6 0 0 1-18 0zM7 12a5 7 0 0 1 10 0"/></svg>',
-  rice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="22" height="22"><path d="M5 20h14M6 20c-1-4 1-8 2-9M18 20c1-4-1-8-2-9M9 11c1-3 1-5 0-8M15 11c-1-3-1-5 0-8"/></svg>',
-  meat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="22" height="22"><path d="M15 3c3 0 5.5 2.5 5.5 5.5 0 2-1 3.5-2.5 4.5l-7 7a2.5 2.5 0 0 1-3.5-3.5l7-7C15.5 8.5 15 6 15 3z"/></svg>',
-  flower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="46" height="46"><circle cx="12" cy="12" r="2.4"/><circle cx="12" cy="6" r="2.6"/><circle cx="12" cy="18" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="12" r="2.6"/></svg>',
-  glass: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="46" height="46"><path d="M7 3h10l-1.5 12a3.5 3.5 0 0 1-7 0L7 3zM12 15v6M8 21h8"/></svg>',
-  gift: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="46" height="46"><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M3 12h18M12 8v13M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg>',
-  table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="46" height="46"><path d="M3 9h18M5 9v11M19 9v11M9 3h6l-1 6h-4l-1-6z"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" width="20" height="20"><polygon points="6 4 20 12 6 20 6 4"/></svg>',
   whatsapp: '<svg viewBox="0 0 24 24" width="14" height="14" fill="#fff"><path d="M12.04 2c-5.5 0-9.96 4.46-9.96 9.96 0 1.76.46 3.44 1.33 4.93L2 22l5.24-1.37a9.9 9.9 0 0 0 4.8 1.22h.01c5.5 0 9.96-4.46 9.96-9.96S17.54 2 12.04 2z"/></svg>'
 };
-
-/* ============================================================
-   GALLERY DATA — a six-photo preview of the full gallery (see
-   gallery.html for the whole infinite-scroll archive).
-   Add a real photo by setting `image: "your-photo.jpg"`.
-   Leave image: null to keep the elegant placeholder frame.
-============================================================ */
-const galleryItems = [
-  { caption: 'Wedding cake beneath the chandeliers', icon: ICONS.cake, tone:'', image: mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg'), cls:'g-1' },
-  { caption: 'Small chops platter — cocktail hour', icon: ICONS.platter, tone:'tone-b', image: mediaUrl('img/123520380_2807744082662300_1396207157575276742_n.jpg'), cls:'g-2' },
-  { caption: 'Birthday cake, made to order', icon: ICONS.cake, tone:'tone-c', image: mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg'), cls:'g-3' },
-  { caption: 'Crystal-base wedding tier', icon: ICONS.flower, tone:'tone-b', image: mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg'), cls:'g-5' },
-  { caption: 'The six-tier reveal, red & ivory', icon: ICONS.table, tone:'', image: mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg'), cls:'g-6' },
-  { caption: 'Custom novelty cakes, made to order', icon: ICONS.gift, tone:'tone-c', image: mediaUrl('img/505753228_9109996449103667_9107171079224956350_n.jpg'), cls:'g-7' },
-];
-
-const galleryGrid = document.getElementById('galleryGrid');
-galleryItems.forEach((item, i)=>{
-  const el = document.createElement('div');
-  el.className = `media-frame ${item.tone} ${item.cls}`;
-  el.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div>`
-    : `<div class="ring"></div>${item.icon}<span class="cap">${item.caption}</span>`;
-  el.addEventListener('click', ()=> openLightbox(item));
-  galleryGrid.appendChild(el);
-});
 
 /* ============================================================
    VIDEO REEL — behind-the-scenes clips (silent, autoplay while
@@ -222,7 +203,7 @@ testimonials.forEach(t=>{
   const el = document.createElement('div');
   el.className = 't-card';
   el.innerHTML = `<span class="quote-mark">&ldquo;</span><p>${t.quote}</p>
-    <div class="who"><span class="initial">${t.name.charAt(0)}</span><div><div class="name">${t.name}</div><div class="event">${t.event}</div></div></div>`;
+    <div class="who"><div><div class="name">${t.name}</div><div class="event">${t.event}</div></div></div>`;
   testimonialGrid.appendChild(el);
 });
 
@@ -320,7 +301,7 @@ function getDesiredTierNumbers(){
   });
   if(tierCustomCheckbox.checked){
     const n = Math.min(MAX_CUSTOM_TIERS, Math.max(0, Math.floor(Number(tierCustomCount.value)) || 0));
-    for(let i = 1; i <= n; i++) numbers.add(i);
+    if(n > 0) numbers.add(n);
   }
   return numbers;
 }
@@ -472,6 +453,7 @@ cakeGalleryItems.forEach(item=>{
   const el = document.createElement('div');
   el.className = 'media-frame';
   el.innerHTML = `<img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div>`;
+  bindMediaSkeleton(el, el.querySelector('img'));
   el.addEventListener('click', ()=> openLightbox(item));
   cakeGalleryGrid.appendChild(el);
 });
@@ -553,8 +535,8 @@ const CHIN_CHIN_VARIANTS = [
   { id:'cc-bucket', name:'Chin Chin — Bucket', unit:'bucket', price:15000 },
 ];
 const fingerFoodMenu = [
-  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'pack of 12', price:1000, icon: ICONS.platter },
-  { id:'cake-slices', name:'Cake Slices', desc:'Delicious cake slices for any occasion', unit:'slice', price:3500, icon: ICONS.platter, needsFlavour:true },
+  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'pack of 12', price:1000 },
+  { id:'cake-slices', name:'Cake Slices', desc:'Delicious cake slices for any occasion', unit:'slice', price:3500, needsFlavour:true },
 ];
 const ALL_FF_ITEMS = [...SMALL_CHOPS_VARIANTS, ...CHIN_CHIN_VARIANTS, ...fingerFoodMenu];
 
@@ -571,7 +553,6 @@ function buildSmallChopsItem(){
   wrap.className = 'menu-item has-extra';
   wrap.innerHTML = `
     <div class="m-top">
-      <span class="m-icon">${ICONS.platter}</span>
       <div class="m-body">
         <h4>Small Chops</h4>
         <p>Puff puff, spring rolls, samosa & sausage rolls — choose plate or tray</p>
@@ -657,7 +638,6 @@ function buildChinChinItem(){
   wrap.className = 'menu-item has-extra';
   wrap.innerHTML = `
     <div class="m-top">
-      <span class="m-icon">${ICONS.platter}</span>
       <div class="m-body">
         <h4>Chin Chin</h4>
         <p>Crunchy, lightly sweetened bites — choose your size</p>
@@ -716,7 +696,6 @@ fingerFoodMenu.forEach(item=>{
   row.className = 'menu-item' + (item.needsFlavour ? ' has-extra' : '');
   row.innerHTML = `
     <div class="m-top">
-      <span class="m-icon">${item.icon}</span>
       <div class="m-body">
         <h4>${item.name}</h4>
         <p>${item.desc}</p>
@@ -839,11 +818,11 @@ document.getElementById('ffSubmit').addEventListener('click', ()=>{
    CATERING — Soups, Rice, Proteins (liter/qty based)
 ============================================================ */
 const cateringSoups = [
-  { id:'afang', name:'Afang Soup', desc:'Waterleaf, afang leaf, assorted meat or fish', icon: ICONS.bowl },
-  { id:'edikang-ikong', name:'Edikang Ikong', desc:'Ugu & waterleaf, rich with assorted meat', icon: ICONS.bowl },
-  { id:'atama', name:'Atama Soup', desc:'Atama leaf, periwinkle & assorted meat', icon: ICONS.bowl },
-  { id:'white-soup', name:'White Soup', desc:'Catfish soup, native spice base', icon: ICONS.bowl },
-  { id:'egusi', name:'Egusi Soup', desc:'Melon seed, assorted meat or fish', icon: ICONS.bowl },
+  { id:'afang', name:'Afang Soup', desc:'Waterleaf, afang leaf, assorted meat or fish' },
+  { id:'edikang-ikong', name:'Edikang Ikong', desc:'Ugu & waterleaf, rich with assorted meat' },
+  { id:'atama', name:'Atama Soup', desc:'Atama leaf, periwinkle & assorted meat' },
+  { id:'white-soup', name:'White Soup', desc:'Catfish soup, native spice base' },
+  { id:'egusi', name:'Egusi Soup', desc:'Melon seed, assorted meat or fish' },
 ];
 const literOptions = [
   { label:'3L', price:15000 }, { label:'5L', price:23000 }, { label:'10L', price:42000 },
@@ -851,9 +830,9 @@ const literOptions = [
 const SOUP_PROTEINS = ['Goat meat', 'Beef', 'Fish', 'Cow Leg'];
 
 const cateringRice = [
-  { id:'jollof', name:'Jollof Rice', desc:'Smoky party-style jollof', icon: ICONS.rice },
-  { id:'fried-rice', name:'Fried Rice', desc:'Mixed vegetables, Nigerian-style', icon: ICONS.rice },
-  { id:'coconut-rice', name:'Coconut Rice', desc:'Rich coconut milk base', icon: ICONS.rice },
+  { id:'jollof', name:'Jollof Rice', desc:'Smoky party-style jollof' },
+  { id:'fried-rice', name:'Fried Rice', desc:'Mixed vegetables, Nigerian-style' },
+  { id:'coconut-rice', name:'Coconut Rice', desc:'Rich coconut milk base' },
 ];
 // Lunchpack = personal portion, Tray = serves 10. Classic adds a side.
 const RICE_TYPES = ['Lunchpack', 'Tray'];
@@ -869,10 +848,10 @@ const RICE_STYLE_NOTES = {
 };
 
 const cateringProteins = [
-  { id:'chicken', name:'Chicken', unit:'per portion', price:2500, icon: ICONS.meat },
-  { id:'turkey', name:'Turkey', unit:'per portion', price:3000, icon: ICONS.meat },
-  { id:'beef', name:'Beef', unit:'per portion', price:2200, icon: ICONS.meat },
-  { id:'fish', name:'Fish (Titus/Croaker)', unit:'per portion', price:3200, icon: ICONS.meat },
+  { id:'chicken', name:'Chicken', unit:'per portion', price:2500 },
+  { id:'turkey', name:'Turkey', unit:'per portion', price:3000 },
+  { id:'beef', name:'Beef', unit:'per portion', price:2200 },
+  { id:'fish', name:'Fish (Titus/Croaker)', unit:'per portion', price:3200 },
 ];
 
 const catState = { soups:{}, rice:{}, proteins:{} };
@@ -885,7 +864,6 @@ function buildSoupRow(item){
   row.className = 'menu-item has-extra';
   row.innerHTML = `
     <div class="m-top">
-      <span class="m-icon">${item.icon}</span>
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
     </div>
     <div class="m-extra">
@@ -953,7 +931,6 @@ function buildRiceRow(item){
   row.className = 'menu-item has-extra';
   row.innerHTML = `
     <div class="m-top">
-      <span class="m-icon">${item.icon}</span>
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
     </div>
     <div class="m-extra">
@@ -1061,7 +1038,6 @@ cateringProteins.forEach(item=>{
   const row = document.createElement('div');
   row.className = 'menu-item';
   row.innerHTML = `
-    <span class="m-icon">${item.icon}</span>
     <div class="m-body"><h4>${item.name}</h4><div class="m-price">${fmtNaira(item.price)} ${item.unit}</div></div>
     <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
       <button type="button" aria-label="Decrease" data-act="dec">−</button>
@@ -1183,8 +1159,6 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
   showToast('Opening WhatsApp with your catering request…');
 });
 
-renderFF();
-renderCatering();
 /* ============================================================
    MINI CART — context-aware sticky bar + review sheet
 
@@ -1452,4 +1426,10 @@ function syncCartStates(){
 }
 
 function refreshCartUI(){ syncCartStates(); updateCartBar(); }
-refreshCartUI();
+
+// Both call refreshCartUI() internally — must run after every const/
+// function above is initialized (cartBar, prevCardQty, etc.), or the
+// page throws a TDZ ReferenceError on load and the mini-cart never
+// initializes. See git history for the incident.
+renderFF();
+renderCatering();

@@ -110,16 +110,6 @@ const siteNav = document.getElementById('siteNav');
 window.addEventListener('scroll', ()=>{
   siteNav.classList.toggle('scrolled', window.scrollY > 40);
 });
-const navToggle = document.getElementById('navToggle');
-const navLinks = document.getElementById('navLinks');
-navToggle.addEventListener('click', ()=>{
-  const open = navLinks.classList.toggle('open');
-  navToggle.classList.toggle('open', open);
-  navToggle.setAttribute('aria-expanded', open);
-});
-navLinks.querySelectorAll('a').forEach(a=> a.addEventListener('click', ()=>{
-  navLinks.classList.remove('open'); navToggle.classList.remove('open');
-}));
 
 /* ============================================================
    SCROLL REVEAL
@@ -636,6 +626,7 @@ function makeTile(item){
     ? `<img src="${item.image}" alt="${item.caption}">`
     : `<div class="ring"></div>${item.icon}`;
   el.appendChild(media);
+  if(item.image) bindMediaSkeleton(media, media.querySelector('img'));
 
   el.insertAdjacentHTML('beforeend', `
     <div class="gi-overlay">
