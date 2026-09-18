@@ -765,54 +765,7 @@ function renderFF(){
   if(typeof refreshCartUI === 'function') refreshCartUI();
 }
 
-document.getElementById('ffSubmit').addEventListener('click', ()=>{
-  const name = document.getElementById('ffName').value;
-  const phone = document.getElementById('ffPhone').value;
-  const addressEl = document.getElementById('ffAddress');
-  const address = addressEl.value.trim();
-  const date = document.getElementById('ffDate').value;
-  const notes = document.getElementById('ffNotes').value;
-  if(!name || !phone){ showToast('Please add your name and WhatsApp number.'); return; }
-  if(!isValidPhone(phone)){
-    showToast('Please enter a valid WhatsApp number.');
-    document.getElementById('ffPhone').focus();
-    return;
-  }
-  if(!address){ showToast('Please add your delivery location.'); addressEl.focus(); return; }
-
-  for(const item of ALL_FF_ITEMS){
-    if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
-      showToast(`Please select a flavour for ${item.name}.`);
-      document.getElementById(`ff-flavour-${item.id}`).focus();
-      return;
-    }
-  }
-
-  const items = ALL_FF_ITEMS.filter(i=> ffState[i.id] > 0)
-    .map(i=>{
-      const flavourNote = i.needsFlavour && ffFlavours[i.id] ? ` — Flavour: ${ffFlavours[i.id]}` : '';
-      return `• ${i.name} × ${ffState[i.id]} (${fmtNaira(i.price * ffState[i.id])})${flavourNote}`;
-    });
-  let total = ALL_FF_ITEMS.reduce((sum,i)=> sum + i.price * ffState[i.id], 0);
-
-  const lines = [
-    `Hello ${CONFIG.businessName}! I'd like to place a *Finger Food* order.`,
-    ``,
-    `*Items:*`,
-    ...items,
-    ``,
-    `*Estimated Total:* ${fmtNaira(total)}`,
-    `*Delivery Location:* ${address}`,
-    date ? `*Date Needed:* ${date}` : null,
-    notes ? `*Notes:* ${notes}` : null,
-    ``,
-    `*Name:* ${name}`,
-    `*WhatsApp Number:* ${phone}`,
-  ].filter(Boolean).join('\n');
-
-  openWhatsApp(lines);
-  showToast('Opening WhatsApp with your order…');
-});
+document.getElementById('ffCheckoutBtn').addEventListener('click', openCheckoutModal);
 
 /* ============================================================
    CATERING — Soups, Rice, Proteins (liter/qty based)
@@ -1086,69 +1039,141 @@ function renderCatering(){
   if(typeof refreshCartUI === 'function') refreshCartUI();
 }
 
-let catServiceType = '';
-document.querySelectorAll('#catServiceType .chip').forEach(c=>{
+document.getElementById('catCheckoutBtn').addEventListener('click', openCheckoutModal);
+
+/* ============================================================
+   CHECKOUT — one modal, shared by Finger Foods and Catering (cakes
+   have their own always-inline form and send straight to WhatsApp,
+   so they never touch this). Opened from either section's Checkout
+   button or the nav cart dropdown's Checkout All — never sits
+   inline on the page. Reviews everything in the cart and sends it
+   all as a single WhatsApp message; the event-specific fields only
+   show up if there's a catering item in the mix.
+============================================================ */
+const checkoutModal = document.getElementById('checkoutModal');
+
+function renderCheckoutModal(){
+  const ffLines = CART_SOURCES.ff.lines();
+  const catLines = CART_SOURCES.cat.lines();
+  const hasCat = catLines.length > 0;
+
+  const reviewEl = document.getElementById('checkoutReview');
+  reviewEl.innerHTML = '';
+  [...ffLines, ...catLines].forEach(line=>{
+    const row = document.createElement('div');
+    row.className = 'checkout-review-row';
+    row.innerHTML = `<span>${line.name}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${fmtNaira(line.qty * line.unitPrice)}</span>`;
+    reviewEl.appendChild(row);
+  });
+
+  const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+  document.getElementById('checkoutTotal').textContent = fmtNaira(total);
+
+  document.getElementById('checkoutEventTypeField').hidden = !hasCat;
+  document.getElementById('checkoutEventDetailsRow').hidden = !hasCat;
+}
+
+function openCheckoutModal(){
+  const ffLines = CART_SOURCES.ff.lines();
+  const catLines = CART_SOURCES.cat.lines();
+  if(!ffLines.length && !catLines.length){ showToast('Your cart is empty.'); return; }
+  closeCartDropdown();
+  renderCheckoutModal();
+  openModal(checkoutModal);
+}
+document.getElementById('checkoutClose').addEventListener('click', ()=> closeModal(checkoutModal));
+document.getElementById('checkoutBackdrop').addEventListener('click', ()=> closeModal(checkoutModal));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && checkoutModal.classList.contains('open')) closeModal(checkoutModal); });
+document.getElementById('cartCheckoutAllBtn').addEventListener('click', openCheckoutModal);
+
+let checkoutServiceType = '';
+document.querySelectorAll('#checkoutServiceType .chip').forEach(c=>{
   c.addEventListener('click', ()=>{
-    document.querySelectorAll('#catServiceType .chip').forEach(x=> x.classList.remove('active'));
+    document.querySelectorAll('#checkoutServiceType .chip').forEach(x=> x.classList.remove('active'));
     c.classList.add('active');
-    catServiceType = c.dataset.value;
+    checkoutServiceType = c.dataset.value;
   });
 });
 
-const catAddressField = document.getElementById('catAddressField');
-const catAddressInput = document.getElementById('catAddress');
-let catDelivery = '';
-document.querySelectorAll('#catDelivery .chip').forEach(c=>{
+const checkoutAddressField = document.getElementById('checkoutAddressField');
+const checkoutAddressInput = document.getElementById('checkoutAddress');
+let checkoutDelivery = '';
+document.querySelectorAll('#checkoutDelivery .chip').forEach(c=>{
   c.addEventListener('click', ()=>{
-    document.querySelectorAll('#catDelivery .chip').forEach(x=> x.classList.remove('active'));
+    document.querySelectorAll('#checkoutDelivery .chip').forEach(x=> x.classList.remove('active'));
     c.classList.add('active');
-    catDelivery = c.dataset.value;
-    const needsAddress = catDelivery === 'Delivery';
-    catAddressField.style.display = needsAddress ? 'block' : 'none';
-    if(!needsAddress) catAddressInput.value = '';
+    checkoutDelivery = c.dataset.value;
+    const needsAddress = checkoutDelivery === 'Delivery';
+    checkoutAddressField.style.display = needsAddress ? 'block' : 'none';
+    if(!needsAddress) checkoutAddressInput.value = '';
   });
 });
 
-document.getElementById('catSubmit').addEventListener('click', ()=>{
-  const eventType = document.getElementById('catEventType').value;
-  const guests = document.getElementById('catGuests').value;
-  const date = document.getElementById('catDate').value;
-  const name = document.getElementById('catName').value;
-  const phone = document.getElementById('catPhone').value;
-  const address = catAddressInput.value.trim();
-  const notes = document.getElementById('catNotes').value;
+document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
 
-  if(!eventType || !catDelivery || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
-  if(!isValidPhone(phone)){
-    showToast('Please enter a valid WhatsApp number.');
-    document.getElementById('catPhone').focus();
+  const ffLines = CART_SOURCES.ff.lines();
+  const catLines = CART_SOURCES.cat.lines();
+  if(!ffLines.length && !catLines.length){ showToast('Your cart is empty.'); return; }
+  const hasCat = catLines.length > 0;
+
+  const eventType = document.getElementById('checkoutEventType').value;
+  const guests = document.getElementById('checkoutGuests').value;
+  const name = document.getElementById('checkoutName').value;
+  const phone = document.getElementById('checkoutPhone').value;
+  const address = checkoutAddressInput.value.trim();
+  const date = document.getElementById('checkoutDate').value;
+  const notes = document.getElementById('checkoutNotes').value;
+
+  if(hasCat && !eventType){
+    showToast('Please select an event type.');
+    document.getElementById('checkoutEventType').focus();
     return;
   }
-  if(catDelivery === 'Delivery' && !address){ showToast('Please add your venue/delivery location.'); catAddressInput.focus(); return; }
+  if(!checkoutDelivery || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
+  if(!isValidPhone(phone)){
+    showToast('Please enter a valid WhatsApp number.');
+    document.getElementById('checkoutPhone').focus();
+    return;
+  }
+  if(checkoutDelivery === 'Delivery' && !address){ showToast('Please add your delivery location.'); checkoutAddressInput.focus(); return; }
 
+  for(const item of ALL_FF_ITEMS){
+    if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
+      showToast(`Please select a flavour for ${item.name}.`);
+      closeModal(checkoutModal);
+      const flavourSelect = document.getElementById(`ff-flavour-${item.id}`);
+      flavourSelect.scrollIntoView({ behavior:'smooth', block:'center' });
+      flavourSelect.focus();
+      return;
+    }
+  }
+
+  const ffItemLines = ffLines.map(l=> `• ${l.name} × ${l.qty} (${fmtNaira(l.qty * l.unitPrice)})`);
   const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label} (${fmtNaira(s.price)})`);
   const riceLines = Object.values(catState.rice).map(r=> `• ${r.name} — ${r.label} (${fmtNaira(r.price)})`);
   const proteinLines = cateringProteins.filter(p=> catState.proteins[p.id] > 0)
     .map(p=> `• ${p.name} × ${catState.proteins[p.id]} (${fmtNaira(p.price * catState.proteins[p.id])})`);
-  const total = Object.values(catState.soups).reduce((s,x)=>s+x.price,0)
-    + Object.values(catState.rice).reduce((s,x)=>s+x.price,0)
-    + cateringProteins.reduce((s,p)=> s + p.price * catState.proteins[p.id], 0);
+
+  const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
 
   const lines = [
-    `Hello ${CONFIG.businessName}! I'd like to place a *Catering / Bulk Order* request.`,
+    `Hello ${CONFIG.businessName}! I'd like to place an order.`,
     ``,
-    `*Event Type:* ${eventType}`,
+    ffItemLines.length ? `*Finger Foods:*` : null, ...ffItemLines,
+    ffItemLines.length ? `` : null,
+    hasCat ? `*Event Type:* ${eventType}` : null,
     guests ? `*Guest Count:* ${guests}` : null,
-    date ? `*Event Date:* ${date}` : null,
-    catServiceType ? `*Service Type:* ${catServiceType}` : null,
-    ``,
+    checkoutServiceType ? `*Service Type:* ${checkoutServiceType}` : null,
+    hasCat ? `` : null,
     soupLines.length ? `*Soups:*` : null, ...soupLines,
     riceLines.length ? `*Rice & Sides:*` : null, ...riceLines,
     proteinLines.length ? `*Proteins:*` : null, ...proteinLines,
-    ``,
+    (soupLines.length || riceLines.length || proteinLines.length) ? `` : null,
     `*Estimated Total:* ${fmtNaira(total)}`,
-    `*Delivery:* ${catDelivery}`,
-    address ? `*Venue/Delivery Location:* ${address}` : null,
+    `*Delivery:* ${checkoutDelivery}`,
+    address ? `*Delivery/Venue Location:* ${address}` : null,
+    date ? `*Date Needed:* ${date}` : null,
     notes ? `*Notes:* ${notes}` : null,
     ``,
     `*Name:* ${name}`,
@@ -1156,7 +1181,8 @@ document.getElementById('catSubmit').addEventListener('click', ()=>{
   ].filter(Boolean).join('\n');
 
   openWhatsApp(lines);
-  showToast('Opening WhatsApp with your catering request…');
+  closeModal(checkoutModal);
+  showToast('Opening WhatsApp with your order…');
 });
 
 /* ============================================================
@@ -1186,9 +1212,7 @@ const cartDropdownTotal = document.getElementById('cartDropdownTotal');
    sections generically. */
 const CART_SOURCES = {
   ff: {
-    sectionId: 'finger-foods',
     title: 'Finger Foods Order',
-    checkoutId: 'ffCheckout',
     lines(){
       return ALL_FF_ITEMS.filter(i=> ffState[i.id] > 0).map(i=>({
         id: i.id,
@@ -1201,9 +1225,7 @@ const CART_SOURCES = {
     setQty(id, qty){ ffState[id] = Math.max(0, qty); renderFF(); }
   },
   cat: {
-    sectionId: 'catering',
     title: 'Catering Order',
-    checkoutId: 'catCheckout',
     lines(){
       const out = [];
       // Soups and rice are a single size selection, not a quantity —
@@ -1296,18 +1318,7 @@ function buildCartSection(key){
 
   const section = document.createElement('div');
   section.className = 'cart-dd-section';
-  section.innerHTML = `
-    <div class="cart-dd-section-head">
-      <span>${src.title}</span>
-      <button type="button" class="cart-dd-goto">Checkout →</button>
-    </div>`;
-  section.querySelector('.cart-dd-goto').addEventListener('click', ()=>{
-    closeCartDropdown();
-    const target = document.getElementById(src.checkoutId);
-    // Wait for the close transition before scrolling, or the browser
-    // measures the target while the dropdown is still overlaying it.
-    if(target) setTimeout(()=> target.scrollIntoView({ behavior:'smooth', block:'start' }), 260);
-  });
+  section.innerHTML = `<div class="cart-dd-section-head"><span>${src.title}</span></div>`;
   const linesWrap = document.createElement('div');
   linesWrap.className = 'cart-dd-lines';
   lines.forEach(line=> linesWrap.appendChild(buildCartLineRow(line, src)));

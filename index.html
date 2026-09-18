@@ -82,8 +82,11 @@
         </div>
         <div class="cart-dropdown-body" id="cartDropdownBody"></div>
         <div class="cart-dropdown-foot">
-          <span>Estimated Total</span>
-          <strong id="cartDropdownTotal">&#8358;0</strong>
+          <div class="cart-dropdown-total-row">
+            <span>Estimated Total</span>
+            <strong id="cartDropdownTotal">&#8358;0</strong>
+          </div>
+          <button type="button" class="btn btn-wine" id="cartCheckoutAllBtn" style="width:100%; justify-content:center;">Checkout All</button>
         </div>
       </div>
     </div>
@@ -107,7 +110,6 @@
         <a href="#cakes" class="btn btn-gold">Order a Cake</a>
         <a href="#finger-foods" class="btn btn-outline">Finger Foods</a>
         <a href="#catering" class="btn btn-outline">Soups</a>
-        <a href="#about" class="btn btn-outline">Let Me Decide</a>
       </div>
     </div>
   </div>
@@ -162,11 +164,6 @@
 ============================================================ -->
 <section class="menu-section" id="cakes">
   <div class="container">
-    <div class="section-head reveal">
-      <span class="eyebrow">Cake Menu</span>
-      <!-- <p>Every cake is built to order. Tell us the occasion, size and style below, and we'll confirm flavors, design and pricing directly on WhatsApp — reference photos welcome once we're chatting.</p> -->
-    </div>
-
     <!-- <div class="flavor-showcase reveal">
       <h4>Popular Flavors</h4>
       <div class="chip-row">
@@ -177,8 +174,9 @@
       </div>
     </div> -->
 
-    <div class="menu-layout mt-lg">
+    <div class="menu-layout">
       <div class="order-card reveal" style="max-width:640px;">
+        <span class="eyebrow">Cake Menu</span>
         <h3>Order Your Cake</h3>
         <p class="sub">Fields marked <span class="req">*</span> are required so we can quote you accurately.</p>
         <form id="cakeForm">
@@ -294,12 +292,7 @@
         <div id="ffCheckout" style="display:none;">
           <div class="summary-divider"></div>
           <div class="summary-total"><span>Estimated Total</span><strong id="ffTotal">₦0</strong></div>
-          <div class="field"><label for="ffName">Your Name <span class="req">*</span></label><input type="text" id="ffName" placeholder="Full name"></div>
-          <div class="field"><label for="ffPhone">WhatsApp Number <span class="req">*</span></label><input type="tel" id="ffPhone" placeholder="080X XXX XXXX"></div>
-          <div class="field"><label for="ffDate">Date Needed</label><input type="date" id="ffDate"></div>
-          <div class="field"><label for="ffAddress">Delivery Location <span class="req">*</span></label><input type="text" id="ffAddress" placeholder="Full delivery address / area"></div>
-          <div class="field"><label for="ffNotes">Additional Notes</label><textarea id="ffNotes" placeholder="Any special requests"></textarea></div>
-          <button class="btn btn-wine" style="width:100%; justify-content:center;" id="ffSubmit">Send Order via WhatsApp</button>
+          <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="ffCheckoutBtn">Checkout</button>
         </div>
       </div>
     </div>
@@ -335,37 +328,7 @@
         <div id="catCheckout" style="display:none;">
           <div class="summary-divider"></div>
           <div class="summary-total"><span>Estimated Total</span><strong id="catTotal">₦0</strong></div>
-          <div class="event-fields">
-            <div class="field"><label for="catEventType">Event Type <span class="req">*</span></label>
-              <select id="catEventType"><option value="">Select event type</option><option>Wedding</option><option>Birthday</option><option>Owambe / Party</option><option>Corporate</option><option>Burial / Memorial</option><option>Other</option></select>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="catGuests">Number of Guests</label><input type="number" id="catGuests" min="1" placeholder="e.g. 100"></div>
-              <div class="field"><label for="catDate">Event Date</label><input type="date" id="catDate"></div>
-            </div>
-            <div class="field"><label>Service Type</label>
-              <div class="chip-row" id="catServiceType">
-                <button type="button" class="chip" data-value="Indoor">Indoor</button>
-                <button type="button" class="chip" data-value="Outdoor">Outdoor</button>
-                <button type="button" class="chip" data-value="Both">Both</button>
-              </div>
-            </div>
-            <div class="field"><label for="catName">Your Name <span class="req">*</span></label><input type="text" id="catName" placeholder="Full name"></div>
-            <div class="field"><label for="catPhone">WhatsApp Number <span class="req">*</span></label><input type="tel" id="catPhone" placeholder="080X XXX XXXX"></div>
-            <div class="field">
-              <label>Delivery <span class="req">*</span></label>
-              <div class="chip-row" id="catDelivery">
-                <button type="button" class="chip" data-value="Delivery">Delivery</button>
-                <button type="button" class="chip" data-value="Pickup">Pickup</button>
-              </div>
-            </div>
-            <div class="field" id="catAddressField" style="display:none;">
-              <label for="catAddress">Venue / Delivery Location <span class="req">*</span></label>
-              <input type="text" id="catAddress" placeholder="Venue or delivery address">
-            </div>
-            <div class="field"><label for="catNotes">Additional Notes</label><textarea id="catNotes" placeholder="Setup & serving needs, anything else"></textarea></div>
-          </div>
-          <button class="btn btn-wine" style="width:100%; justify-content:center;" id="catSubmit">Send Catering Request via WhatsApp</button>
+          <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="catCheckoutBtn">Checkout</button>
         </div>
       </div>
     </div>
@@ -461,6 +424,60 @@
     </div>
     <a href="#" class="btn btn-gold" id="newsModalCta">Order Now</a>
     <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
+  </div>
+</div>
+
+<!-- Checkout — combines whatever's in the cart (Finger Foods and/or
+     Catering) into one form and one WhatsApp message. Opened from
+     the "Checkout" button in either order-summary, or "Checkout All"
+     in the nav cart dropdown — never sits on the page itself. -->
+<div class="checkout-modal" id="checkoutModal" role="dialog" aria-modal="true" aria-label="Checkout">
+  <div class="checkout-backdrop" id="checkoutBackdrop"></div>
+  <div class="checkout-panel">
+    <div class="checkout-head">
+      <h3>Complete Your Order</h3>
+      <button type="button" class="checkout-close" id="checkoutClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="checkout-review" id="checkoutReview"></div>
+    <div class="checkout-total"><span>Estimated Total</span><strong id="checkoutTotal">&#8358;0</strong></div>
+    <form id="checkoutForm">
+      <div class="field" id="checkoutEventTypeField" hidden>
+        <label for="checkoutEventType">Event Type <span class="req">*</span></label>
+        <select id="checkoutEventType">
+          <option value="">Select event type</option>
+          <option>Wedding</option><option>Birthday</option><option>Owambe / Party</option>
+          <option>Corporate</option><option>Burial / Memorial</option><option>Other</option>
+        </select>
+      </div>
+      <div class="field-row" id="checkoutEventDetailsRow" hidden>
+        <div class="field"><label for="checkoutGuests">Number of Guests</label><input type="number" id="checkoutGuests" min="1" placeholder="e.g. 100"></div>
+        <div class="field"><label>Service Type</label>
+          <div class="chip-row" id="checkoutServiceType">
+            <button type="button" class="chip" data-value="Indoor">Indoor</button>
+            <button type="button" class="chip" data-value="Outdoor">Outdoor</button>
+            <button type="button" class="chip" data-value="Both">Both</button>
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="checkoutName">Your Name <span class="req">*</span></label><input type="text" id="checkoutName" placeholder="Full name"></div>
+        <div class="field"><label for="checkoutPhone">WhatsApp Number <span class="req">*</span></label><input type="tel" id="checkoutPhone" placeholder="080X XXX XXXX"></div>
+      </div>
+      <div class="field">
+        <label>Delivery <span class="req">*</span></label>
+        <div class="chip-row" id="checkoutDelivery">
+          <button type="button" class="chip" data-value="Delivery">Delivery</button>
+          <button type="button" class="chip" data-value="Pickup">Pickup</button>
+        </div>
+      </div>
+      <div class="field" id="checkoutAddressField" style="display:none;">
+        <label for="checkoutAddress">Delivery / Venue Location <span class="req">*</span></label>
+        <input type="text" id="checkoutAddress" placeholder="Full address">
+      </div>
+      <div class="field"><label for="checkoutDate">Date Needed</label><input type="date" id="checkoutDate"></div>
+      <div class="field"><label for="checkoutNotes">Additional Notes</label><textarea id="checkoutNotes" placeholder="Any special requests"></textarea></div>
+      <button type="submit" class="btn btn-wine" style="width:100%; justify-content:center;">Send Order via WhatsApp</button>
+    </form>
   </div>
 </div>
 
