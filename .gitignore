@@ -7,3 +7,6 @@ img/
 .DS_Store
 Thumbs.db
 *.log
+
+# One-off local admin tool, not part of the site
+_image-review.html

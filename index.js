@@ -90,9 +90,9 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   }, 1200);
 }
 
-// Generic WhatsApp buttons (nav, hero, contact, floating)
+// Generic WhatsApp buttons (nav, hero, contact)
 const genericWaMessage = `Hello ${CONFIG.businessName}! I'd like to enquire about your cakes and catering services.`;
-['navWaBtn','heroWaBtn','contactWaBtn','floatWaBtn','contactWaIcon'].forEach(id=>{
+['navWaBtn','heroWaBtn','contactWaBtn','contactWaIcon'].forEach(id=>{
   const el = document.getElementById(id);
   if(el){ el.href = waLink(genericWaMessage); }
 });
@@ -196,9 +196,13 @@ videoReel.querySelectorAll('video').forEach(v=> reelVideoObserver.observe(v));
 const testimonials = [
   { quote: 'The cake didn\'t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
   { quote: 'We ordered small chops for 150 guests and everything arrived hot, on time, beautifully packed.', name:'Tunde O.', event:'Corporate Launch' },
-  { quote: 'The Afang soup alone made my mother-in-law\'s day. We\'re already booking for next year.', name:'Grace E.', event:'Family Owambe' },
 ];
 const testimonialGrid = document.getElementById('testimonialGrid');
+// .t-grid defaults to 3 columns (shared with gallery.html's larger
+// set) — with just 2 cards here that leaves a lopsided empty column,
+// so scope a centered 2-up layout via a modifier class instead of
+// touching the shared rule.
+testimonialGrid.classList.toggle('t-grid--pair', testimonials.length === 2);
 testimonials.forEach(t=>{
   const el = document.createElement('div');
   el.className = 't-card';
