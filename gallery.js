@@ -112,6 +112,23 @@ window.addEventListener('scroll', ()=>{
 });
 
 /* ============================================================
+   BACK TO TOP
+============================================================ */
+const scrollTopBtn = document.getElementById('scrollTopBtn');
+let scrollTopHideTimer;
+window.addEventListener('scroll', ()=>{
+  if(window.scrollY > 500){
+    clearTimeout(scrollTopHideTimer);
+    scrollTopBtn.hidden = false;
+    requestAnimationFrame(()=> scrollTopBtn.classList.add('show'));
+  } else if(scrollTopBtn.classList.contains('show')){
+    scrollTopBtn.classList.remove('show');
+    scrollTopHideTimer = setTimeout(()=>{ scrollTopBtn.hidden = true; }, 260);
+  }
+});
+scrollTopBtn.addEventListener('click', ()=> window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+/* ============================================================
    SCROLL REVEAL
 ============================================================ */
 const revealEls = document.querySelectorAll('.reveal');

@@ -116,6 +116,23 @@ const siteNav = document.getElementById('siteNav');
 window.addEventListener('scroll', ()=>{
   siteNav.classList.toggle('scrolled', window.scrollY > 40);
 });
+
+/* ============================================================
+   BACK TO TOP
+============================================================ */
+const scrollTopBtn = document.getElementById('scrollTopBtn');
+let scrollTopHideTimer;
+window.addEventListener('scroll', ()=>{
+  if(window.scrollY > 500){
+    clearTimeout(scrollTopHideTimer);
+    scrollTopBtn.hidden = false;
+    requestAnimationFrame(()=> scrollTopBtn.classList.add('show'));
+  } else if(scrollTopBtn.classList.contains('show')){
+    scrollTopBtn.classList.remove('show');
+    scrollTopHideTimer = setTimeout(()=>{ scrollTopBtn.hidden = true; }, 260);
+  }
+});
+scrollTopBtn.addEventListener('click', ()=> window.scrollTo({ top: 0, behavior: 'smooth' }));
 // Brand text shows alone while the "what would you like today?" hero
 // question is on screen; once the user scrolls past it, the brand
 // swaps out for the Gallery/Cakes/Catering links (see .nav.past-hero
@@ -295,18 +312,17 @@ function removeTierRow(tierNumber){
   if(row) row.remove();
 }
 
-// The full set of tier numbers that should currently have a row: every
-// checked preset (1/2/3/4/5+) contributes its own number, and a checked
-// Custom contributes 1..N for whatever count was typed.
+// The full set of tier numbers that should currently have a row —
+// one per checked preset (1/2/3/4/5+). Custom deliberately never
+// contributes a row: it's for orders too open-ended to spec inches/
+// layers for up front, so it only collects a tier/step count and
+// gets flagged as a custom order in the WhatsApp message instead
+// (see formatCakeLines()).
 function getDesiredTierNumbers(){
   const numbers = new Set();
   tierSelectEl.querySelectorAll('.tier-option input[data-count]:checked').forEach(input=>{
     numbers.add(Number(input.dataset.count));
   });
-  if(tierCustomCheckbox.checked){
-    const n = Math.min(MAX_CUSTOM_TIERS, Math.max(0, Math.floor(Number(tierCustomCount.value)) || 0));
-    if(n > 0) numbers.add(n);
-  }
   return numbers;
 }
 
@@ -370,37 +386,53 @@ document.querySelectorAll('#cakeDelivery .chip').forEach(c=>{
   });
 });
 
-document.getElementById('cakeForm').addEventListener('submit', (e)=>{
-  e.preventDefault();
-  const occasion = document.getElementById('cakeOccasion').value;
+/* ============================================================
+   CAKE CART — lets one order cover more than one cake. "Add Another
+   Cake" validates and saves just the cake-specific fields (occasion
+   through design) into cakeCart and clears them for a fresh cake;
+   the shared fields below (delivery, name, phone) are deliberately
+   left untouched since they're the same customer/order either way.
+   "Checkout Now" folds whatever's currently in the form in too (if
+   it's been touched), then sends every cake in cakeCart as one
+   WhatsApp message.
+============================================================ */
+let cakeCart = [];
+
+function cakeFormHasContent(){
+  return !!(
+    cakeOccasionEl.value ||
+    document.querySelectorAll('#tierSelect input:checked').length ||
+    document.getElementById('cakeDate').value ||
+    document.getElementById('cakeFlavor').value
+  );
+}
+
+// Validates and reads back just the per-cake fields — returns null
+// (after toasting the problem) if anything required is missing.
+function validateCakeFields(){
+  const occasion = cakeOccasionEl.value;
   const tierInputs = Array.from(document.querySelectorAll('#tierSelect input:checked'));
   const date = document.getElementById('cakeDate').value;
   const flavor = document.getElementById('cakeFlavor').value;
   const finish = document.getElementById('cakeFinish').value;
   const inscription = document.getElementById('cakeInscription').value;
   const design = document.getElementById('cakeDesign').value;
-  const name = document.getElementById('cakeName').value;
-  const phone = document.getElementById('cakePhone').value;
-  const deliveryAddress = cakeDeliveryAddressInput.value.trim();
 
-  if(!occasion || !tierInputs.length || !date || !flavor || !cakeDelivery || !name || !phone){
+  if(!occasion || !tierInputs.length || !date || !flavor){
     showToast('Please fill all required fields marked with *');
-    return;
+    return null;
   }
-  if(!isValidPhone(phone)){
-    showToast('Please enter a valid WhatsApp number.');
-    document.getElementById('cakePhone').focus();
-    return;
-  }
-  if(tierCustomCheckbox.checked && !(Number(tierCustomCount.value) > 0)){
-    showToast('Please type how many tiers for your custom option.');
+  const isCustom = tierCustomCheckbox.checked;
+  const customCount = Math.floor(Number(tierCustomCount.value)) || 0;
+  if(isCustom && !(customCount > 0)){
+    showToast('Please type how many tiers/steps for your custom option.');
     tierCustomCount.focus();
-    return;
+    return null;
   }
-  if(cakeDelivery === 'Delivery' && !deliveryAddress){
-    showToast('Please add your delivery location.');
-    cakeDeliveryAddressInput.focus();
-    return;
+  if(isCustom && customCount > MAX_CUSTOM_TIERS){
+    showToast(`Custom orders top out at ${MAX_CUSTOM_TIERS} tiers/steps here — message us directly for anything bigger.`);
+    tierCustomCount.focus();
+    return null;
   }
 
   const tierDetails = [];
@@ -410,23 +442,99 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
     const layers = row.querySelector('.tier-layers').value;
     if(!inches || !layers){
       showToast('Please select inches and layers for every tier.');
-      return;
+      return null;
     }
     tierDetails.push(`Tier ${row.dataset.index}: ${inches}" — ${layers} layers`);
   }
 
+  const tiersLabel = tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${customCount} Tiers/Steps)` : i.value).join(', ');
+
+  return { occasion, tiersLabel, tierDetails, isCustom, customCount, date, flavor, finish, inscription, design };
+}
+
+function resetCakeFields(){
+  cakeOccasionEl.value = '';
+  document.querySelectorAll('#tierSelect input[type="checkbox"]').forEach(inp=>{
+    inp.checked = false;
+    inp.closest('.tier-option').classList.remove('selected');
+  });
+  tierCustomField.style.display = 'none';
+  tierCustomCount.value = '';
+  tierConfigEl.innerHTML = '';
+  document.getElementById('cakeDate').value = '';
+  document.getElementById('cakeFlavor').value = '';
+  document.getElementById('cakeFinish').value = '';
+  document.getElementById('cakeInscription').value = '';
+  document.getElementById('cakeDesign').value = '';
+  updateTierAvailability();
+}
+
+function formatCakeLines(cake, index, total){
+  return [
+    total > 1 ? `*Cake ${index + 1}*` : null,
+    `*Occasion:* ${cake.occasion}`,
+    `*Tiers/Steps:* ${cake.tiersLabel}`,
+    cake.tierDetails.length ? `*Tier Details:*` : null,
+    ...cake.tierDetails.map(t=> `• ${t}`),
+    cake.isCustom
+      ? `⚠️ *This is a CUSTOM ORDER (${cake.customCount} tiers/steps)* — please confirm exact sizing, design and pricing with the customer directly.`
+      : null,
+    `*Date Needed:* ${cake.date}`,
+    `*Flavor:* ${cake.flavor}`,
+    cake.finish ? `*Icing/Finish:* ${cake.finish}` : null,
+    cake.inscription ? `*Inscription:* ${cake.inscription}` : null,
+    cake.design ? `*Design Inspiration:* ${cake.design}` : null,
+  ].filter(Boolean);
+}
+
+document.getElementById('cakeAddAnotherBtn').addEventListener('click', ()=>{
+  const cake = validateCakeFields();
+  if(!cake) return;
+  cakeCart.push(cake);
+  resetCakeFields();
+  showToast(`Cake added to your order (${cakeCart.length} so far) — add another or check out when ready.`);
+});
+
+document.getElementById('cakeForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+
+  // Fold the current form into the cart too, unless it's untouched
+  // and there's already at least one cake queued up — in that case
+  // this click is purely "I'm done, check out" for what's already
+  // been added via "Add Another Cake".
+  if(cakeFormHasContent() || cakeCart.length === 0){
+    const cake = validateCakeFields();
+    if(!cake) return;
+    cakeCart.push(cake);
+    resetCakeFields();
+  }
+
+  const name = document.getElementById('cakeName').value;
+  const phone = document.getElementById('cakePhone').value;
+  const deliveryAddress = cakeDeliveryAddressInput.value.trim();
+
+  if(!cakeDelivery || !name || !phone){
+    showToast('Please fill all required fields marked with *');
+    return;
+  }
+  if(!isValidPhone(phone)){
+    showToast('Please enter a valid WhatsApp number.');
+    document.getElementById('cakePhone').focus();
+    return;
+  }
+  if(cakeDelivery === 'Delivery' && !deliveryAddress){
+    showToast('Please add your delivery location.');
+    cakeDeliveryAddressInput.focus();
+    return;
+  }
+
+  const cakeLines = cakeCart.flatMap((cake, i)=> formatCakeLines(cake, i, cakeCart.length));
+
   const lines = [
-    `Hello ${CONFIG.businessName}! I'd like to place a *Custom Cake* request.`,
+    `Hello ${CONFIG.businessName}! I'd like to place a *Custom Cake* request${cakeCart.length > 1 ? ` for ${cakeCart.length} cakes` : ''}.`,
     ``,
-    `*Occasion:* ${occasion}`,
-    `*Tiers/Steps:* ${tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${tierCustomCount.value} Tiers)` : i.value).join(', ')}`,
-    tierDetails.length ? `*Tier Details:*` : null,
-    ...tierDetails.map(t=> `• ${t}`),
-    `*Date Needed:* ${date}`,
-    `*Flavor:* ${flavor}`,
-    finish ? `*Icing/Finish:* ${finish}` : null,
-    inscription ? `*Inscription:* ${inscription}` : null,
-    design ? `*Design Inspiration:* ${design}` : null,
+    ...cakeLines,
+    ``,
     `*Delivery:* ${cakeDelivery}`,
     deliveryAddress ? `*Delivery Location:* ${deliveryAddress}` : null,
     ``,
@@ -436,6 +544,7 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
 
   openWhatsApp(lines);
   showToast('Opening WhatsApp with your cake request…');
+  cakeCart = [];
 });
 
 /* ============================================================

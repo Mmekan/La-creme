@@ -462,6 +462,8 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 
 .submit-row{ margin-top: 30px; }
 .submit-row .btn{ width: 100%; justify-content:center; }
+.submit-row .cake-actions{ display:flex; gap: 14px; flex-wrap:wrap; }
+.submit-row .cake-actions .btn{ flex: 1; min-width: 160px; width:auto; }
 .form-note{ font-size: 0.78rem; color: var(--text-muted); margin-top: 14px; text-align:center; }
 .form-note svg{ vertical-align: -3px; margin-right:4px; }
 
@@ -727,6 +729,25 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 /* ============================================================
    TOAST (confirmation feedback)
 ============================================================ */
+/* ============================================================
+   BACK TO TOP — shown once the page has scrolled a bit (see the
+   scroll listener in index.js/gallery.js), hidden with the [hidden]
+   attribute (not just opacity) below that so it's never in the tab
+   order or hit-testable while off-screen.
+============================================================ */
+.scroll-top-btn{
+  position: fixed; bottom: 26px; right: 26px; z-index: 300;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--wine); color: var(--ivory);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  opacity: 0; transform: translateY(12px); pointer-events: none;
+  transition: opacity .25s ease, transform .25s ease, background .2s ease;
+}
+.scroll-top-btn.show{ opacity: 1; transform: translateY(0); pointer-events: auto; }
+.scroll-top-btn:hover{ background: var(--wine-bright); }
+.scroll-top-btn[hidden]{ display:none; } /* this rule's own display:flex otherwise wins over the UA [hidden] rule */
+
 .toast{
   position: fixed; bottom: 100px; right: 26px; z-index: 400;
   background: var(--ink); color: var(--ivory); padding: 16px 22px; border-radius: 3px;

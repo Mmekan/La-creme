@@ -195,7 +195,7 @@
         <form id="cakeForm">
           <div class="field">
             <label for="cakeOccasion">Occasion <span class="req">*</span></label>
-            <select id="cakeOccasion" required>
+            <select id="cakeOccasion">
               <option value="">Select occasion</option>
               <option>Birthday</option><option>Wedding</option><option>Anniversary</option>
               <option>Baby Shower / Naming</option><option>Graduation</option><option>Corporate / Brand Launch</option><option>Other</option>
@@ -212,8 +212,9 @@
               <label class="tier-option" id="tierOptCustom"><input type="checkbox" id="tierCustomCheckbox" value="Custom">Custom</label>
             </div>
             <div class="field tier-custom-field" id="tierCustomField" style="display:none;">
-              <label for="tierCustomCount">How many tiers?</label>
+              <label for="tierCustomCount">How many tiers/steps?</label>
               <input type="number" id="tierCustomCount" min="1" max="20" placeholder="e.g. 7">
+              <p class="form-note" style="text-align:left; margin-top:8px;">Custom orders don't need inches/layers picked here — we'll confirm the full spec with you directly on WhatsApp.</p>
             </div>
             <p class="form-note" id="birthdayTierNote" style="display:none; text-align:left; margin-top:10px;">Birthday cakes are available in 1–3 tiers/steps.</p>
             <div class="tier-config" id="tierConfig"></div>
@@ -277,8 +278,11 @@
             </div>
           </div>
           <div class="submit-row">
-            <button type="submit" class="btn btn-wine">Send Cake Request via WhatsApp</button>
-            <p class="form-note">You'll be redirected to WhatsApp with your request pre-filled, nothing is charged here.</p>
+            <div class="cake-actions">
+              <button type="button" class="btn btn-outline" id="cakeAddAnotherBtn" style="border-color: var(--gold-line); color: var(--ink);">Add Another Cake</button>
+              <button type="submit" class="btn btn-wine" id="cakeCheckoutBtn">Checkout Now</button>
+            </div>
+            <p class="form-note">"Add Another Cake" saves this one and clears the form for a second cake in the same order. "Checkout Now" sends everything to WhatsApp — nothing is charged here.</p>
           </div>
         </form>
       </div>
@@ -491,6 +495,11 @@
 
 <!-- Debounced announcements for screen readers -->
 <div class="sr-only" id="cartLive" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Back to top -->
+<button type="button" class="scroll-top-btn" id="scrollTopBtn" aria-label="Back to top" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+</button>
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
