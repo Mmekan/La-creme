@@ -549,8 +549,13 @@ function debounce(fn, wait){
 }
 window.addEventListener('resize', debounce(layoutAllBlocks, 150));
 
-function staggerReveal(block){
-  block.querySelectorAll('.gi').forEach((tile, i)=>{
+// Takes the specific tiles just added (not the whole block) so the
+// delay always starts back at 0 for each new chunk — indexing off
+// the growing block's full tile count would make the stagger delay
+// climb without bound as a long category accumulates more batches
+// (e.g. tile #216 of a 238-item category would wait 216*55 ≈ 12s).
+function staggerReveal(tiles){
+  tiles.forEach((tile, i)=>{
     setTimeout(()=> tile.classList.add('gi-in'), i * 55);
   });
 }
@@ -558,6 +563,26 @@ function staggerReveal(block){
 /* ============================================================
    TILE / BREAK / QUOTE / END-CARD RENDERING
 ============================================================ */
+// Native loading="lazy" doesn't work here: these tiles are absolutely
+// positioned and sized a frame later (by layoutBlock, via
+// requestAnimationFrame), so at insertion time the browser sees a
+// 0x0 element and its native lazy-load heuristic decides once and
+// never reconsiders it after the resize — the image never loads.
+// A plain IntersectionObserver doesn't have that problem: it keeps
+// watching and re-fires whenever the target's real geometry changes,
+// so observing it immediately (before layoutBlock runs) is fine —
+// it'll correctly report "not intersecting" until the tile is both
+// positioned for real AND actually near the viewport.
+const galImageObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(!entry.isIntersecting) return;
+    const img = entry.target;
+    img.src = img.dataset.src;
+    delete img.dataset.src;
+    galImageObserver.unobserve(img);
+  });
+}, { rootMargin: '400px 0px' });
+
 function makeTile(item){
   const el = document.createElement('div');
   el.className = 'gi';
@@ -568,17 +593,14 @@ function makeTile(item){
   const media = document.createElement('div');
   media.className = `media-frame ${item.tone || ''}`;
   media.innerHTML = item.image
-    // No `loading="lazy"` here: these tiles are absolutely positioned
-    // and sized a frame later (by layoutBlock, via requestAnimationFrame),
-    // so at insertion time the browser sees a 0x0 element and its native
-    // lazy-load heuristic never reconsiders it once resized — the tile
-    // never loads. The batched infinite-scroll (see loadMore()) already
-    // keeps unseen images from being requested, so eager-loading each
-    // batch's own images once it's created is fine.
-    ? `<img src="${item.image}" alt="${item.caption}">`
+    ? `<img data-src="${item.image}" alt="${item.caption}">`
     : `<div class="ring"></div>${item.icon}`;
   el.appendChild(media);
-  if(item.image) bindMediaSkeleton(media, media.querySelector('img'));
+  if(item.image){
+    const img = media.querySelector('img');
+    bindMediaSkeleton(media, img);
+    galImageObserver.observe(img);
+  }
 
   el.insertAdjacentHTML('beforeend', `
     <div class="gi-overlay">
@@ -622,22 +644,32 @@ function showEndCard(){
 
 /* ============================================================
    INFINITE SCROLL
-   Each call to loadMore() renders exactly one category's worth
-   of items as a batch (so editorial breaks always land between
-   batches, never mid-category). The first batch of a view loads
-   immediately; every batch after that waits on the sentinel
-   scrolling into view, with a short simulated-network delay so
-   the loader is visible — swap in a real fetch delay once this
-   reads from R2 and the loader keeps working unchanged.
+   Each call to loadMore() renders up to BATCH_SIZE items — capped
+   at a category boundary, never spanning two, so editorial breaks
+   still always land between tiles, never mid-category. A category
+   longer than BATCH_SIZE (Cakes, at 238) spans several calls, but
+   they keep appending into the SAME .masonry-block and re-running
+   layoutBlock() on the whole thing (cheap — it's just arithmetic,
+   no DOM measurement beyond one clientWidth read) rather than
+   starting a new block per chunk, so the masonry stays one
+   continuous column layout with no seam at the chunk boundary —
+   only real category changes start a new block. The first chunk of
+   a view loads immediately; every chunk after that waits on the
+   sentinel scrolling into view. No artificial delay: with
+   galleryItems as a local array there's no real fetch to wait on,
+   so faking one only slowed down what's otherwise an instant
+   response to scrolling.
 ============================================================ */
+const BATCH_SIZE = 24;
 const galGrid = document.getElementById('galGrid');
-const galLoader = document.getElementById('galLoader');
 const galSentinel = document.getElementById('galSentinel');
 let activeFilter = 'All';
 let workingItems = [];
 let nextIndex = 0;
 let loading = false;
 let insertedInterstitials = new Set();
+let currentBlock = null;
+let currentBlockCategory = null;
 
 function itemsForFilter(filter){
   return filter === 'All' ? galleryItems : galleryItems.filter(g=> g.category === filter);
@@ -656,52 +688,58 @@ function sentinelIsNear(){
   const rect = galSentinel.getBoundingClientRect();
   return rect.top < window.innerHeight + 600;
 }
-function loadMore(immediate){
+function loadMore(){
   if(loading || nextIndex >= workingItems.length) return;
   loading = true;
-  const run = ()=>{
-    galLoader.classList.remove('show');
-    const startItem = workingItems[nextIndex];
-    maybeInsertInterstitials(startItem.id);
 
-    const cat = startItem.category;
-    let end = nextIndex;
-    while(end < workingItems.length && workingItems[end].category === cat) end++;
+  const startItem = workingItems[nextIndex];
+  maybeInsertInterstitials(startItem.id);
 
-    const block = document.createElement('div');
-    block.className = 'masonry-block';
-    for(let i = nextIndex; i < end; i++) block.appendChild(makeTile(workingItems[i]));
-    galGrid.appendChild(block);
+  const cat = startItem.category;
+  let end = nextIndex;
+  while(end < workingItems.length && workingItems[end].category === cat && (end - nextIndex) < BATCH_SIZE) end++;
 
-    nextIndex = end;
-    loading = false;
-    requestAnimationFrame(()=>{
-      layoutBlock(block);
-      staggerReveal(block);
-      // IntersectionObserver only fires on boundary crossings — if the
-      // sentinel is still within range after this batch lands (e.g. the
-      // page is already scrolled to the bottom), it won't cross again on
-      // its own, so keep the chain going manually until it's pushed out
-      // of range or the data runs out.
-      if(nextIndex < workingItems.length && sentinelIsNear()) loadMore(false);
-      else if(nextIndex >= workingItems.length) showEndCard();
-    });
-  };
-  if(immediate) run();
-  else { galLoader.classList.add('show'); setTimeout(run, 480 + Math.random() * 320); }
+  if(currentBlockCategory !== cat){
+    currentBlock = document.createElement('div');
+    currentBlock.className = 'masonry-block';
+    galGrid.appendChild(currentBlock);
+    currentBlockCategory = cat;
+  }
+  const newTiles = [];
+  for(let i = nextIndex; i < end; i++){
+    const tile = makeTile(workingItems[i]);
+    newTiles.push(tile);
+    currentBlock.appendChild(tile);
+  }
+
+  nextIndex = end;
+  loading = false;
+  const block = currentBlock;
+  requestAnimationFrame(()=>{
+    layoutBlock(block);
+    staggerReveal(newTiles);
+    // IntersectionObserver only fires on boundary crossings — if the
+    // sentinel is still within range after this chunk lands (e.g. the
+    // page is already scrolled to the bottom), it won't cross again on
+    // its own, so keep the chain going manually until it's pushed out
+    // of range or the data runs out.
+    if(nextIndex < workingItems.length && sentinelIsNear()) loadMore();
+    else if(nextIndex >= workingItems.length) showEndCard();
+  });
 }
 function resetGrid(filter){
   galGrid.innerHTML = '';
-  galLoader.classList.remove('show');
   activeFilter = filter;
   workingItems = itemsForFilter(filter);
   nextIndex = 0;
   loading = false;
   insertedInterstitials = new Set();
-  loadMore(true);
+  currentBlock = null;
+  currentBlockCategory = null;
+  loadMore();
 }
 new IntersectionObserver((entries)=>{
-  entries.forEach(e=>{ if(e.isIntersecting) loadMore(false); });
+  entries.forEach(e=>{ if(e.isIntersecting) loadMore(); });
 }, { rootMargin: '600px 0px' }).observe(galSentinel);
 
 /* ============================================================
