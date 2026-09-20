@@ -439,19 +439,13 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .tier-config{ margin-top: 14px; display:flex; flex-direction:column; gap: 12px; }
 .tier-config .tier-row{
   position: relative; display:flex; gap: 14px; align-items:flex-end; flex-wrap: wrap;
-  padding: 14px 16px 34px; border: 1px solid rgba(24,19,15,0.1); border-radius: 3px; background: rgba(255,255,255,0.5);
+  padding: 14px 16px; border: 1px solid rgba(24,19,15,0.1); border-radius: 3px; background: rgba(255,255,255,0.5);
 }
 .tier-config .tier-row-label{
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);
   width: 100%; margin-bottom: 2px; font-weight: 500;
 }
 .tier-config .tier-row .field{ margin-bottom: 0; flex:1; min-width: 130px; }
-.tier-preview-btn{
-  position: absolute; right:16px; bottom:10px;
-  font-size: 0.74rem; letter-spacing: 0.04em; color: var(--wine); text-decoration: underline;
-  text-underline-offset: 3px; background:none; border:none; padding:0; cursor:pointer;
-}
-.tier-preview-btn:hover{ color: var(--wine-bright); }
 
 .gallery-peek-btn{
   display:inline-flex; align-items:center; gap: 8px; margin-top: 10px;

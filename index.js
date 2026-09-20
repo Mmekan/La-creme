@@ -281,8 +281,7 @@ function buildTierRow(index){
       <select id="tierLayers-${index}" class="tier-layers" disabled>
         <option value="">Select inches first</option>
       </select>
-    </div>
-    <button type="button" class="tier-preview-btn" data-tier="${index}">Preview</button>`;
+    </div>`;
   const inchesSel = row.querySelector('.tier-inches');
   const layersSel = row.querySelector('.tier-layers');
   inchesSel.addEventListener('change', ()=>{
@@ -292,7 +291,6 @@ function buildTierRow(index){
       ? `<option value="">Select layers</option>` + opts.map(l=> `<option value="${l}">${l} Layers</option>`).join('')
       : `<option value="">Select inches first</option>`;
   });
-  row.querySelector('.tier-preview-btn').addEventListener('click', ()=> openTierPreview(index));
   return row;
 }
 
@@ -397,6 +395,7 @@ document.querySelectorAll('#cakeDelivery .chip').forEach(c=>{
    WhatsApp message.
 ============================================================ */
 let cakeCart = [];
+let cakeIdCounter = 0;
 
 function cakeFormHasContent(){
   return !!(
@@ -449,7 +448,7 @@ function validateCakeFields(){
 
   const tiersLabel = tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${customCount} Tiers/Steps)` : i.value).join(', ');
 
-  return { occasion, tiersLabel, tierDetails, isCustom, customCount, date, flavor, finish, inscription, design };
+  return { id: ++cakeIdCounter, occasion, tiersLabel, tierDetails, isCustom, customCount, date, flavor, finish, inscription, design };
 }
 
 function resetCakeFields(){
@@ -492,6 +491,7 @@ document.getElementById('cakeAddAnotherBtn').addEventListener('click', ()=>{
   if(!cake) return;
   cakeCart.push(cake);
   resetCakeFields();
+  refreshCartUI();
   showToast(`Cake added to your order (${cakeCart.length} so far) — add another or check out when ready.`);
 });
 
@@ -507,6 +507,7 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
     if(!cake) return;
     cakeCart.push(cake);
     resetCakeFields();
+    refreshCartUI();
   }
 
   const name = document.getElementById('cakeName').value;
@@ -545,6 +546,7 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
   openWhatsApp(lines);
   showToast('Opening WhatsApp with your cake request…');
   cakeCart = [];
+  refreshCartUI();
 });
 
 /* ============================================================
@@ -576,57 +578,6 @@ document.getElementById('viewCakeGalleryBtn').addEventListener('click', ()=> ope
 document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
 document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> closeModal(cakeGalleryModal));
 document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && cakeGalleryModal.classList.contains('open')) closeModal(cakeGalleryModal); });
-
-/* ============================================================
-   TIER QUICK LOOK — 3 photos per tier count, shown when the
-   "Preview" link on a tier-row is clicked. Fill in the 3 images
-   you want for each number below by replacing `image: null` with
-   image: mediaUrl('img/your-file.jpg'). Leaving image: null keeps
-   an empty placeholder frame with the caption text.
-============================================================ */
-const TIER_PREVIEW_IMAGES = {
-  1: [
-    { image: null, caption: '1 Tier — photo 1' },
-    { image: null, caption: '1 Tier — photo 2' },
-    { image: null, caption: '1 Tier — photo 3' },
-  ],
-  2: [
-    { image: null, caption: '2 Tiers — photo 1' },
-    { image: null, caption: '2 Tiers — photo 2' },
-    { image: null, caption: '2 Tiers — photo 3' },
-  ],
-  3: [
-    { image: null, caption: '3 Tiers — photo 1' },
-    { image: null, caption: '3 Tiers — photo 2' },
-    { image: null, caption: '3 Tiers — photo 3' },
-  ],
-  4: [
-    { image: null, caption: '4 Tiers — photo 1' },
-    { image: null, caption: '4 Tiers — photo 2' },
-    { image: null, caption: '4 Tiers — photo 3' },
-  ],
-  5: [
-    { image: null, caption: '5+ Tiers — photo 1' },
-    { image: null, caption: '5+ Tiers — photo 2' },
-    { image: null, caption: '5+ Tiers — photo 3' },
-  ],
-};
-const tierPreviewModal = document.getElementById('tierPreviewModal');
-const tierPreviewGrid = document.getElementById('tierPreviewGrid');
-const tierPreviewTitle = document.getElementById('tierPreviewTitle');
-
-function openTierPreview(tierNumber){
-  const items = TIER_PREVIEW_IMAGES[tierNumber] || [];
-  tierPreviewTitle.textContent = `${tierNumber} Tier${tierNumber > 1 ? 's' : ''} — Quick Look`;
-  tierPreviewGrid.innerHTML = items.map(item=> item.image
-    ? `<div class="media-frame"><img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div></div>`
-    : `<div class="media-frame" style="aspect-ratio:4/5;"><div class="ring"></div><span class="cap">${item.caption}</span></div>`
-  ).join('');
-  openModal(tierPreviewModal);
-}
-document.getElementById('tierPreviewClose').addEventListener('click', ()=> closeModal(tierPreviewModal));
-document.getElementById('tierPreviewBackdrop').addEventListener('click', ()=> closeModal(tierPreviewModal));
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && tierPreviewModal.classList.contains('open')) closeModal(tierPreviewModal); });
 
 /* ============================================================
    FINGER FOOD MENU — data-driven
@@ -1321,8 +1272,8 @@ const cartDropdown      = document.getElementById('cartDropdown');
 const cartDropdownBody  = document.getElementById('cartDropdownBody');
 const cartDropdownTotal = document.getElementById('cartDropdownTotal');
 
-/* Each cart exposes the same shape so the dropdown can render both
-   sections generically. */
+/* Each cart exposes the same shape so the dropdown can render every
+   section generically. */
 const CART_SOURCES = {
   ff: {
     title: 'Finger Foods Order',
@@ -1361,6 +1312,30 @@ const CART_SOURCES = {
       else if(kind === 'rice') delete catState.rice[key];
       renderCatering();
     }
+  },
+  // Cakes have no fixed price (quoted directly on WhatsApp) and no
+  // per-line quantity — each entry is one full cake spec, added via
+  // "Add Another Cake" and only removable, not adjustable, from here.
+  // Not part of the "Checkout All" flow below: cakes are finalized
+  // from their own "Checkout Now" button in the Cakes section, which
+  // has the richer per-cake detail (tiers, custom-order flag, etc.)
+  // that a generic cart line can't show.
+  cake: {
+    title: 'Cake Order',
+    lines(){
+      return cakeCart.map(c=>({
+        id: c.id,
+        name: `${c.occasion} Cake — ${c.tiersLabel}`,
+        qty: 1,
+        unitPrice: 0,
+        priceLabel: 'Quote on request',
+        stepper: false
+      }));
+    },
+    setQty(id){
+      cakeCart = cakeCart.filter(c=> c.id !== id);
+      refreshCartUI();
+    }
   }
 };
 
@@ -1392,7 +1367,7 @@ function buildCartLineRow(line, src){
   nameEl.textContent = line.qty > 1 ? `${line.name} × ${line.qty}` : line.name;
   const priceEl = document.createElement('div');
   priceEl.className = 'cart-dd-line-price';
-  priceEl.textContent = fmtNaira(line.qty * line.unitPrice);
+  priceEl.textContent = line.priceLabel || fmtNaira(line.qty * line.unitPrice);
   body.append(nameEl, priceEl);
   row.appendChild(body);
 
@@ -1441,7 +1416,7 @@ function buildCartSection(key){
 
 function renderCartDropdown(){
   cartDropdownBody.innerHTML = '';
-  const sections = ['ff','cat'].map(buildCartSection).filter(Boolean);
+  const sections = ['ff','cat','cake'].map(buildCartSection).filter(Boolean);
   if(!sections.length){
     const empty = document.createElement('p');
     empty.className = 'cart-dropdown-empty';
@@ -1453,7 +1428,7 @@ function renderCartDropdown(){
 }
 
 function getCartTotals(){
-  const allLines = [...CART_SOURCES.ff.lines(), ...CART_SOURCES.cat.lines()];
+  const allLines = [...CART_SOURCES.ff.lines(), ...CART_SOURCES.cat.lines(), ...CART_SOURCES.cake.lines()];
   return {
     count: allLines.reduce((n,l)=> n + l.qty, 0),
     total: allLines.reduce((n,l)=> n + l.qty * l.unitPrice, 0)
