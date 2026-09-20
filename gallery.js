@@ -761,12 +761,20 @@ new IntersectionObserver((entries)=>{
 
 /* ============================================================
    FILTER TABS
+   Supports landing pre-filtered via ?filter=<category> in the URL
+   (e.g. gallery.html?filter=Cakes) — used by the "View Cake Designs"
+   link on the homepage's cake form, so it can point straight at the
+   real gallery's own (already batch-loaded/lazy) infinite scroll
+   instead of duplicating a chunk of galleryItems into index.js.
 ============================================================ */
 const galFilters = document.getElementById('galFilters');
-filterCategories.forEach((cat, i)=>{
+const urlFilter = new URLSearchParams(location.search).get('filter');
+const initialFilter = filterCategories.includes(urlFilter) ? urlFilter : 'All';
+let initialFilterBtn = null;
+filterCategories.forEach((cat)=>{
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'gal-filter' + (i === 0 ? ' active' : '');
+  btn.className = 'gal-filter' + (cat === initialFilter ? ' active' : '');
   btn.innerHTML = `${cat} <span class="gf-count">${categoryCounts[cat]}</span>`;
   btn.addEventListener('click', ()=>{
     if(activeFilter === cat) return;
@@ -775,8 +783,13 @@ filterCategories.forEach((cat, i)=>{
     resetGrid(cat);
   });
   galFilters.appendChild(btn);
+  if(cat === initialFilter) initialFilterBtn = btn;
 });
-resetGrid('All');
+// Only matters when the tab bar itself scrolls (narrow screens) and
+// the pre-selected filter isn't the first tab — keeps the active
+// one from landing off-screen.
+if(initialFilter !== 'All') initialFilterBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
+resetGrid(initialFilter);
 
 /* ============================================================
    VIDEO TESTIMONIALS

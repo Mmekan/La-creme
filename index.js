@@ -229,21 +229,6 @@ testimonials.forEach(t=>{
 });
 
 /* ============================================================
-   LIGHTBOX
-============================================================ */
-const lightbox = document.getElementById('lightbox');
-const lightboxInner = document.getElementById('lightboxInner');
-function openLightbox(item){
-  lightboxInner.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy" style="border-radius:2px;">`
-    : `<div class="media-frame ${item.tone}" style="aspect-ratio:4/5; border-radius:2px;"><div class="ring"></div>${item.icon}<span class="cap">${item.caption}</span></div>`;
-  openModal(lightbox);
-}
-document.getElementById('lightboxClose').addEventListener('click', ()=> closeModal(lightbox));
-lightbox.addEventListener('click', (e)=>{ if(e.target === lightbox) closeModal(lightbox); });
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && lightbox.classList.contains('open')) closeModal(lightbox); });
-
-/* ============================================================
    CAKE FORM
 ============================================================ */
 
@@ -548,36 +533,6 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
   cakeCart = [];
   refreshCartUI();
 });
-
-/* ============================================================
-   CAKE GALLERY PICKER — a small curated set of past cake photos
-   for inspiration. Closing it (X, backdrop click, or Escape)
-   only toggles this modal's own class, so #cakeForm's fields are
-   left untouched and the order continues right where it was.
-============================================================ */
-const cakeGalleryItems = [
-  { caption: 'Under the Chandeliers', image: mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg') },
-  { caption: 'The Six-Tier Reveal', image: mediaUrl('img/503736309_9061189193984393_2635635431881218558_n.jpg') },
-  { caption: 'Crystal Base, Ivory Tiers', image: mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg') },
-  { caption: 'For Mummy, With Love', image: mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg') },
-  { caption: 'The Boss Cake', image: mediaUrl('img/503416798_9068281249941854_7585160892651594669_n.jpg') },
-  { caption: 'A Pot Worth Celebrating', image: mediaUrl('img/505753228_9109996449103667_9107171079224956350_n.jpg') },
-];
-const cakeGalleryGrid = document.getElementById('cakeGalleryGrid');
-cakeGalleryItems.forEach(item=>{
-  const el = document.createElement('div');
-  el.className = 'media-frame';
-  el.innerHTML = `<img src="${item.image}" alt="${item.caption}" loading="lazy"><div class="ring"></div>`;
-  bindMediaSkeleton(el, el.querySelector('img'));
-  el.addEventListener('click', ()=> openLightbox(item));
-  cakeGalleryGrid.appendChild(el);
-});
-
-const cakeGalleryModal = document.getElementById('cakeGalleryModal');
-document.getElementById('viewCakeGalleryBtn').addEventListener('click', ()=> openModal(cakeGalleryModal));
-document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
-document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> closeModal(cakeGalleryModal));
-document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && cakeGalleryModal.classList.contains('open')) closeModal(cakeGalleryModal); });
 
 /* ============================================================
    FINGER FOOD MENU — data-driven
