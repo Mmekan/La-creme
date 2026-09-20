@@ -14,17 +14,21 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="Gallery | La Crème — Bespoke Cakes, Confectionery &amp; Catering">
 <meta property="og:description" content="A full look at La Crème's work — cakes, catering spreads, event styling and client testimonials.">
-<meta property="og:image" content="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/504807796_9099742323462413_1120354441484283313_n.jpg">
+<meta property="og:image" content="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/logo-wr.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Gallery | La Crème — Bespoke Cakes, Confectionery &amp; Catering">
 <meta name="twitter:description" content="A full look at La Crème's work — cakes, catering spreads, event styling and client testimonials.">
-<meta name="twitter:image" content="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/504807796_9099742323462413_1120354441484283313_n.jpg">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23C8102E'/%3E%3Ctext x='50' y='62' font-family='Georgia,serif' font-size='40' fill='%23C7A155' text-anchor='middle'%3ELC%3C/text%3E%3C/svg%3E">
+<meta name="twitter:image" content="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/logo-wr.png">
+<link rel="icon" type="image/png" href="assets/logo-wr.png">
+<link rel="preconnect" href="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev" crossorigin>
+<link rel="preload" as="image" href="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/cakeslice1-sm.jpg">
+<link rel="preload" as="image" href="https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev/img/cakeslice2-sm.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,400..500&family=Public+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="index.css">
 <script src="config.js" defer></script>
+<script src="gallery-data.js" defer></script>
 <script src="gallery.js" defer></script>
 <!--
 ====================================================================
@@ -83,6 +87,7 @@
 ============================================================ -->
 <header class="nav" id="siteNav">
   <div class="container">
+    <a href="index.html" class="nav-logo" aria-label="La Crème home"><img src="assets/logo-wr.png" alt=""></a>
     <a href="index.html" class="nav-brand">
       <span class="name">LA CR<em>È</em>ME</span>
     </a>
@@ -100,7 +105,7 @@
 <section class="gallery-hero">
   <div class="container">
     <div class="breadcrumb"><a href="index.html">Home</a> / Gallery</div>
-    <div class="crest-wrap"><img class="logo-img logo-lg" src="assets/logo-white.png" alt="La Crème"></div>
+    <div class="crest-wrap"><img class="logo-img logo-lg" src="assets/logo-wr.png" alt="La Crème"></div>
     <span class="eyebrow">The Full Collection</span>
     <h1>Every celebration, on display</h1>
     <p>Cakes, catering spreads, event styling — filter by what you're planning, or browse it all.</p>
@@ -158,7 +163,7 @@
 ============================================================ -->
 <section class="contact" id="contact">
   <div class="container">
-    <div class="crest-wrap"><img class="logo-img logo-lg" src="assets/logo-white.png" alt="La Crème"></div>
+    <div class="crest-wrap"><img class="logo-img logo-lg" src="assets/logo-wr.png" alt="La Crème"></div>
     <span class="eyebrow">Get In Touch</span>
     <h2>Let's plan your next celebration</h2>
     <p class="lede">Message us directly on WhatsApp — it's the fastest way to reach us and get a real answer, not an automated one.</p>
@@ -207,7 +212,6 @@
       <p class="news-modal-price" id="newsModalPrice"></p>
       <p class="news-modal-blurb" id="newsModalBlurb"></p>
     </div>
-    <a href="#" class="btn btn-gold" id="newsModalCta">Order Now</a>
     <div class="news-modal-timer"><span id="newsModalTimerBar"></span></div>
   </div>
 </div>

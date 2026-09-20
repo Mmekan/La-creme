@@ -23,12 +23,10 @@ const NEWS_ITEMS = [
     price: '₦4,000 / slice',
     blurb: 'Delicious cake slices for any occasion — now on the Finger Foods menu.',
     images: [
-      mediaUrl('img/503084596_9068281273275185_5558051441541664408_n.jpg'),
-      mediaUrl('img/503416798_9068281249941854_7585160892651594669_n.jpg'),
-      mediaUrl('img/504685489_9085240854912560_3651136197304790624_n.jpg'),
+      mediaUrl('img/cakeslice1-sm.jpg'),
+      mediaUrl('img/cakeslice2-sm.jpg'),
     ],
-    ctaLabel: 'Order Now',
-    ctaHref: 'index.html#finger-foods', // works from both index.html and gallery.html
+    ctaHref: 'index.html#finger-foods', // ticker click-through; works from both index.html and gallery.html
   },
 ];
 
@@ -61,17 +59,18 @@ if(newsTickerTrack && NEWS_ITEMS.length){
 const newsModal = document.getElementById('newsModal');
 if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   const item = NEWS_ITEMS[Math.floor(Math.random() * NEWS_ITEMS.length)];
-  const AUTO_DISMISS_MS = 7000;
+  const AUTO_DISMISS_MS = 5000;
 
   document.getElementById('newsModalTag').textContent = item.tag;
   document.getElementById('newsModalTitle').textContent = item.title;
   document.getElementById('newsModalPrice').textContent = item.price;
   document.getElementById('newsModalBlurb').textContent = item.blurb;
   document.getElementById('newsModalGallery').innerHTML = (item.images || []).slice(0, 3)
-    .map(src=> `<img src="${src}" alt="${item.title}">`).join('');
-  const ctaEl = document.getElementById('newsModalCta');
-  ctaEl.textContent = item.ctaLabel || 'Learn More';
-  ctaEl.href = item.ctaHref || '#';
+    .map(src=> `<img src="${src}" alt="${item.title}" fetchpriority="high" decoding="async">`).join('');
+  // Timer bar's shrink animation is driven from here (not a fixed
+  // CSS duration) so it can never drift out of sync with the actual
+  // auto-dismiss delay above.
+  document.getElementById('newsModalTimerBar').style.animationDuration = `${AUTO_DISMISS_MS}ms`;
 
   let dismissTimer;
   function closeNewsModal(){
@@ -80,7 +79,6 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   }
   document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
   document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
-  ctaEl.addEventListener('click', closeNewsModal);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && newsModal.classList.contains('open')) closeNewsModal(); });
 
   sessionStorage.setItem('lcNewsSeen', '1');
@@ -107,6 +105,23 @@ function showToast(msg){
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> t.classList.remove('show'), 3200);
+}
+
+// Scrolls a field (or field-group container, e.g. a chip-row) into
+// view and rings it briefly, so a validation failure always points
+// at exactly what needs fixing rather than just toasting about it.
+function flagInvalidField(el){
+  if(!el) return;
+  el.scrollIntoView({ behavior:'smooth', block:'center' });
+  if(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement){
+    el.focus({ preventScroll:true });
+  }
+  el.classList.add('field-invalid');
+  const clear = ()=> el.classList.remove('field-invalid');
+  el.addEventListener('input', clear, { once:true });
+  el.addEventListener('change', clear, { once:true });
+  el.addEventListener('click', clear, { once:true });
+  setTimeout(clear, 2500);
 }
 
 /* ============================================================
@@ -229,8 +244,82 @@ testimonials.forEach(t=>{
 });
 
 /* ============================================================
-   CAKE FORM
+   ORDER DATE RESTRICTION — every "Date Needed" field on the site
+   requires at least a 1-day lead time (so choosing on a Monday, the
+   earliest pickable date is Tuesday), enforced both as the native
+   date-picker's min (blocks selecting an earlier date in the UI) and
+   as an explicit JS check at submit time (covers keyboard-typed
+   dates a picker's min doesn't always catch). Uses local
+   year/month/day rather than toISOString(), which is UTC-based and
+   can land on the wrong calendar day depending on the visitor's
+   timezone offset.
 ============================================================ */
+const MIN_ORDER_LEAD_DAYS = 1;
+function minOrderDate(daysAhead = MIN_ORDER_LEAD_DAYS){
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+document.getElementById('cakeDate').min = minOrderDate();
+document.getElementById('checkoutDate').min = minOrderDate();
+
+/* ============================================================
+   CAKE DESIGN GALLERY MODAL — "Cakes"-category photos, filtered
+   out of GALLERY_ITEMS (gallery-data.js, shared with gallery.html
+   so nothing is duplicated). Renders in batches with the same
+   lazy-load pattern as the real gallery, appended as the user
+   scrolls the modal itself close to its bottom.
+============================================================ */
+const cakeGalleryItems = GALLERY_ITEMS.filter(item => item.category === 'Cakes');
+const CGM_BATCH_SIZE = 24;
+let cgmRendered = 0;
+
+const cgmImageObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(!entry.isIntersecting) return;
+    const img = entry.target;
+    img.src = img.dataset.src;
+    delete img.dataset.src;
+    cgmImageObserver.unobserve(img);
+  });
+}, { rootMargin: '400px 0px' });
+
+const cgmGrid = document.getElementById('cgmGrid');
+const cgmSentinel = document.getElementById('cgmSentinel');
+
+function cgmLoadMore(){
+  const next = cakeGalleryItems.slice(cgmRendered, cgmRendered + CGM_BATCH_SIZE);
+  next.forEach(item=>{
+    const tile = document.createElement('div');
+    tile.className = 'cgm-tile';
+    tile.innerHTML = `<div class="media-frame"><img data-src="${item.image}" alt="${item.caption || 'Cake design'}"></div>`;
+    cgmGrid.appendChild(tile);
+    const media = tile.querySelector('.media-frame');
+    const img = tile.querySelector('img');
+    bindMediaSkeleton(media, img);
+    cgmImageObserver.observe(img);
+  });
+  cgmRendered += next.length;
+}
+
+const cgmScrollObserver = new IntersectionObserver((entries)=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting && cgmRendered < cakeGalleryItems.length) cgmLoadMore();
+  });
+}, { rootMargin: '300px 0px' });
+cgmScrollObserver.observe(cgmSentinel);
+
+const cakeGalleryModal = document.getElementById('cakeGalleryModal');
+document.getElementById('cakeGalleryOpenBtn').addEventListener('click', ()=>{
+  if(!cgmRendered) cgmLoadMore();
+  openModal(cakeGalleryModal);
+});
+document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
+document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> closeModal(cakeGalleryModal));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && cakeGalleryModal.classList.contains('open')) closeModal(cakeGalleryModal); });
 
 // Which layer counts are available for each cake size (inches).
 const INCH_LAYER_OPTIONS = { '6': [3], '8': [3, 4, 5], '10': [3, 4, 5], '12': [3], '14': [3] };
@@ -396,39 +485,63 @@ function cakeFormHasContent(){
 function validateCakeFields(){
   const occasion = cakeOccasionEl.value;
   const tierInputs = Array.from(document.querySelectorAll('#tierSelect input:checked'));
-  const date = document.getElementById('cakeDate').value;
-  const flavor = document.getElementById('cakeFlavor').value;
+  const dateEl = document.getElementById('cakeDate');
+  const date = dateEl.value;
+  const flavorEl = document.getElementById('cakeFlavor');
+  const flavor = flavorEl.value;
   const finish = document.getElementById('cakeFinish').value;
   const inscription = document.getElementById('cakeInscription').value;
   const design = document.getElementById('cakeDesign').value;
 
-  if(!occasion || !tierInputs.length || !date || !flavor){
-    showToast('Please fill all required fields marked with *');
+  if(!occasion){
+    showToast('Please select an occasion.');
+    flagInvalidField(cakeOccasionEl);
+    return null;
+  }
+  if(!tierInputs.length){
+    showToast('Please choose at least one tier/step size.');
+    flagInvalidField(tierSelectEl);
+    return null;
+  }
+  if(!date){
+    showToast('Please choose a date needed.');
+    flagInvalidField(dateEl);
+    return null;
+  }
+  if(!flavor){
+    showToast('Please choose a cake flavor.');
+    flagInvalidField(flavorEl);
+    return null;
+  }
+  if(date < minOrderDate()){
+    showToast(`We need at least ${MIN_ORDER_LEAD_DAYS} days' notice — please pick a date from ${minOrderDate()} onward.`);
+    flagInvalidField(dateEl);
     return null;
   }
   const isCustom = tierCustomCheckbox.checked;
   const customCount = Math.floor(Number(tierCustomCount.value)) || 0;
   if(isCustom && !(customCount > 0)){
     showToast('Please type how many tiers/steps for your custom option.');
-    tierCustomCount.focus();
+    flagInvalidField(tierCustomCount);
     return null;
   }
   if(isCustom && customCount > MAX_CUSTOM_TIERS){
     showToast(`Custom orders top out at ${MAX_CUSTOM_TIERS} tiers/steps here — message us directly for anything bigger.`);
-    tierCustomCount.focus();
+    flagInvalidField(tierCustomCount);
     return null;
   }
 
   const tierDetails = [];
   const tierRows = tierConfigEl.querySelectorAll('.tier-row');
   for(const row of tierRows){
-    const inches = row.querySelector('.tier-inches').value;
-    const layers = row.querySelector('.tier-layers').value;
-    if(!inches || !layers){
+    const inchesEl = row.querySelector('.tier-inches');
+    const layersEl = row.querySelector('.tier-layers');
+    if(!inchesEl.value || !layersEl.value){
       showToast('Please select inches and layers for every tier.');
+      flagInvalidField(inchesEl.value ? layersEl : inchesEl);
       return null;
     }
-    tierDetails.push(`Tier ${row.dataset.index}: ${inches}" — ${layers} layers`);
+    tierDetails.push(`Tier ${row.dataset.index}: ${inchesEl.value}" — ${layersEl.value} layers`);
   }
 
   const tiersLabel = tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${customCount} Tiers/Steps)` : i.value).join(', ');
@@ -477,12 +590,15 @@ document.getElementById('cakeAddAnotherBtn').addEventListener('click', ()=>{
   cakeCart.push(cake);
   resetCakeFields();
   refreshCartUI();
-  showToast(`Cake added to your order (${cakeCart.length} so far) — add another or check out when ready.`);
+  showToast(`Cake added to your order (${cakeCart.length} so far), add another or check out when ready.`);
 });
 
-document.getElementById('cakeForm').addEventListener('submit', (e)=>{
-  e.preventDefault();
-
+// Validates and sends the queued cake(s) via WhatsApp — shared by the
+// Cakes section's own "Checkout Now" button and by the nav cart's
+// "Checkout All", which falls through to this when the cart holds
+// only cakes (cakes have no fixed price, so the generic FF/Catering
+// checkout modal can't handle them — see CART_SOURCES.cake above).
+function finalizeCakeOrder(){
   // Fold the current form into the cart too, unless it's untouched
   // and there's already at least one cake queued up — in that case
   // this click is purely "I'm done, check out" for what's already
@@ -495,22 +611,35 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
     refreshCartUI();
   }
 
-  const name = document.getElementById('cakeName').value;
-  const phone = document.getElementById('cakePhone').value;
+  const nameEl = document.getElementById('cakeName');
+  const phoneEl = document.getElementById('cakePhone');
+  const name = nameEl.value;
+  const phone = phoneEl.value;
   const deliveryAddress = cakeDeliveryAddressInput.value.trim();
 
-  if(!cakeDelivery || !name || !phone){
-    showToast('Please fill all required fields marked with *');
+  if(!cakeDelivery){
+    showToast('Please choose a delivery method.');
+    flagInvalidField(document.getElementById('cakeDelivery'));
+    return;
+  }
+  if(!name){
+    showToast('Please enter your name.');
+    flagInvalidField(nameEl);
+    return;
+  }
+  if(!phone){
+    showToast('Please enter your WhatsApp number.');
+    flagInvalidField(phoneEl);
     return;
   }
   if(!isValidPhone(phone)){
     showToast('Please enter a valid WhatsApp number.');
-    document.getElementById('cakePhone').focus();
+    flagInvalidField(phoneEl);
     return;
   }
   if(cakeDelivery === 'Delivery' && !deliveryAddress){
     showToast('Please add your delivery location.');
-    cakeDeliveryAddressInput.focus();
+    flagInvalidField(cakeDeliveryAddressInput);
     return;
   }
 
@@ -532,6 +661,11 @@ document.getElementById('cakeForm').addEventListener('submit', (e)=>{
   showToast('Opening WhatsApp with your cake request…');
   cakeCart = [];
   refreshCartUI();
+}
+
+document.getElementById('cakeForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  finalizeCakeOrder();
 });
 
 /* ============================================================
@@ -789,15 +923,14 @@ document.getElementById('ffCheckoutBtn').addEventListener('click', openCheckoutM
 /* ============================================================
    CATERING — Soups, Rice, Proteins (liter/qty based)
 ============================================================ */
+// Each soup prices its own 5L/10L (10L = 2× the 5L price) rather than
+// sharing one flat per-litre rate across all flavours.
 const cateringSoups = [
-  { id:'afang', name:'Afang Soup', desc:'Waterleaf, afang leaf, assorted meat or fish' },
-  { id:'edikang-ikong', name:'Edikang Ikong', desc:'Ugu & waterleaf, rich with assorted meat' },
-  { id:'atama', name:'Atama Soup', desc:'Atama leaf, periwinkle & assorted meat' },
-  { id:'white-soup', name:'White Soup', desc:'Catfish soup, native spice base' },
-  { id:'egusi', name:'Egusi Soup', desc:'Melon seed, assorted meat or fish' },
-];
-const literOptions = [
-  { label:'3L', price:15000 }, { label:'5L', price:23000 }, { label:'10L', price:42000 },
+  { id:'afang', name:'Afang Soup', desc:'Waterleaf, afang leaf, assorted meat or fish', sizes:[{label:'5L', price:30000}, {label:'10L', price:60000}] },
+  { id:'edikang-ikong', name:'Edikang Ikong', desc:'Ugu & waterleaf, rich with assorted meat', sizes:[{label:'5L', price:30000}, {label:'10L', price:60000}] },
+  { id:'atama', name:'Atama Soup', desc:'Atama leaf, periwinkle & assorted meat', sizes:[{label:'5L', price:28000}, {label:'10L', price:56000}] },
+  { id:'white-soup', name:'White Soup', desc:'Catfish soup, native spice base', sizes:[{label:'5L', price:28000}, {label:'10L', price:56000}] },
+  { id:'egusi', name:'Egusi Soup', desc:'Melon seed, assorted meat or fish', sizes:[{label:'5L', price:28000}, {label:'10L', price:56000}] },
 ];
 const SOUP_PROTEINS = ['Goat meat', 'Beef', 'Fish', 'Cow Leg'];
 
@@ -806,18 +939,10 @@ const cateringRice = [
   { id:'fried-rice', name:'Fried Rice', desc:'Mixed vegetables, Nigerian-style' },
   { id:'coconut-rice', name:'Coconut Rice', desc:'Rich coconut milk base' },
 ];
-// Lunchpack = personal portion, Tray = serves 10. Classic adds a side.
+// Lunchpack = personal portion, Tray = serves 10. One flat price per
+// type, same across every rice flavour.
 const RICE_TYPES = ['Lunchpack', 'Tray'];
-const RICE_STYLES = ['Standard', 'Classic'];
-const RICE_SIDES = ['Salad', 'Plantain'];
-const RICE_PRICING = {
-  Lunchpack: { Standard: 2500, Classic: 3000 },
-  Tray: { Standard: 20000, Classic: 24000 },
-};
-const RICE_STYLE_NOTES = {
-  Standard: 'Standard has just Rice and Chicken.',
-  Classic: 'Classic has Rice, Chicken and Sides (Salad/Plantain).',
-};
+const RICE_PRICING = { Lunchpack: 3500, Tray: 20000 };
 
 const cateringProteins = [
   { id:'chicken', name:'Chicken', unit:'per portion', price:2500 },
@@ -839,9 +964,21 @@ function buildSoupRow(item){
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
     </div>
     <div class="m-extra">
-      <span class="m-extra-label">Size</span>
-      <div class="liter-chips" data-role="size">
-        ${literOptions.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}" data-price="${o.price}">${o.label}</button>`).join('')}
+      <div class="m-qty-row">
+        <div>
+          <span class="m-extra-label">Size</span>
+          <div class="liter-chips" data-role="size">
+            ${item.sizes.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}" data-price="${o.price}">${o.label}</button>`).join('')}
+          </div>
+        </div>
+        <div class="qty-with-label" data-role="qty-wrap" style="display:none;">
+          <span class="qty-label">Quantity</span>
+          <div class="qty-control">
+            <button type="button" aria-label="Decrease quantity" data-act="dec">−</button>
+            <span class="qty-val" data-role="qty-val">0</span>
+            <button type="button" aria-label="Increase quantity" data-act="inc">+</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="m-extra" data-role="protein-wrap" style="display:none;">
@@ -851,14 +988,16 @@ function buildSoupRow(item){
       </div>
     </div>`;
 
-  const sel = { label:'', price:0, protein:'' };
+  const sel = { label:'', price:0, protein:'', qty:1 };
   const sizeWrap = row.querySelector('[data-role="size"]');
+  const qtyWrap = row.querySelector('[data-role="qty-wrap"]');
+  const qtyVal = row.querySelector('[data-role="qty-val"]');
   const proteinWrap = row.querySelector('[data-role="protein-wrap"]');
   const proteinChips = row.querySelector('[data-role="protein"]');
 
   function commit(){
     if(sel.label && sel.protein){
-      catState.soups[item.id] = { name:item.name, label:`${sel.label} — ${sel.protein}`, price: sel.price };
+      catState.soups[item.id] = { name:item.name, label:`${sel.label} — ${sel.protein}`, unitPrice: sel.price, qty: sel.qty };
     } else {
       delete catState.soups[item.id];
     }
@@ -871,17 +1010,35 @@ function buildSoupRow(item){
       sizeWrap.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       proteinChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       if(already){
-        sel.label = ''; sel.price = 0; sel.protein = '';
+        sel.label = ''; sel.price = 0; sel.protein = ''; sel.qty = 1;
+        qtyVal.textContent = '0'; // keeps syncCartStates()'s generic qty>0 check honest pre-selection
         proteinWrap.style.display = 'none';
+        qtyWrap.style.display = 'none';
       } else {
         chip.classList.add('selected');
         sel.label = chip.dataset.label;
         sel.price = Number(chip.dataset.price);
         sel.protein = '';
+        sel.qty = 1;
+        qtyVal.textContent = '1';
         proteinWrap.style.display = 'block';
+        qtyWrap.style.display = 'flex';
       }
       commit();
     });
+  });
+  qtyWrap.querySelector('[data-act="dec"]').addEventListener('click', ()=>{
+    const q = Number(qtyVal.textContent) || 1;
+    if(q <= 1) return;
+    sel.qty = q - 1;
+    qtyVal.textContent = sel.qty;
+    commit();
+  });
+  qtyWrap.querySelector('[data-act="inc"]').addEventListener('click', ()=>{
+    const q = Number(qtyVal.textContent) || 1;
+    sel.qty = q + 1;
+    qtyVal.textContent = sel.qty;
+    commit();
   });
   proteinChips.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
@@ -908,37 +1065,16 @@ function buildRiceRow(item){
     <div class="m-extra">
       <span class="m-extra-label">Type</span>
       <div class="liter-chips" data-role="type">
-        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t}</button>`).join('')}
-      </div>
-    </div>
-    <div class="m-extra" data-role="style-wrap" style="display:none;">
-      <span class="m-extra-label">Style</span>
-      <div class="liter-chips" data-role="style">
-        ${RICE_STYLES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
-      </div>
-      <p class="form-note sc-note" data-role="style-note" style="display:none;"></p>
-    </div>
-    <div class="m-extra" data-role="sides-wrap" style="display:none;">
-      <span class="m-extra-label">Choose a Side</span>
-      <div class="liter-chips" data-role="sides">
-        ${RICE_SIDES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
+        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t} — ${fmtNaira(RICE_PRICING[t])}</button>`).join('')}
       </div>
     </div>`;
 
-  const sel = { type:'', style:'', sides:'' };
+  const sel = { type:'' };
   const typeChips = row.querySelector('[data-role="type"]');
-  const styleWrap = row.querySelector('[data-role="style-wrap"]');
-  const styleChips = row.querySelector('[data-role="style"]');
-  const styleNoteEl = row.querySelector('[data-role="style-note"]');
-  const sidesWrap = row.querySelector('[data-role="sides-wrap"]');
-  const sidesChips = row.querySelector('[data-role="sides"]');
 
   function commit(){
-    if(sel.type && sel.style && (sel.style !== 'Classic' || sel.sides)){
-      const price = RICE_PRICING[sel.type][sel.style];
-      const labelBits = [sel.type, sel.style];
-      if(sel.sides) labelBits.push(`Side: ${sel.sides}`);
-      catState.rice[item.id] = { name: item.name, label: labelBits.join(' — '), price };
+    if(sel.type){
+      catState.rice[item.id] = { name: item.name, label: sel.type, price: RICE_PRICING[sel.type] };
     } else {
       delete catState.rice[item.id];
     }
@@ -949,48 +1085,12 @@ function buildRiceRow(item){
     chip.addEventListener('click', ()=>{
       const already = chip.classList.contains('selected');
       typeChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      styleChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sel.style = ''; sel.sides = '';
-      sidesWrap.style.display = 'none';
-      styleNoteEl.style.display = 'none';
       if(already){
         sel.type = '';
-        styleWrap.style.display = 'none';
       } else {
         chip.classList.add('selected');
         sel.type = chip.dataset.value;
-        styleWrap.style.display = 'block';
       }
-      commit();
-    });
-  });
-  styleChips.querySelectorAll('.liter-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      const already = chip.classList.contains('selected');
-      styleChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sel.sides = '';
-      if(already){
-        sel.style = '';
-        sidesWrap.style.display = 'none';
-        styleNoteEl.style.display = 'none';
-      } else {
-        chip.classList.add('selected');
-        sel.style = chip.dataset.value;
-        sidesWrap.style.display = sel.style === 'Classic' ? 'block' : 'none';
-        styleNoteEl.textContent = RICE_STYLE_NOTES[sel.style];
-        styleNoteEl.style.display = 'block';
-      }
-      commit();
-    });
-  });
-  sidesChips.querySelectorAll('.liter-chip').forEach(chip=>{
-    chip.addEventListener('click', ()=>{
-      const already = chip.classList.contains('selected');
-      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sel.sides = already ? '' : chip.dataset.value;
-      if(!already) chip.classList.add('selected');
       commit();
     });
   });
@@ -1027,9 +1127,9 @@ function renderCatering(){
   listEl.innerHTML = '';
 
   Object.values(catState.soups).forEach(s=>{
-    count++; total += s.price;
+    count += s.qty; total += s.qty * s.unitPrice;
     const row = document.createElement('div'); row.className = 'summary-row';
-    row.innerHTML = `<div><div class="s-name">${s.name} — ${s.label}</div><div class="s-meta">${fmtNaira(s.price)}</div></div>`;
+    row.innerHTML = `<div><div class="s-name">${s.name} — ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''}</div><div class="s-meta">${fmtNaira(s.qty * s.unitPrice)}</div></div>`;
     listEl.appendChild(row);
   });
   Object.values(catState.rice).forEach(r=>{
@@ -1095,7 +1195,18 @@ function renderCheckoutModal(){
 function openCheckoutModal(){
   const ffLines = CART_SOURCES.ff.lines();
   const catLines = CART_SOURCES.cat.lines();
-  if(!ffLines.length && !catLines.length){ showToast('Your cart is empty.'); return; }
+  if(!ffLines.length && !catLines.length){
+    // Nothing but cakes queued up (or a cake form filled in but not
+    // yet added) — cakes have no fixed price, so they skip this
+    // generic modal and go straight to their own WhatsApp flow.
+    if(cakeCart.length || cakeFormHasContent()){
+      closeCartDropdown();
+      finalizeCakeOrder();
+      return;
+    }
+    showToast('Your cart is empty.');
+    return;
+  }
   closeCartDropdown();
   renderCheckoutModal();
   openModal(checkoutModal);
@@ -1136,40 +1247,65 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   if(!ffLines.length && !catLines.length){ showToast('Your cart is empty.'); return; }
   const hasCat = catLines.length > 0;
 
-  const eventType = document.getElementById('checkoutEventType').value;
+  const eventTypeEl = document.getElementById('checkoutEventType');
+  const eventType = eventTypeEl.value;
   const guests = document.getElementById('checkoutGuests').value;
-  const name = document.getElementById('checkoutName').value;
-  const phone = document.getElementById('checkoutPhone').value;
+  const nameEl = document.getElementById('checkoutName');
+  const phoneEl = document.getElementById('checkoutPhone');
+  const name = nameEl.value;
+  const phone = phoneEl.value;
   const address = checkoutAddressInput.value.trim();
-  const date = document.getElementById('checkoutDate').value;
+  const dateEl = document.getElementById('checkoutDate');
+  const date = dateEl.value;
   const notes = document.getElementById('checkoutNotes').value;
 
   if(hasCat && !eventType){
     showToast('Please select an event type.');
-    document.getElementById('checkoutEventType').focus();
+    flagInvalidField(eventTypeEl);
     return;
   }
-  if(!checkoutDelivery || !name || !phone){ showToast('Please fill all required fields marked with *'); return; }
+  if(date && date < minOrderDate()){
+    showToast(`We need at least ${MIN_ORDER_LEAD_DAYS} days' notice — please pick a date from ${minOrderDate()} onward.`);
+    flagInvalidField(dateEl);
+    return;
+  }
+  if(!checkoutDelivery){
+    showToast('Please choose a delivery method.');
+    flagInvalidField(document.getElementById('checkoutDelivery'));
+    return;
+  }
+  if(!name){
+    showToast('Please enter your name.');
+    flagInvalidField(nameEl);
+    return;
+  }
+  if(!phone){
+    showToast('Please enter your WhatsApp number.');
+    flagInvalidField(phoneEl);
+    return;
+  }
   if(!isValidPhone(phone)){
     showToast('Please enter a valid WhatsApp number.');
-    document.getElementById('checkoutPhone').focus();
+    flagInvalidField(phoneEl);
     return;
   }
-  if(checkoutDelivery === 'Delivery' && !address){ showToast('Please add your delivery location.'); checkoutAddressInput.focus(); return; }
+  if(checkoutDelivery === 'Delivery' && !address){
+    showToast('Please add your delivery location.');
+    flagInvalidField(checkoutAddressInput);
+    return;
+  }
 
   for(const item of ALL_FF_ITEMS){
     if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
       showToast(`Please select a flavour for ${item.name}.`);
       closeModal(checkoutModal);
-      const flavourSelect = document.getElementById(`ff-flavour-${item.id}`);
-      flavourSelect.scrollIntoView({ behavior:'smooth', block:'center' });
-      flavourSelect.focus();
+      flagInvalidField(document.getElementById(`ff-flavour-${item.id}`));
       return;
     }
   }
 
   const ffItemLines = ffLines.map(l=> `• ${l.name} × ${l.qty} (${fmtNaira(l.qty * l.unitPrice)})`);
-  const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label} (${fmtNaira(s.price)})`);
+  const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''} (${fmtNaira(s.qty * s.unitPrice)})`);
   const riceLines = Object.values(catState.rice).map(r=> `• ${r.name} — ${r.label} (${fmtNaira(r.price)})`);
   const proteinLines = cateringProteins.filter(p=> catState.proteins[p.id] > 0)
     .map(p=> `• ${p.name} × ${catState.proteins[p.id]} (${fmtNaira(p.price * catState.proteins[p.id])})`);
@@ -1247,10 +1383,11 @@ const CART_SOURCES = {
     title: 'Catering Order',
     lines(){
       const out = [];
-      // Soups and rice are a single size selection, not a quantity —
-      // so they get a remove action rather than a +/- stepper.
+      // Soup quantity is set via its own selector in the menu (not
+      // adjustable from the cart), and rice is a single size selection —
+      // so both get a remove action here rather than a +/- stepper.
       Object.entries(catState.soups).forEach(([key, s])=>
-        out.push({ id:`soup:${key}`, name:`${s.name} — ${s.label}`, qty:1, unitPrice:s.price, stepper:false }));
+        out.push({ id:`soup:${key}`, name:`${s.name} — ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
       Object.entries(catState.rice).forEach(([key, r])=>
         out.push({ id:`rice:${key}`, name:`${r.name} — ${r.label}`, qty:1, unitPrice:r.price, stepper:false }));
       cateringProteins.forEach(p=>{
@@ -1389,6 +1526,22 @@ function getCartTotals(){
     total: allLines.reduce((n,l)=> n + l.qty * l.unitPrice, 0)
   };
 }
+
+/* ============================================================
+   CART ICON ATTENTION PULSE — every 20s, briefly pulses the nav
+   cart icon while it's on screen and holds at least one item, as a
+   lightweight nudge to come back and finish checking out.
+============================================================ */
+let cartIconInView = false;
+new IntersectionObserver((entries)=>{
+  entries.forEach(entry=> cartIconInView = entry.isIntersecting);
+}, { threshold: 0 }).observe(cartIconBtn);
+
+setInterval(()=>{
+  if(!cartIconInView || !getCartTotals().count) return;
+  cartIconBtn.classList.add('cart-pulse');
+  setTimeout(()=> cartIconBtn.classList.remove('cart-pulse'), 1000);
+}, 20000);
 
 function scheduleCartAutoDismiss(){
   clearTimeout(cartAutoDismissTimer);
