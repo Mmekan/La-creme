@@ -461,14 +461,15 @@ document.querySelectorAll('#cakeDelivery .chip').forEach(c=>{
 });
 
 /* ============================================================
-   CAKE CART — lets one order cover more than one cake. "Add Another
-   Cake" validates and saves just the cake-specific fields (occasion
+   CAKE CART — lets one order cover more than one cake, or a cake plus
+   finger foods/catering. "Add to Cart" validates and saves just the cake-specific fields (occasion
    through design) into cakeCart and clears them for a fresh cake;
    the shared fields below (delivery, name, phone) are deliberately
    left untouched since they're the same customer/order either way.
    "Checkout Now" folds whatever's currently in the form in too (if
    it's been touched), then sends every cake in cakeCart as one
-   WhatsApp message.
+   WhatsApp message. If finger foods/catering are also in the cart, the
+   nav cart's "Checkout All" sends the cakes along with them instead.
 ============================================================ */
 let cakeCart = [];
 let cakeIdCounter = 0;
@@ -605,6 +606,18 @@ function fitWhatsAppMessage(buildLines){
   return message;
 }
 
+// One cake as a single plain-text line for the order log / admin page.
+function cakeLogText(c){
+  return [
+    `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}, needed ${c.date}`,
+    c.tierDetails.length ? `sizes: ${c.tierDetails.join('; ')}` : '',
+    c.isCustom ? `CUSTOM ORDER (${c.customCount} tiers/steps)` : '',
+    c.finish ? `finish: ${c.finish}` : '',
+    c.inscription ? `inscription: ${c.inscription}` : '',
+    c.design ? `design: ${c.design}` : ''
+  ].filter(Boolean).join(' | ');
+}
+
 function formatCakeLines(cake, index, total, detail){
   const label = total > 1 ? `*Cake ${index + 1}*` : `*Cake*`;
   if(detail === 'summary'){
@@ -630,7 +643,7 @@ document.getElementById('cakeAddAnotherBtn').addEventListener('click', ()=>{
   cakeCart.push(cake);
   resetCakeFields();
   refreshCartUI();
-  showToast(`Cake added to your order (${cakeCart.length} so far), add another or check out when ready.`);
+  showToast(`Cake added to your cart (${cakeCart.length} cake${cakeCart.length === 1 ? '' : 's'}), add more or check out when ready.`);
 });
 
 // Validates and sends the queued cake(s) via WhatsApp — shared by the
@@ -642,7 +655,7 @@ function finalizeCakeOrder(){
   // Fold the current form into the cart too, unless it's untouched
   // and there's already at least one cake queued up — in that case
   // this click is purely "I'm done, check out" for what's already
-  // been added via "Add Another Cake".
+  // been added via "Add to Cart".
   if(cakeFormHasContent() || cakeCart.length === 0){
     const cake = validateCakeFields();
     if(!cake) return;
@@ -702,14 +715,7 @@ function finalizeCakeOrder(){
     delivery: cakeDelivery,
     address: deliveryAddress,
     dateNeeded: cakeCart.map(c=> c.date).join(' | '),
-    items: cakeCart.map(c=> [
-      `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}, needed ${c.date}`,
-      c.tierDetails.length ? `sizes: ${c.tierDetails.join('; ')}` : '',
-      c.isCustom ? `CUSTOM ORDER (${c.customCount} tiers/steps)` : '',
-      c.finish ? `finish: ${c.finish}` : '',
-      c.inscription ? `inscription: ${c.inscription}` : '',
-      c.design ? `design: ${c.design}` : ''
-    ].filter(Boolean).join(' | ')).join('\n'),
+    items: cakeCart.map(cakeLogText).join('\n'),
     total: '',
     notes: ''
   });
@@ -1314,10 +1320,10 @@ function renderCheckoutModal(){
 
   const reviewEl = document.getElementById('checkoutReview');
   reviewEl.innerHTML = '';
-  [...ffLines, ...catLines].forEach(line=>{
+  [...ffLines, ...catLines, ...CART_SOURCES.cake.lines()].forEach(line=>{
     const row = document.createElement('div');
     row.className = 'checkout-review-row';
-    row.innerHTML = `<span>${line.name}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${fmtNaira(line.qty * line.unitPrice)}</span>`;
+    row.innerHTML = `<span>${line.name}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${line.priceLabel || fmtNaira(line.qty * line.unitPrice)}</span>`;
     reviewEl.appendChild(row);
   });
 
@@ -1456,6 +1462,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   const eventBits = [eventType, guests ? `${guests} guests` : '', checkoutServiceType].filter(Boolean);
   const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
   const orderNo = generateOrderNumber(name);
+  const cakes = cakeCart.slice(); // cakes queued via "Add to Cart" ride along in this order
 
   const message = fitWhatsAppMessage((detail)=> {
     const strip = (arr)=> detail === 'summary'
@@ -1471,8 +1478,14 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
       cateringItemLines.length ? `*Catering*` : null,
       ...(cateringItemLines.length ? strip(cateringItemLines) : []),
       cateringItemLines.length ? `` : null,
+      cakes.length ? `*Cakes*` : null,
+      // a lone cake under the *Cakes* heading doesn't need its own "*Cake*" label
+      ...cakes.flatMap((cake, i)=>{
+        const lines = formatCakeLines(cake, i, cakes.length, detail);
+        return [...(cakes.length === 1 && detail !== 'summary' ? lines.slice(1) : lines), ``];
+      }),
       eventBits.length ? `Event: ${eventBits.join(', ')}` : null,
-      `*Total ${fmtNaira(total)}*`,
+      `*Total ${fmtNaira(total)}*${cakes.length ? ' (cakes quoted separately)' : ''}`,
       `${checkoutDelivery}${address ? `, ${address}` : ''}`,
       date ? `Needed: ${date}` : null,
       notes ? `Notes: ${trimText(notes, detail === 'full' ? 300 : 100)}` : null,
@@ -1483,21 +1496,22 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
 
   logOrder({
     orderNumber: orderNo,
-    orderType: hasCat ? (ffLines.length ? 'Finger Foods + Catering' : 'Catering') : 'Finger Foods',
+    orderType: [cakes.length ? 'Cake' : '', ffLines.length ? 'Finger Foods' : '', hasCat ? 'Catering' : ''].filter(Boolean).join(' + '),
     name, phone,
     delivery: checkoutDelivery,
     address,
-    dateNeeded: date,
+    dateNeeded: [date, ...cakes.map(c=> c.date)].filter(Boolean).join(' | '),
     eventType: hasCat ? eventType : '',
     guests: hasCat ? guests : '',
     serviceType: hasCat ? checkoutServiceType : '',
-    items: [...ffItemLines, ...cateringItemLines].join('\n'),
-    total: fmtNaira(total),
+    items: [...ffItemLines, ...cateringItemLines, ...cakes.map(cakeLogText)].join('\n'),
+    total: fmtNaira(total) + (cakes.length ? ' + cake quote' : ''),
     notes
   });
 
   const opened = openWhatsApp(message);
   closeModal(checkoutModal);
+  cakeCart = [];
   clearFingerFoodAndCateringCart();
   showToast(opened
     ? `Opening WhatsApp — your order no. is ${orderNo}`
@@ -1592,7 +1606,7 @@ const CART_SOURCES = {
   },
   // Cakes have no fixed price (quoted directly on WhatsApp) and no
   // per-line quantity — each entry is one full cake spec, added via
-  // "Add Another Cake" and only removable, not adjustable, from here.
+  // "Add to Cart" and only removable, not adjustable, from here.
   // Not part of the "Checkout All" flow below: cakes are finalized
   // from their own "Checkout Now" button in the Cakes section, which
   // has the richer per-cake detail (tiers, custom-order flag, etc.)

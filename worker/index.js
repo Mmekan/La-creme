@@ -110,7 +110,7 @@ async function handleListOrders(url, env) {
     args.push(like, like, like, like);
   }
   if (STATUSES.includes(status)) { where.push('status = ?'); args.push(status); }
-  if (type) { where.push('order_type = ?'); args.push(type); }
+  if (type) { where.push('order_type LIKE ?'); args.push(`%${type.replace(/[%_]/g, '')}%`); }
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const rows = await env.DB.prepare(`SELECT * FROM orders ${clause} ORDER BY received_at DESC LIMIT ? OFFSET ?`)
