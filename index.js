@@ -21,7 +21,7 @@ const NEWS_ITEMS = [
     tag: 'New Arrival',
     title: 'Cake Slices',
     price: '₦4,000 / slice',
-    blurb: 'Delicious cake slices for any occasion — now on the Finger Foods menu.',
+    blurb: 'Delicious cake slices for any occasion, now on the Finger Foods menu.',
     images: [
       mediaUrl('img/cakeslice1-sm.jpg'),
       mediaUrl('img/cakeslice2-sm.jpg'),
@@ -198,19 +198,21 @@ const ICONS = {
    your-clip.mp4')` — the play placeholder is swapped automatically.
 ============================================================ */
 const videoTestimonials = [
-  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20260612_184349227.mp4'), tone:'' },
-  { name: '12inch Cake Reveal', video: mediaUrl('videos/InShot_20251207_154703112.mp4'), tone:'tone-b' },
-  { name: 'Wedding Day Moment', video: mediaUrl('videos/InShot_20251122_180814090.mp4'), tone:'tone-c' },
-  { name: 'Lunchpack Preparation', video: mediaUrl('videos/InShot_20251122_201354636.mp4'), tone:'' },
+  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20260612_184349227-sm.mp4'), poster: mediaUrl('videos/InShot_20260612_184349227-poster.jpg'), tone:'' },
+  { name: '12inch Cake Reveal', video: mediaUrl('videos/InShot_20251207_154703112-sm.mp4'), poster: mediaUrl('videos/InShot_20251207_154703112-poster.jpg'), tone:'tone-b' },
+  { name: 'Wedding Day Moment', video: mediaUrl('videos/InShot_20251122_180814090-sm.mp4'), poster: mediaUrl('videos/InShot_20251122_180814090-poster.jpg'), tone:'tone-c' },
+  { name: 'Lunchpack Preparation', video: mediaUrl('videos/InShot_20251122_201354636-sm.mp4'), poster: mediaUrl('videos/InShot_20251122_201354636-poster.jpg'), tone:'' },
 ];
 const videoReel = document.getElementById('videoReel');
 videoTestimonials.forEach(v=>{
   const el = document.createElement('div');
   el.className = `media-frame reel-item ${v.tone}`;
   el.innerHTML = v.video
-    ? `<video src="${v.video}" muted loop playsinline preload="metadata"></video><div class="cap"><span class="who">${v.name}</span></div>`
+    ? `<video src="${v.video}"${v.poster ? ` poster="${v.poster}"` : ''} muted loop playsinline preload="auto"></video><div class="cap"><span class="who">${v.name}</span></div>`
     : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">${v.name}</div>`;
   videoReel.appendChild(el);
+  const reelVid = el.querySelector('video');
+  if(reelVid) bindMediaSkeleton(el, reelVid);
 });
 // Autoplay each clip only while it's actually in view (muted, so
 // autoplay is allowed cross-browser); pause it once scrolled away.
@@ -226,7 +228,7 @@ videoReel.querySelectorAll('video').forEach(v=> reelVideoObserver.observe(v));
    TESTIMONIAL QUOTES
 ============================================================ */
 const testimonials = [
-  { quote: 'The cake didn\'t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
+  { quote: 'The cake didn\'t just look expensive, it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
   { quote: 'We ordered small chops for 150 guests and everything arrived hot, on time, beautifully packed.', name:'Tunde O.', event:'Corporate Launch' },
 ];
 const testimonialGrid = document.getElementById('testimonialGrid');
@@ -566,21 +568,59 @@ function resetCakeFields(){
   updateTierAvailability();
 }
 
-function formatCakeLines(cake, index, total){
+/* ============================================================
+   WHATSAPP MESSAGE FORMATTING
+
+   A wa.me link carries the whole order in its URL, and encoding
+   roughly doubles its length — so a big order (a dozen cakes, each
+   with free-typed design notes) can grow past what WhatsApp clients
+   reliably accept, and the message silently arrives truncated.
+
+   Every message is therefore built at a detail level, and dropped to
+   the next level down until it fits: 'full' (everything), 'brief'
+   (drops per-tier sizing and the free-text fields), then 'summary'
+   (one line per cake). The order number is in the message either way,
+   and the untrimmed order is in the order sheet, so nothing is ever
+   actually lost — only the WhatsApp copy gets shorter.
+============================================================ */
+// Measured on the URL-encoded message, since that's what the wa.me link
+// actually carries: ₦, × and — expand to 6-9 characters each once encoded,
+// so a message that looks short can still make a very long link.
+const WA_MAX_ENCODED_CHARS = 1900;
+const WA_DETAIL_LEVELS = ['full', 'brief', 'summary'];
+
+function trimText(str, max){
+  const s = String(str || '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + '…' : s;
+}
+
+// Calls buildLines(detail) at successively lower detail levels and
+// returns the first message that fits (or the shortest one if none do).
+function fitWhatsAppMessage(buildLines){
+  let message = '';
+  for(const detail of WA_DETAIL_LEVELS){
+    message = buildLines(detail).filter(l=> l !== null && l !== undefined).join('\n');
+    if(encodeURIComponent(message).length <= WA_MAX_ENCODED_CHARS) break;
+  }
+  return message;
+}
+
+function formatCakeLines(cake, index, total, detail){
+  const label = total > 1 ? `*Cake ${index + 1}*` : `*Cake*`;
+  if(detail === 'summary'){
+    return [`${label} — ${cake.occasion}, ${cake.tiersLabel}, ${cake.date}, ${cake.flavor}`];
+  }
   return [
-    total > 1 ? `*Cake ${index + 1}*` : null,
-    `*Occasion:* ${cake.occasion}`,
-    `*Tiers/Steps:* ${cake.tiersLabel}`,
-    cake.tierDetails.length ? `*Tier Details:*` : null,
-    ...cake.tierDetails.map(t=> `• ${t}`),
-    cake.isCustom
-      ? `⚠️ *This is a CUSTOM ORDER (${cake.customCount} tiers/steps)* — please confirm exact sizing, design and pricing with the customer directly.`
-      : null,
-    `*Date Needed:* ${cake.date}`,
-    `*Flavor:* ${cake.flavor}`,
-    cake.finish ? `*Icing/Finish:* ${cake.finish}` : null,
-    cake.inscription ? `*Inscription:* ${cake.inscription}` : null,
-    cake.design ? `*Design Inspiration:* ${cake.design}` : null,
+    label,
+    `Occasion: ${cake.occasion}`,
+    `Tiers/Steps: ${cake.tiersLabel}`,
+    ...(detail === 'full' ? cake.tierDetails.map(t=> `   ${t}`) : []),
+    cake.isCustom ? `CUSTOM ORDER (${cake.customCount} tiers/steps) — confirm sizing, design and price directly` : null,
+    `Date: ${cake.date}`,
+    `Flavor: ${cake.flavor}`,
+    detail === 'full' && cake.finish ? `Finish: ${cake.finish}` : null,
+    detail === 'full' && cake.inscription ? `Inscription: ${trimText(cake.inscription, 120)}` : null,
+    detail === 'full' && cake.design ? `Design: ${trimText(cake.design, 200)}` : null,
   ].filter(Boolean);
 }
 
@@ -643,22 +683,41 @@ function finalizeCakeOrder(){
     return;
   }
 
-  const cakeLines = cakeCart.flatMap((cake, i)=> formatCakeLines(cake, i, cakeCart.length));
+  const orderNo = generateOrderNumber(name);
 
-  const lines = [
-    `Hello ${CONFIG.businessName}! I'd like to place a *Custom Cake* request${cakeCart.length > 1 ? ` for ${cakeCart.length} cakes` : ''}.`,
+  const message = fitWhatsAppMessage((detail)=> [
+    `*CAKE ORDER*`,
+    `No. ${orderNo}`,
     ``,
-    ...cakeLines,
+    ...cakeCart.flatMap((cake, i, arr)=> [...formatCakeLines(cake, i, arr.length, detail), ``]),
+    `${cakeDelivery}${deliveryAddress ? `, ${deliveryAddress}` : ''}`,
     ``,
-    `*Delivery:* ${cakeDelivery}`,
-    deliveryAddress ? `*Delivery Location:* ${deliveryAddress}` : null,
-    ``,
-    `*Name:* ${name}`,
-    `*WhatsApp Number:* ${phone}`,
-  ].filter(Boolean).join('\n');
+    `${name}, ${phone}`,
+  ]);
 
-  openWhatsApp(lines);
-  showToast('Opening WhatsApp with your cake request…');
+  logOrder({
+    orderNumber: orderNo,
+    orderType: 'Cake',
+    name, phone,
+    delivery: cakeDelivery,
+    address: deliveryAddress,
+    dateNeeded: cakeCart.map(c=> c.date).join(' | '),
+    items: cakeCart.map(c=> [
+      `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}, needed ${c.date}`,
+      c.tierDetails.length ? `sizes: ${c.tierDetails.join('; ')}` : '',
+      c.isCustom ? `CUSTOM ORDER (${c.customCount} tiers/steps)` : '',
+      c.finish ? `finish: ${c.finish}` : '',
+      c.inscription ? `inscription: ${c.inscription}` : '',
+      c.design ? `design: ${c.design}` : ''
+    ].filter(Boolean).join(' | ')).join('\n'),
+    total: '',
+    notes: ''
+  });
+
+  const opened = openWhatsApp(message);
+  showToast(opened
+    ? `Opening WhatsApp — your order no. is ${orderNo}`
+    : `Order no. ${orderNo} — taking you to WhatsApp…`);
   cakeCart = [];
   refreshCartUI();
 }
@@ -708,7 +767,7 @@ function buildSmallChopsItem(){
     <div class="m-top">
       <div class="m-body">
         <h4>Small Chops</h4>
-        <p>Puff puff, spring rolls, samosa & sausage rolls — choose plate or tray</p>
+        <p>Puff puff, spring rolls, samosa & sausage rolls, choose plate or tray</p>
       </div>
     </div>
     <div class="m-extra sc-picker-row">
@@ -782,6 +841,12 @@ function buildSmallChopsItem(){
   });
 
   wrap.syncQty = ()=>{ if(currentVariant) qtyVal.textContent = ffState[currentVariant.id]; };
+  wrap.restoreSelection = ()=>{
+    const v = SMALL_CHOPS_VARIANTS.find(x=> ffState[x.id] > 0);
+    if(!v) return;
+    typeWrap.querySelector('[data-value="' + v.type + '"]').click();
+    styleChipsEl.querySelector('[data-id="' + v.id + '"]').click();
+  };
   return wrap;
 }
 
@@ -793,7 +858,7 @@ function buildChinChinItem(){
     <div class="m-top">
       <div class="m-body">
         <h4>Chin Chin</h4>
-        <p>Crunchy, lightly sweetened bites — choose your size</p>
+        <p>Crunchy, lightly sweetened bites, choose your size</p>
       </div>
     </div>
     <div class="m-extra">
@@ -838,6 +903,10 @@ function buildChinChinItem(){
   });
 
   wrap.syncQty = ()=>{ if(currentVariant) qtyVal.textContent = ffState[currentVariant.id]; };
+  wrap.restoreSelection = ()=>{
+    const v = CHIN_CHIN_VARIANTS.find(x=> ffState[x.id] > 0);
+    if(v) optionWrap.querySelector('[data-id="' + v.id + '"]').click();
+  };
   return wrap;
 }
 
@@ -939,10 +1008,21 @@ const cateringRice = [
   { id:'fried-rice', name:'Fried Rice', desc:'Mixed vegetables, Nigerian-style' },
   { id:'coconut-rice', name:'Coconut Rice', desc:'Rich coconut milk base' },
 ];
-// Lunchpack = personal portion, Tray = serves 10. One flat price per
-// type, same across every rice flavour.
+// Lunchpack = personal portion, Tray = serves 10. Classic adds a side.
 const RICE_TYPES = ['Lunchpack', 'Tray'];
-const RICE_PRICING = { Lunchpack: 3500, Tray: 20000 };
+const RICE_STYLES = ['Standard', 'Classic'];
+const RICE_SIDES = ['Salad', 'Plantain'];
+const RICE_PRICING = {
+  Lunchpack: { Standard: 3500, Classic: 4500 },
+  Tray: { Standard: 20000, Classic: 24000 },
+};
+// What's actually in each pack. Listed up front on every rice row
+// rather than tucked behind a selection, so the difference between the
+// two is obvious before choosing.
+const RICE_STYLE_NOTES = {
+  Standard: 'Rice and Chicken',
+  Classic: 'Rice, Chicken and a Side (Salad or Plantain)',
+};
 
 const cateringProteins = [
   { id:'chicken', name:'Chicken', unit:'per portion', price:2500 },
@@ -959,6 +1039,7 @@ const catState = { soups:{}, rice:{}, proteins:{} };
 function buildSoupRow(item){
   const row = document.createElement('div');
   row.className = 'menu-item has-extra';
+  row.dataset.itemId = item.id;
   row.innerHTML = `
     <div class="m-top">
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
@@ -997,7 +1078,7 @@ function buildSoupRow(item){
 
   function commit(){
     if(sel.label && sel.protein){
-      catState.soups[item.id] = { name:item.name, label:`${sel.label} — ${sel.protein}`, unitPrice: sel.price, qty: sel.qty };
+      catState.soups[item.id] = { name:item.name, label:`${sel.label}, ${sel.protein}`, unitPrice: sel.price, qty: sel.qty, sel:{ label: sel.label, protein: sel.protein } };
     } else {
       delete catState.soups[item.id];
     }
@@ -1058,6 +1139,7 @@ function buildSoupRow(item){
 function buildRiceRow(item){
   const row = document.createElement('div');
   row.className = 'menu-item has-extra';
+  row.dataset.itemId = item.id;
   row.innerHTML = `
     <div class="m-top">
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
@@ -1065,16 +1147,38 @@ function buildRiceRow(item){
     <div class="m-extra">
       <span class="m-extra-label">Type</span>
       <div class="liter-chips" data-role="type">
-        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t} — ${fmtNaira(RICE_PRICING[t])}</button>`).join('')}
+        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t}</button>`).join('')}
+      </div>
+    </div>
+    <div class="m-extra" data-role="style-wrap" style="display:none;">
+      <span class="m-extra-label">Style</span>
+      <div class="liter-chips" data-role="style">
+        ${RICE_STYLES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
+      </div>
+      <ul class="pack-contents">
+        ${RICE_STYLES.map(s=> `<li><strong>${s}</strong><span>${RICE_STYLE_NOTES[s]}</span></li>`).join('')}
+      </ul>
+    </div>
+    <div class="m-extra" data-role="sides-wrap" style="display:none;">
+      <span class="m-extra-label">Choose a Side</span>
+      <div class="liter-chips" data-role="sides">
+        ${RICE_SIDES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
       </div>
     </div>`;
 
-  const sel = { type:'' };
+  const sel = { type:'', style:'', sides:'' };
   const typeChips = row.querySelector('[data-role="type"]');
+  const styleWrap = row.querySelector('[data-role="style-wrap"]');
+  const styleChips = row.querySelector('[data-role="style"]');
+  const sidesWrap = row.querySelector('[data-role="sides-wrap"]');
+  const sidesChips = row.querySelector('[data-role="sides"]');
 
   function commit(){
-    if(sel.type){
-      catState.rice[item.id] = { name: item.name, label: sel.type, price: RICE_PRICING[sel.type] };
+    if(sel.type && sel.style && (sel.style !== 'Classic' || sel.sides)){
+      const price = RICE_PRICING[sel.type][sel.style];
+      const labelBits = [sel.type, sel.style];
+      if(sel.sides) labelBits.push(sel.sides);
+      catState.rice[item.id] = { name: item.name, label: labelBits.join(', '), price, sel:{ type: sel.type, style: sel.style, sides: sel.sides } };
     } else {
       delete catState.rice[item.id];
     }
@@ -1085,12 +1189,44 @@ function buildRiceRow(item){
     chip.addEventListener('click', ()=>{
       const already = chip.classList.contains('selected');
       typeChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      styleChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      sel.style = ''; sel.sides = '';
+      sidesWrap.style.display = 'none';
       if(already){
         sel.type = '';
+        styleWrap.style.display = 'none';
       } else {
         chip.classList.add('selected');
         sel.type = chip.dataset.value;
+        styleWrap.style.display = 'block';
       }
+      commit();
+    });
+  });
+  styleChips.querySelectorAll('.liter-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const already = chip.classList.contains('selected');
+      styleChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      sel.sides = '';
+      if(already){
+        sel.style = '';
+        sidesWrap.style.display = 'none';
+      } else {
+        chip.classList.add('selected');
+        sel.style = chip.dataset.value;
+        sidesWrap.style.display = sel.style === 'Classic' ? 'block' : 'none';
+      }
+      commit();
+    });
+  });
+  sidesChips.querySelectorAll('.liter-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      const already = chip.classList.contains('selected');
+      sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
+      sel.sides = already ? '' : chip.dataset.value;
+      if(!already) chip.classList.add('selected');
       commit();
     });
   });
@@ -1129,13 +1265,13 @@ function renderCatering(){
   Object.values(catState.soups).forEach(s=>{
     count += s.qty; total += s.qty * s.unitPrice;
     const row = document.createElement('div'); row.className = 'summary-row';
-    row.innerHTML = `<div><div class="s-name">${s.name} — ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''}</div><div class="s-meta">${fmtNaira(s.qty * s.unitPrice)}</div></div>`;
+    row.innerHTML = `<div><div class="s-name">${s.name}, ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''}</div><div class="s-meta">${fmtNaira(s.qty * s.unitPrice)}</div></div>`;
     listEl.appendChild(row);
   });
   Object.values(catState.rice).forEach(r=>{
     count++; total += r.price;
     const row = document.createElement('div'); row.className = 'summary-row';
-    row.innerHTML = `<div><div class="s-name">${r.name} — ${r.label}</div><div class="s-meta">${fmtNaira(r.price)}</div></div>`;
+    row.innerHTML = `<div><div class="s-name">${r.name}, ${r.label}</div><div class="s-meta">${fmtNaira(r.price)}</div></div>`;
     listEl.appendChild(row);
   });
   cateringProteins.forEach(p=>{
@@ -1190,6 +1326,7 @@ function renderCheckoutModal(){
 
   document.getElementById('checkoutEventTypeField').hidden = !hasCat;
   document.getElementById('checkoutEventDetailsRow').hidden = !hasCat;
+  document.getElementById('checkoutDateReq').hidden = !hasCat;
 }
 
 function openCheckoutModal(){
@@ -1264,6 +1401,11 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     flagInvalidField(eventTypeEl);
     return;
   }
+  if(hasCat && !date){
+    showToast('Please choose the date of your event.');
+    flagInvalidField(dateEl);
+    return;
+  }
   if(date && date < minOrderDate()){
     showToast(`We need at least ${MIN_ORDER_LEAD_DAYS} days' notice — please pick a date from ${minOrderDate()} onward.`);
     flagInvalidField(dateEl);
@@ -1304,41 +1446,84 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     }
   }
 
-  const ffItemLines = ffLines.map(l=> `• ${l.name} × ${l.qty} (${fmtNaira(l.qty * l.unitPrice)})`);
-  const soupLines = Object.values(catState.soups).map(s=> `• ${s.name} — ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''} (${fmtNaira(s.qty * s.unitPrice)})`);
-  const riceLines = Object.values(catState.rice).map(r=> `• ${r.name} — ${r.label} (${fmtNaira(r.price)})`);
-  const proteinLines = cateringProteins.filter(p=> catState.proteins[p.id] > 0)
-    .map(p=> `• ${p.name} × ${catState.proteins[p.id]} (${fmtNaira(p.price * catState.proteins[p.id])})`);
-
+  const ffItemLines = ffLines.map(l=> `${l.qty} × ${l.name} — ${fmtNaira(l.qty * l.unitPrice)}`);
+  const cateringItemLines = [
+    ...Object.values(catState.soups).map(s=> `${s.qty} × ${s.name}, ${s.label} — ${fmtNaira(s.qty * s.unitPrice)}`),
+    ...Object.values(catState.rice).map(r=> `${r.name}, ${r.label} — ${fmtNaira(r.price)}`),
+    ...cateringProteins.filter(p=> catState.proteins[p.id] > 0)
+      .map(p=> `${catState.proteins[p.id]} × ${p.name} — ${fmtNaira(p.price * catState.proteins[p.id])}`),
+  ];
+  const eventBits = [eventType, guests ? `${guests} guests` : '', checkoutServiceType].filter(Boolean);
   const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+  const orderNo = generateOrderNumber(name);
 
-  const lines = [
-    `Hello ${CONFIG.businessName}! I'd like to place an order.`,
-    ``,
-    ffItemLines.length ? `*Finger Foods:*` : null, ...ffItemLines,
-    ffItemLines.length ? `` : null,
-    hasCat ? `*Event Type:* ${eventType}` : null,
-    guests ? `*Guest Count:* ${guests}` : null,
-    checkoutServiceType ? `*Service Type:* ${checkoutServiceType}` : null,
-    hasCat ? `` : null,
-    soupLines.length ? `*Soups:*` : null, ...soupLines,
-    riceLines.length ? `*Rice & Sides:*` : null, ...riceLines,
-    proteinLines.length ? `*Proteins:*` : null, ...proteinLines,
-    (soupLines.length || riceLines.length || proteinLines.length) ? `` : null,
-    `*Estimated Total:* ${fmtNaira(total)}`,
-    `*Delivery:* ${checkoutDelivery}`,
-    address ? `*Delivery/Venue Location:* ${address}` : null,
-    date ? `*Date Needed:* ${date}` : null,
-    notes ? `*Notes:* ${notes}` : null,
-    ``,
-    `*Name:* ${name}`,
-    `*WhatsApp Number:* ${phone}`,
-  ].filter(Boolean).join('\n');
+  const message = fitWhatsAppMessage((detail)=> {
+    const strip = (arr)=> detail === 'summary'
+      ? [`${arr.length} item${arr.length === 1 ? '' : 's'}`]
+      : arr.map(l=> detail === 'brief' ? l.replace(/ — ₦[\d,]+$/, '') : l);
+    return [
+      `*ORDER*`,
+      `No. ${orderNo}`,
+      ``,
+      ffItemLines.length ? `*Finger Foods*` : null,
+      ...(ffItemLines.length ? strip(ffItemLines) : []),
+      ffItemLines.length ? `` : null,
+      cateringItemLines.length ? `*Catering*` : null,
+      ...(cateringItemLines.length ? strip(cateringItemLines) : []),
+      cateringItemLines.length ? `` : null,
+      eventBits.length ? `Event: ${eventBits.join(', ')}` : null,
+      `*Total ${fmtNaira(total)}*`,
+      `${checkoutDelivery}${address ? `, ${address}` : ''}`,
+      date ? `Needed: ${date}` : null,
+      notes ? `Notes: ${trimText(notes, detail === 'full' ? 300 : 100)}` : null,
+      ``,
+      `${name}, ${phone}`,
+    ];
+  });
 
-  openWhatsApp(lines);
+  logOrder({
+    orderNumber: orderNo,
+    orderType: hasCat ? (ffLines.length ? 'Finger Foods + Catering' : 'Catering') : 'Finger Foods',
+    name, phone,
+    delivery: checkoutDelivery,
+    address,
+    dateNeeded: date,
+    eventType: hasCat ? eventType : '',
+    guests: hasCat ? guests : '',
+    serviceType: hasCat ? checkoutServiceType : '',
+    items: [...ffItemLines, ...cateringItemLines].join('\n'),
+    total: fmtNaira(total),
+    notes
+  });
+
+  const opened = openWhatsApp(message);
   closeModal(checkoutModal);
-  showToast('Opening WhatsApp with your order…');
+  clearFingerFoodAndCateringCart();
+  showToast(opened
+    ? `Opening WhatsApp — your order no. is ${orderNo}`
+    : `Order no. ${orderNo} — taking you to WhatsApp…`);
 });
+
+// Empties the finger-food and catering cart after an order has been sent,
+// so a returning visitor (the cart is persisted) doesn't resend it and
+// create a duplicate order. Drives the real widgets so their chips and
+// steppers reset along with the underlying state. Cakes clear themselves
+// in finalizeCakeOrder().
+function clearFingerFoodAndCateringCart(){
+  ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
+  Object.keys(ffFlavours).forEach(id=>{
+    ffFlavours[id] = '';
+    const sel = document.getElementById('ff-flavour-' + id);
+    if(sel) sel.value = '';
+  });
+  document.querySelectorAll('#soupList [data-role="size"] .liter-chip.selected').forEach(chip=> chip.click());
+  document.querySelectorAll('#riceList [data-role="type"] .liter-chip.selected').forEach(chip=> chip.click());
+  cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
+  catState.soups = {};
+  catState.rice = {};
+  renderFF();
+  renderCatering();
+}
 
 /* ============================================================
    CART WIDGET — nav icon + dropdown (Finger Foods + Catering only;
@@ -1387,9 +1572,9 @@ const CART_SOURCES = {
       // adjustable from the cart), and rice is a single size selection —
       // so both get a remove action here rather than a +/- stepper.
       Object.entries(catState.soups).forEach(([key, s])=>
-        out.push({ id:`soup:${key}`, name:`${s.name} — ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
+        out.push({ id:`soup:${key}`, name:`${s.name}, ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
       Object.entries(catState.rice).forEach(([key, r])=>
-        out.push({ id:`rice:${key}`, name:`${r.name} — ${r.label}`, qty:1, unitPrice:r.price, stepper:false }));
+        out.push({ id:`rice:${key}`, name:`${r.name}, ${r.label}`, qty:1, unitPrice:r.price, stepper:false }));
       cateringProteins.forEach(p=>{
         if(catState.proteins[p.id] > 0)
           out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:p.price, stepper:true });
@@ -1642,7 +1827,99 @@ function syncCartStates(){
   });
 }
 
-function refreshCartUI(){ syncCartStates(); updateCartIcon(); }
+/* ============================================================
+   CART PERSISTENCE — the whole order-in-progress (finger foods,
+   catering, queued cakes) is mirrored to localStorage on every change
+   and rebuilt on load, so a refresh or a trip to the gallery page
+   doesn't wipe it. Expires after CART_TTL_MS so a stale order from
+   last week doesn't greet a returning visitor. Restoring drives the
+   real menu widgets with .click() so their own internal state (chips,
+   steppers) stays consistent with what's in the cart.
+============================================================ */
+const CART_STORAGE_KEY = 'lcCartV1';
+const CART_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+// Starts true so the initial renderFF()/renderCatering() at load can't
+// wipe the saved cart before restoreCartState() has read it.
+let cartRestoring = true;
+
+function saveCartState(){
+  if(cartRestoring) return;
+  try{
+    const empty = !getCartTotals().count;
+    if(empty){ localStorage.removeItem(CART_STORAGE_KEY); return; }
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({
+      t: Date.now(), ff: ffState, fl: ffFlavours, cat: catState, cake: cakeCart, cid: cakeIdCounter
+    }));
+  }catch(e){ /* private mode / quota — persistence is best-effort */ }
+}
+
+function restoreCartState(){
+  let saved;
+  try{
+    saved = JSON.parse(localStorage.getItem(CART_STORAGE_KEY) || 'null');
+  }catch(e){ cartRestoring = false; return; }
+  if(!saved || typeof saved !== 'object' || Date.now() - saved.t > CART_TTL_MS){
+    cartRestoring = false;
+    try{ localStorage.removeItem(CART_STORAGE_KEY); }catch(e){}
+    return;
+  }
+  try{
+    const qtyOf = v => Math.max(0, Math.min(999, Math.floor(Number(v)) || 0));
+
+    // Finger foods
+    ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = qtyOf(saved.ff && saved.ff[item.id]); });
+    fingerFoodMenu.forEach(item=>{
+      if(!item.needsFlavour) return;
+      const f = saved.fl && saved.fl[item.id];
+      if(CAKE_SLICE_FLAVOURS.includes(f)){
+        ffFlavours[item.id] = f;
+        document.getElementById('ff-flavour-' + item.id).value = f;
+      }
+    });
+    ffWidgets.forEach(w=> w.restoreSelection && w.restoreSelection());
+    renderFF();
+
+    // Catering: proteins are plain counts; soups/rice re-drive their chips.
+    cateringProteins.forEach(p=>{ catState.proteins[p.id] = qtyOf(saved.cat && saved.cat.proteins && saved.cat.proteins[p.id]); });
+    const clickChip = (root, sel)=>{ const c = root.querySelector(sel); if(c) c.click(); return c; };
+    Object.entries((saved.cat && saved.cat.soups) || {}).forEach(([id, s])=>{
+      const row = document.querySelector('#soupList [data-item-id="' + id + '"]');
+      if(!row || !s.sel) return;
+      if(!clickChip(row, '[data-role="size"] .liter-chip[data-label="' + s.sel.label + '"]')) return;
+      if(!clickChip(row, '[data-role="protein"] .liter-chip[data-value="' + s.sel.protein + '"]')) return;
+      for(let i = 1; i < qtyOf(s.qty); i++) row.querySelector('[data-act="inc"]').click();
+    });
+    Object.entries((saved.cat && saved.cat.rice) || {}).forEach(([id, r])=>{
+      const row = document.querySelector('#riceList [data-item-id="' + id + '"]');
+      if(!row || !r.sel) return;
+      if(!clickChip(row, '[data-role="type"] .liter-chip[data-value="' + r.sel.type + '"]')) return;
+      if(!clickChip(row, '[data-role="style"] .liter-chip[data-value="' + r.sel.style + '"]')) return;
+      if(r.sel.sides) clickChip(row, '[data-role="sides"] .liter-chip[data-value="' + r.sel.sides + '"]');
+    });
+    renderCatering();
+
+    // Cakes
+    if(Array.isArray(saved.cake)){
+      cakeCart = saved.cake.filter(c=> c && typeof c.occasion === 'string' && typeof c.tiersLabel === 'string' && Array.isArray(c.tierDetails));
+      cakeIdCounter = Math.max(Number(saved.cid) || 0, ...cakeCart.map(c=> Number(c.id) || 0));
+    }
+  } catch(err) {
+    // A saved cart that can't be replayed (edited by hand, or from an
+    // older menu) is dropped rather than left to fail on every load.
+    try{ localStorage.removeItem(CART_STORAGE_KEY); }catch(e){}
+    ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
+    catState.soups = {}; catState.rice = {};
+    cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
+    cakeCart = [];
+    renderFF();
+    renderCatering();
+  } finally {
+    cartRestoring = false;
+  }
+  refreshCartUI();
+}
+
+function refreshCartUI(){ syncCartStates(); updateCartIcon(); saveCartState(); }
 
 // Both call refreshCartUI() internally — must run after every const/
 // function above is initialized (cartWidget, prevCardQty, etc.), or
@@ -1650,3 +1927,4 @@ function refreshCartUI(){ syncCartStates(); updateCartIcon(); }
 // never initializes. See git history for the incident.
 renderFF();
 renderCatering();
+restoreCartState();

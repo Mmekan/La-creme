@@ -16,7 +16,7 @@ const NEWS_ITEMS = [
     tag: 'New Arrival',
     title: 'Cake Slices',
     price: '₦4,000 / slice',
-    blurb: 'Delicious cake slices for any occasion — now on the Finger Foods menu.',
+    blurb: 'Delicious cake slices for any occasion, now on the Finger Foods menu.',
     images: [
       mediaUrl('img/cakeslice1-sm.jpg'),
       mediaUrl('img/cakeslice2-sm.jpg'),
@@ -108,6 +108,14 @@ const siteNav = document.getElementById('siteNav');
 window.addEventListener('scroll', ()=>{
   siteNav.classList.toggle('scrolled', window.scrollY > 40);
 });
+// Past the page header: the wordmark swaps out for the logo mark (see
+// .nav.past-hero in index.css), leaving just the logo and nav links.
+const galleryHero = document.querySelector('.gallery-hero');
+if(galleryHero){
+  new IntersectionObserver((entries)=>{
+    entries.forEach(entry=> siteNav.classList.toggle('past-hero', !entry.isIntersecting));
+  }, { threshold: 0 }).observe(galleryHero);
+}
 
 /* ============================================================
    BACK TO TOP
@@ -183,7 +191,7 @@ const categoryCounts = filterCategories.reduce((acc, cat)=>{
 const interstitials = [
   { beforeId:1, type:'break', cat:'Weddings', num:'01', text:'The Weddings' },
   { beforeId:5, type:'break', cat:'Cakes', num:'02', text:'The Cakes' },
-  { beforeId:302, type:'quote', quote:'The cake didn’t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
+  { beforeId:302, type:'quote', quote:'The cake didn’t just look expensive, it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
   { beforeId:302, type:'break', cat:'Catering & Events', num:'03', text:'The Catering & Styling' },
   { beforeId:10, type:'break', cat:'Finger Foods', num:'04', text:'The Finger Foods' },
 ];
@@ -318,7 +326,7 @@ function showEndCard(){
   div.innerHTML = `
     <span class="eyebrow" style="justify-content:center;">End of the Archive — For Now</span>
     <h3>You've seen all ${count} piece${count === 1 ? '' : 's'}${activeFilter === 'All' ? ' of our current collection' : ` in ${activeFilter}`}</h3>
-    <p>We photograph every order — this space grows every week. Follow along on Instagram for the newest work, or start your own.</p>
+    <p>We photograph every order, this space grows every week. Follow along on Instagram for the newest work, or start your own.</p>
     <div class="gal-end-ctas">
       <a href="#" class="btn btn-wine" id="galEndWaBtn">Start Your Order</a>
       <a href="#" class="btn btn-outline" target="_blank" rel="noopener">Follow on Instagram</a>
@@ -465,7 +473,7 @@ resetGrid(initialFilter);
 const videoTestimonials = [
   { name:'Dessert Table Detail', video:mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
   { name:'Wedding Cake Reveal', video:mediaUrl('videos/InShot_20251120_224656122.mp4'), tone:'tone-b' },
-  { name:'Wedding Day Moment', video:mediaUrl('videos/InShot_20251122_180814090.mp4'), tone:'tone-c' },
+  { name:'Wedding Day Moment', video:mediaUrl('videos/InShot_20251122_180814090-sm.mp4'), poster:mediaUrl('videos/InShot_20251122_180814090-poster.jpg'), tone:'tone-c' },
   { name:'Cake & Champagne Reveal', video:mediaUrl('videos/InShot_20251213_115333572.mp4'), tone:'tone-b' },
   { name:'Reception Cake Moment', video:mediaUrl('videos/InShot_20251217_202707600.mp4'), tone:'tone-c' },
 ];
@@ -474,9 +482,11 @@ videoTestimonials.forEach(v=>{
   const el = document.createElement('div');
   el.className = `media-frame reel-item ${v.tone}`;
   el.innerHTML = v.video
-    ? `<video src="${v.video}" muted loop playsinline preload="metadata"></video><div class="cap"><span class="who">${v.name}</span></div>`
+    ? `<video src="${v.video}"${v.poster ? ` poster="${v.poster}"` : ''} muted loop playsinline preload="auto"></video><div class="cap"><span class="who">${v.name}</span></div>`
     : `<div class="ring"></div><span class="play-badge">${ICONS.play}</span><div class="cap">${v.name}</div>`;
   videoReel.appendChild(el);
+  const reelVid = el.querySelector('video');
+  if(reelVid) bindMediaSkeleton(el, reelVid);
 });
 // Autoplay each clip only while it's actually in view (muted, so
 // autoplay is allowed cross-browser); pause it once scrolled away.
@@ -492,7 +502,7 @@ videoReel.querySelectorAll('video').forEach(v=> reelVideoObserver.observe(v));
    TESTIMONIAL QUOTES
 ============================================================ */
 const testimonials = [
-  { quote:'The cake didn\'t just look expensive — it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
+  { quote:'The cake didn\'t just look expensive, it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
   { quote:'We ordered small chops for 150 guests and everything arrived hot, on time, beautifully packed.', name:'Tunde O.', event:'Corporate Launch' },
   { quote:'The Afang soup alone made my mother-in-law\'s day. We\'re already booking for next year.', name:'Grace E.', event:'Family Owambe' },
   { quote:'Everyone thought we hired an event company from Lagos. It was one woman and a great team.', name:'Blessing N.', event:'40th Birthday' },

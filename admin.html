@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Orders | La Crème Admin</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<script src="config.js" defer></script>
+<script src="admin.js" defer></script>
+<style>
+  :root{ --wine:#7A0A1D; --ink:#18130F; --ivory:#FBF4E9; --muted:#6b6058; --line:#e4d9c8; --gold:#C7A155; --card:#fff; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--ivory); }
+  button{ font:inherit; cursor:pointer; }
+  input,select{ font:inherit; }
+  [hidden]{ display:none !important; }
+
+  /* login */
+  .login{ min-height:100vh; display:grid; place-items:center; padding:24px; }
+  .login form{ background:var(--card); padding:32px; border-radius:12px; width:100%; max-width:360px; box-shadow:0 10px 40px -20px rgba(24,19,15,.4); }
+  .login h1{ margin:0 0 4px; font-size:1.4rem; }
+  .login p{ margin:0 0 20px; color:var(--muted); font-size:.9rem; }
+  .field{ width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .field:focus{ outline:2px solid var(--wine); outline-offset:1px; }
+  .btn{ padding:11px 18px; border-radius:8px; border:1px solid var(--wine); background:var(--wine); color:#fff; font-weight:600; }
+  .btn:hover{ filter:brightness(1.1); }
+  .btn.ghost{ background:transparent; color:var(--wine); }
+  .btn.block{ width:100%; margin-top:12px; }
+  .err{ color:#b00020; font-size:.88rem; margin-top:10px; min-height:1.2em; }
+
+  /* app */
+  header.top{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 24px; background:var(--ink); color:var(--ivory); position:sticky; top:0; z-index:5; }
+  header.top h1{ margin:0; font-size:1.1rem; letter-spacing:.06em; }
+  header.top .right{ display:flex; gap:10px; align-items:center; }
+  header.top .btn{ padding:7px 14px; font-size:.85rem; background:transparent; border-color:rgba(251,244,233,.4); color:var(--ivory); }
+  main{ display:grid; grid-template-columns:minmax(0,1fr) 440px; gap:20px; padding:20px 24px; align-items:start; }
+  @media (max-width:1000px){ main{ grid-template-columns:1fr; } .detail{ position:static !important; } }
+
+  .filters{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .filters .field{ width:auto; flex:1 1 180px; padding:9px 12px; }
+  .stats{ color:var(--muted); font-size:.85rem; margin:0 0 10px; }
+
+  .list{ background:var(--card); border-radius:12px; overflow:hidden; box-shadow:0 4px 20px -14px rgba(24,19,15,.5); }
+  .row{ display:grid; grid-template-columns:1fr auto; gap:4px 12px; padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .row:last-child{ border-bottom:0; }
+  .row:hover{ background:#fdf9f2; }
+  .row.active{ background:#f7ece0; box-shadow:inset 3px 0 0 var(--wine); }
+  .row .no{ font-weight:600; font-size:.92rem; }
+  .row .who{ color:var(--muted); font-size:.88rem; }
+  .row .meta{ text-align:right; font-size:.82rem; color:var(--muted); }
+  .row .total{ font-weight:600; color:var(--ink); font-size:.95rem; }
+  .empty{ padding:40px; text-align:center; color:var(--muted); }
+
+  .pill{ display:inline-block; padding:2px 9px; border-radius:999px; font-size:.74rem; font-weight:600; background:#eee; color:#444; }
+  .pill.New{ background:#fde8ea; color:var(--wine); }
+  .pill.Confirmed{ background:#e6effb; color:#1a4d9c; }
+  .pill.InProgress{ background:#fff3d6; color:#8a5a00; }
+  .pill.Ready{ background:#e2f4e6; color:#1d6b32; }
+  .pill.Delivered{ background:#e8e8e8; color:#333; }
+  .pill.Cancelled{ background:#f1f1f1; color:#999; text-decoration:line-through; }
+
+  .detail{ background:var(--card); border-radius:12px; padding:22px; position:sticky; top:76px; box-shadow:0 4px 20px -14px rgba(24,19,15,.5); }
+  .detail h2{ margin:0 0 2px; font-size:1.05rem; word-break:break-all; }
+  .detail .sub{ color:var(--muted); font-size:.85rem; margin-bottom:16px; }
+  .kv{ display:grid; grid-template-columns:120px 1fr; gap:6px 12px; font-size:.92rem; margin:0 0 16px; }
+  .kv dt{ color:var(--muted); }
+  .kv dd{ margin:0; word-break:break-word; }
+  .items{ white-space:pre-wrap; background:#faf6ee; border:1px solid var(--line); border-radius:8px; padding:12px; font-size:.9rem; margin:0 0 16px; }
+  .actions{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .actions select{ padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .none{ color:var(--muted); text-align:center; padding:40px 10px; }
+
+  /* receipt: hidden on screen, the only thing printed */
+  #receipt{ display:none; }
+  @media print{
+    body{ background:#fff; }
+    body > *:not(#receipt){ display:none !important; }
+    #receipt{ display:block; max-width:380px; margin:0 auto; font:13px/1.45 "Courier New",monospace; color:#000; }
+    #receipt h1{ text-align:center; font-size:20px; margin:0; letter-spacing:.08em; }
+    #receipt .c{ text-align:center; }
+    #receipt hr{ border:0; border-top:1px dashed #000; margin:10px 0; }
+    #receipt .item{ display:flex; justify-content:space-between; gap:10px; }
+    #receipt .tot{ display:flex; justify-content:space-between; font-weight:bold; font-size:15px; }
+  }
+</style>
+</head>
+<body>
+
+<section class="login" id="loginView">
+  <form id="loginForm">
+    <h1>La Crème Admin</h1>
+    <p>Enter the admin password to view orders.</p>
+    <input class="field" type="password" id="password" placeholder="Password" autocomplete="current-password" required autofocus>
+    <button class="btn block" type="submit" id="loginBtn">Sign in</button>
+    <div class="err" id="loginErr" role="alert"></div>
+  </form>
+</section>
+
+<div id="appView" hidden>
+  <header class="top">
+    <h1>LA CRÈME · ORDERS</h1>
+    <div class="right">
+      <span id="updated" style="font-size:.78rem;opacity:.7"></span>
+      <button class="btn" id="refreshBtn" type="button">Refresh</button>
+      <button class="btn" id="logoutBtn" type="button">Sign out</button>
+    </div>
+  </header>
+  <main>
+    <section>
+      <div class="filters">
+        <input class="field" id="search" type="search" placeholder="Search number, name, phone or items">
+        <select class="field" id="statusFilter"><option value="">All statuses</option></select>
+        <select class="field" id="typeFilter">
+          <option value="">All types</option><option>Cake</option><option>Finger Foods</option>
+          <option>Catering</option><option>Finger Foods + Catering</option>
+        </select>
+      </div>
+      <p class="stats" id="stats"></p>
+      <div class="list" id="list"></div>
+    </section>
+    <aside class="detail" id="detail"><div class="none">Select an order to see the full details.</div></aside>
+  </main>
+</div>
+
+<div id="receipt"></div>
+</body>
+</html>

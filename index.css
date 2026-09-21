@@ -142,26 +142,23 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
    the visible one stays pinned in the space-between layout as if
    the hidden element were still there. */
 .nav-brand, .nav-links{ opacity: 1; transition: opacity .35s ease; }
-.nav.hero-toggle.past-hero .nav-brand,
+.nav.past-hero .nav-brand,
 .nav.hero-toggle:not(.past-hero) .nav-links{
   opacity: 0; visibility: hidden; pointer-events: none; position: absolute;
 }
 /* Persistent brand mark, pinned to the left independent of the
    nav-brand/nav-links flex flow (same absolute-pin technique as
    .cart-widget on the right) so it never shifts either of them.
-   gallery.html's nav (no .hero-toggle) shows it right away; on
-   index.html it only appears once past-hero (after scrolling), with the
-   nav content centered between it and the cart. */
+   Both pages show it only once past-hero (after scrolling past the
+   hero), replacing the wordmark, with the nav links centered. */
 .nav-logo{
   position: absolute; top: 50%; left: 28px; transform: translateY(-50%);
   display:flex; align-items:center; opacity: 0; pointer-events: none;
   transition: opacity .35s ease;
 }
 .nav-logo img{ height: 32px; width:auto; display:block; }
-.nav:not(.hero-toggle) .nav-logo,
-.nav.hero-toggle.past-hero .nav-logo{ opacity: 1; pointer-events: auto; }
-.nav.hero-toggle.past-hero .container,
-.nav:not(.hero-toggle) .container{ justify-content: center; }
+.nav.past-hero .nav-logo{ opacity: 1; pointer-events: auto; }
+.nav.past-hero .container{ justify-content: center; }
 @media (max-width: 480px){
   .nav-logo{ top: 0; transform: none; }
 }
@@ -296,10 +293,6 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   content:""; position:absolute; inset: 14px; border: 1px solid var(--gold-line); pointer-events:none;
 }
 .about-frame .placeholder-icon{ opacity: 0.9; }
-.about-frame figcaption{
-  position:absolute; left:24px; right:24px; bottom:22px;
-  color: var(--gold-soft); font-family: var(--font-display); font-style: italic; font-size: 0.95rem;
-}
 .about-copy .eyebrow{ margin-bottom: 4px; }
 .about-copy h2{ font-size: clamp(2rem, 3.6vw, 2.7rem); margin: 14px 0 22px; }
 .about-copy p{ color: var(--text-muted); margin-bottom: 16px; max-width: 54ch; }
@@ -335,6 +328,8 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   animation: skeletonShine 1.4s ease-in-out infinite;
 }
 .media-frame.skel img, .media-frame.skel video{ opacity: 0; }
+/* Reel clips keep their poster visible while the shimmer runs behind it. */
+.reel-item.skel video{ opacity: 1; }
 @keyframes skeletonShine{ 0%{ background-position: 200% 0; } 100%{ background-position: -200% 0; } }
 .media-frame .cap{
   color: var(--gold-soft); font-size: 0.72rem; letter-spacing: 0.06em; text-align:center; padding: 0 16px;
@@ -533,6 +528,14 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 
 .sc-picker-row{ display:flex; gap: 28px; flex-wrap:wrap; }
 .sc-note{ font-size: 0.78rem; color: var(--text-muted); margin-top: 10px; max-width: 32ch; text-align:left; }
+
+/* What's in each pack, listed under the style chips (see
+   RICE_STYLE_NOTES in index.js) — the pack name carries the weight so
+   the two options can be told apart at a glance. */
+.pack-contents{ list-style:none; margin-top: 12px; display:grid; gap: 6px; }
+.pack-contents li{ display:flex; gap: 10px; align-items:baseline; font-size: 0.82rem; }
+.pack-contents strong{ color: var(--ink); font-weight: 600; min-width: 68px; flex-shrink:0; }
+.pack-contents span{ color: var(--text-muted); }
 
 .liter-chips{ display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0; }
 .liter-chip{

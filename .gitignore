@@ -10,3 +10,7 @@ Thumbs.db
 
 # One-off local admin tool, not part of the site
 _image-review.html
+
+# Cloudflare Worker local dev state / secrets
+.wrangler/
+.dev.vars

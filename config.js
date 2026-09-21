@@ -10,7 +10,13 @@ const CONFIG = {
   // La Crème business WhatsApp number. Digits only, country code
   // first, no + and no leading 0. e.g. 0803 123 4567 -> "2348031234567"
   whatsappNumber: '2348066556677',
-  businessName: 'La Crème'
+  businessName: 'La Crème',
+
+  // Base URL of the order API Worker (see worker/README.md), e.g.
+  // 'https://la-creme-orders.<your-subdomain>.workers.dev'. Orders are
+  // logged to it and the admin page (admin.html) reads from it. Leave ''
+  // to disable logging (orders still go to WhatsApp).
+  ordersApi: ''
 };
 
 const contactPhoneDisplayEl = document.getElementById('contactPhoneDisplay');
@@ -22,12 +28,81 @@ if(contactPhoneDisplayEl){
 function waLink(message){
   return `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(message)}`;
 }
+/* Opens WhatsApp, and survives a blocked popup rather than failing
+   silently — which is the common case in the in-app browsers (Instagram,
+   Facebook) that most of this traffic arrives from.
+
+   Note the deliberate absence of 'noopener' in the feature string: per
+   spec window.open() returns null when noopener is set, so there'd be no
+   way to tell "blocked" from "opened fine". We ask for a handle instead
+   and sever opener ourselves. If we got no handle the popup was blocked,
+   so we navigate this tab to WhatsApp instead — a same-tab navigation
+   from inside a user gesture is never blocked. The in-progress cart is
+   already saved to localStorage, so coming back restores it. */
 function openWhatsApp(message){
-  // noopener,noreferrer: prevents the new wa.me tab from getting a
-  // handle back to this page via window.opener.
-  window.open(waLink(message), '_blank', 'noopener,noreferrer');
+  const url = waLink(message);
+  let win = null;
+  try{ win = window.open(url, '_blank'); }catch(e){ win = null; }
+  if(win){
+    try{ win.opener = null; }catch(e){ /* cross-origin once it navigates */ }
+    return true;
+  }
+  window.location.href = url;
+  return false;
 }
 function fmtNaira(n){ return '₦' + n.toLocaleString('en-NG'); }
+
+/* ============================================================
+   ORDER NUMBERS + ORDER LOG
+
+   Every order gets a reference the customer and the kitchen can both
+   quote: date + time down to the millisecond + the customer's initials,
+   e.g. 20260921-091533123-GI. The millisecond field is what makes it
+   unique; initials just make it human-recognisable in a WhatsApp thread.
+
+   logOrder() posts the same order to the order API so there's a
+   record even if the customer never actually sends the WhatsApp message
+   (view them in admin.html). It's deliberately fire-and-forget: sendBeacon
+   survives the page navigating away to WhatsApp a moment later, and a failed log must
+   never block or delay the order itself.
+============================================================ */
+function orderInitials(name){
+  const letters = String(name || '')
+    .split(/\s+/)
+    .map(word=> (word.match(/[A-Za-z]/) || [''])[0])
+    .filter(Boolean)
+    .slice(0, 3)
+    .join('')
+    .toUpperCase();
+  return letters || 'XX';
+}
+
+function generateOrderNumber(name){
+  const d = new Date();
+  const p = (n, len = 2)=> String(n).padStart(len, '0');
+  const date = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+  const time = `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}${p(d.getMilliseconds(), 3)}`;
+  return `${date}-${time}-${orderInitials(name)}`;
+}
+
+function logOrder(order){
+  if(!CONFIG.ordersApi) return;
+  const endpoint = CONFIG.ordersApi.replace(/\/+$/, '') + '/api/orders';
+  // text/plain keeps this a "simple" request, so the browser doesn't
+  // need a CORS preflight before the order is sent.
+  const body = JSON.stringify(order);
+  try{
+    if(navigator.sendBeacon){
+      const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
+      if(navigator.sendBeacon(endpoint, blob)) return;
+    }
+    fetch(endpoint, {
+      method: 'POST', mode: 'no-cors', keepalive: true,
+      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body
+    }).catch(()=>{});
+  }catch(e){ /* logging must never break checkout */ }
+}
 
 /* ============================================================
    MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather

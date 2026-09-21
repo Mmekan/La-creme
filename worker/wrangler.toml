@@ -1,0 +1,13 @@
+name = "la-creme-orders"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "la-creme-orders"
+# Filled in by: npx wrangler d1 create la-creme-orders
+database_id = "56b749e6-a899-4126-b93b-9c5b4a5a222a"
+
+# Secrets (never put these in this file), set with:
+#   npx wrangler secret put ADMIN_PASSWORD
+#   npx wrangler secret put SESSION_SECRET
