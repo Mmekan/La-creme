@@ -723,7 +723,10 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .news-modal-close:hover{ opacity: 0.7; }
 .news-modal-gallery{ display:flex; height: 150px; }
 .news-modal-gallery img{ flex:1; height:100%; object-fit:cover; min-width:0; }
-.news-modal-body{ padding: 26px 26px 22px; }
+.news-modal-body{ padding: 26px 26px 4px; }
+/* Near-pill, not the base .btn's 3px corners, so it reads as the one
+   thing in the popup worth tapping. */
+.news-modal-cta{ margin: 10px 26px 24px; width: calc(100% - 52px); justify-content:center; border-radius: 999px; }
 .news-modal-tag{
   display:inline-flex; align-items:center; gap:8px;
   font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase;

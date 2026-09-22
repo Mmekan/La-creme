@@ -21,7 +21,8 @@ const NEWS_ITEMS = [
       mediaUrl('img/cakeslice1-sm.jpg'),
       mediaUrl('img/cakeslice2-sm.jpg'),
     ],
-    ctaHref: 'index.html#finger-foods', // ticker click-through
+    ctaLabel: 'Order Now',
+    ctaHref: 'index.html#finger-foods', // ticker click-through, and the popup's Order Now button
   },
 ];
 
@@ -66,6 +67,9 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   // CSS duration) so it can never drift out of sync with the actual
   // auto-dismiss delay above.
   document.getElementById('newsModalTimerBar').style.animationDuration = `${AUTO_DISMISS_MS}ms`;
+  const ctaEl = document.getElementById('newsModalCta');
+  ctaEl.textContent = item.ctaLabel || 'Order Now';
+  ctaEl.href = item.ctaHref || '#';
 
   let dismissTimer;
   function closeNewsModal(){
@@ -74,6 +78,7 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   }
   document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
   document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
+  ctaEl.addEventListener('click', closeNewsModal);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && newsModal.classList.contains('open')) closeNewsModal(); });
 
   sessionStorage.setItem('lcNewsSeen', '1');

@@ -26,7 +26,8 @@ const NEWS_ITEMS = [
       mediaUrl('img/cakeslice1-sm.jpg'),
       mediaUrl('img/cakeslice2-sm.jpg'),
     ],
-    ctaHref: 'index.html#finger-foods', // ticker click-through; works from both index.html and gallery.html
+    ctaLabel: 'Order Now',
+    ctaHref: 'index.html#finger-foods', // ticker click-through, and the popup's Order Now button; works from both index.html and gallery.html
   },
 ];
 
@@ -71,6 +72,9 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   // CSS duration) so it can never drift out of sync with the actual
   // auto-dismiss delay above.
   document.getElementById('newsModalTimerBar').style.animationDuration = `${AUTO_DISMISS_MS}ms`;
+  const ctaEl = document.getElementById('newsModalCta');
+  ctaEl.textContent = item.ctaLabel || 'Order Now';
+  ctaEl.href = item.ctaHref || '#';
 
   let dismissTimer;
   function closeNewsModal(){
@@ -79,6 +83,7 @@ if(newsModal && NEWS_ITEMS.length && !sessionStorage.getItem('lcNewsSeen')){
   }
   document.getElementById('newsModalClose').addEventListener('click', closeNewsModal);
   document.getElementById('newsModalBackdrop').addEventListener('click', closeNewsModal);
+  ctaEl.addEventListener('click', closeNewsModal);
   document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && newsModal.classList.contains('open')) closeNewsModal(); });
 
   sessionStorage.setItem('lcNewsSeen', '1');
@@ -1485,7 +1490,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
         return [...(cakes.length === 1 && detail !== 'summary' ? lines.slice(1) : lines), ``];
       }),
       eventBits.length ? `Event: ${eventBits.join(', ')}` : null,
-      `*Total ${fmtNaira(total)}*${cakes.length ? ' (cakes quoted separately)' : ''}`,
+      `*Total ${fmtNaira(total)}*${cakes.length ? ` (cake price${cakes.length > 1 ? 's' : ''} to be shared on WhatsApp)` : ''}`,
       `${checkoutDelivery}${address ? `, ${address}` : ''}`,
       date ? `Needed: ${date}` : null,
       notes ? `Notes: ${trimText(notes, detail === 'full' ? 300 : 100)}` : null,
@@ -1505,7 +1510,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     guests: hasCat ? guests : '',
     serviceType: hasCat ? checkoutServiceType : '',
     items: [...ffItemLines, ...cateringItemLines, ...cakes.map(cakeLogText)].join('\n'),
-    total: fmtNaira(total) + (cakes.length ? ' + cake quote' : ''),
+    total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
     notes
   });
 
@@ -1604,13 +1609,11 @@ const CART_SOURCES = {
       renderCatering();
     }
   },
-  // Cakes have no fixed price (quoted directly on WhatsApp) and no
-  // per-line quantity — each entry is one full cake spec, added via
-  // "Add to Cart" and only removable, not adjustable, from here.
-  // Not part of the "Checkout All" flow below: cakes are finalized
-  // from their own "Checkout Now" button in the Cakes section, which
-  // has the richer per-cake detail (tiers, custom-order flag, etc.)
-  // that a generic cart line can't show.
+  // Cakes have no fixed price (shared directly on WhatsApp, since every
+  // cake is bespoke) and no per-line quantity — each entry is one full
+  // cake spec, added via "Add to Cart" and only removable, not
+  // adjustable, from here. Rides along with Finger Foods/Catering when
+  // "Checkout All" is used; see the checkout submit handler below.
   cake: {
     title: 'Cake Order',
     lines(){
@@ -1619,7 +1622,7 @@ const CART_SOURCES = {
         name: `${c.occasion} Cake — ${c.tiersLabel}`,
         qty: 1,
         unitPrice: 0,
-        priceLabel: 'Quote on request',
+        priceLabel: 'Price via WhatsApp',
         stepper: false
       }));
     },
