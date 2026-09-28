@@ -252,16 +252,16 @@ testimonials.forEach(t=>{
 
 /* ============================================================
    ORDER DATE RESTRICTION — every "Date Needed" field on the site
-   requires at least a 1-day lead time (so choosing on a Monday, the
-   earliest pickable date is Tuesday), enforced both as the native
-   date-picker's min (blocks selecting an earlier date in the UI) and
-   as an explicit JS check at submit time (covers keyboard-typed
-   dates a picker's min doesn't always catch). Uses local
+   allows today at the earliest, never a day before, enforced both as
+   the native date-picker's min (blocks selecting an earlier date in
+   the UI) and as an explicit JS check at submit time (covers
+   keyboard-typed dates, and iOS Safari's date wheel, which doesn't
+   always honor `min` the way desktop browsers do). Uses local
    year/month/day rather than toISOString(), which is UTC-based and
    can land on the wrong calendar day depending on the visitor's
    timezone offset.
 ============================================================ */
-const MIN_ORDER_LEAD_DAYS = 1;
+const MIN_ORDER_LEAD_DAYS = 0;
 function minOrderDate(daysAhead = MIN_ORDER_LEAD_DAYS){
   const d = new Date();
   d.setDate(d.getDate() + daysAhead);
@@ -274,15 +274,28 @@ document.getElementById('cakeDate').min = minOrderDate();
 document.getElementById('checkoutDate').min = minOrderDate();
 
 /* ============================================================
-   CAKE DESIGN GALLERY MODAL — "Cakes"-category photos, filtered
-   out of GALLERY_ITEMS (gallery-data.js, shared with gallery.html
-   so nothing is duplicated). Renders in batches with the same
-   lazy-load pattern as the real gallery, appended as the user
-   scrolls the modal itself close to its bottom.
+   CAKE DESIGN GALLERY MODAL — cake-category photos, filtered out of
+   GALLERY_ITEMS (gallery-data.js, shared with gallery.html so nothing
+   is duplicated). Has its own filter tabs (the cake-only subset of
+   the real gallery's categories) and auto-picks the matching one when
+   the occasion field already narrows it down — Wedding opens straight
+   into "Wedding Cakes", Anniversary into "Anniversary" — so the user
+   isn't stuck rebrowsing everything they already told the form.
+   Renders in batches with the same lazy-load pattern as the real
+   gallery, appended as the user scrolls the modal itself near its
+   bottom.
 ============================================================ */
-const cakeGalleryItems = GALLERY_ITEMS.filter(item => item.category === 'Cakes');
+const OCCASION_TO_CAKE_FILTER = { Wedding: 'Wedding Cakes', Anniversary: 'Anniversary' };
 const CGM_BATCH_SIZE = 24;
+let cgmActiveFilter = 'All';
+let cgmItems = [];
 let cgmRendered = 0;
+
+function cgmItemsForFilter(filter){
+  return filter === 'All'
+    ? GALLERY_ITEMS.filter(item => CAKE_FILTER_CATEGORIES.includes(item.category))
+    : GALLERY_ITEMS.filter(item => item.category === filter);
+}
 
 const cgmImageObserver = new IntersectionObserver((entries)=>{
   entries.forEach(entry=>{
@@ -296,9 +309,10 @@ const cgmImageObserver = new IntersectionObserver((entries)=>{
 
 const cgmGrid = document.getElementById('cgmGrid');
 const cgmSentinel = document.getElementById('cgmSentinel');
+const cgmFilters = document.getElementById('cgmFilters');
 
 function cgmLoadMore(){
-  const next = cakeGalleryItems.slice(cgmRendered, cgmRendered + CGM_BATCH_SIZE);
+  const next = cgmItems.slice(cgmRendered, cgmRendered + CGM_BATCH_SIZE);
   next.forEach(item=>{
     const tile = document.createElement('div');
     tile.className = 'cgm-tile';
@@ -312,16 +326,38 @@ function cgmLoadMore(){
   cgmRendered += next.length;
 }
 
+function cgmResetGrid(filter){
+  cgmActiveFilter = filter;
+  cgmItems = cgmItemsForFilter(filter);
+  cgmRendered = 0;
+  cgmGrid.innerHTML = '';
+  cgmFilters.querySelectorAll('.gal-filter').forEach(b=> b.classList.toggle('active', b.dataset.filter === filter));
+  cgmLoadMore();
+}
+
+const cgmFilterCounts = { All: cgmItemsForFilter('All').length };
+CAKE_FILTER_CATEGORIES.forEach(cat=>{ cgmFilterCounts[cat] = cgmItemsForFilter(cat).length; });
+['All', ...CAKE_FILTER_CATEGORIES].forEach(cat=>{
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'gal-filter';
+  btn.dataset.filter = cat;
+  btn.innerHTML = `${cat} <span class="gf-count">${cgmFilterCounts[cat]}</span>`;
+  btn.addEventListener('click', ()=>{ if(cat !== cgmActiveFilter) cgmResetGrid(cat); });
+  cgmFilters.appendChild(btn);
+});
+
 const cgmScrollObserver = new IntersectionObserver((entries)=>{
   entries.forEach(entry=>{
-    if(entry.isIntersecting && cgmRendered < cakeGalleryItems.length) cgmLoadMore();
+    if(entry.isIntersecting && cgmRendered < cgmItems.length) cgmLoadMore();
   });
 }, { rootMargin: '300px 0px' });
 cgmScrollObserver.observe(cgmSentinel);
 
 const cakeGalleryModal = document.getElementById('cakeGalleryModal');
 document.getElementById('cakeGalleryOpenBtn').addEventListener('click', ()=>{
-  if(!cgmRendered) cgmLoadMore();
+  const targetFilter = OCCASION_TO_CAKE_FILTER[cakeOccasionEl.value] || 'All';
+  if(targetFilter !== cgmActiveFilter || !cgmRendered) cgmResetGrid(targetFilter);
   openModal(cakeGalleryModal);
 });
 document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
@@ -416,14 +452,83 @@ function syncTierRows(){
   Array.from(desired).sort((a,b)=> a - b).forEach(n=> addTierRow(n));
 }
 
-function updateTierAvailability(){
-  const isBirthday = cakeOccasionEl.value === 'Birthday';
-  birthdayTierNote.style.display = isBirthday ? 'block' : 'none';
-  [tierOpt4, tierOpt5plus, tierOptCustom].forEach(opt=>{
+const tierOpt1 = document.getElementById('tierOpt1');
+const tierOpt2 = document.getElementById('tierOpt2');
+const tierOpt3 = document.getElementById('tierOpt3');
+const ALL_TIER_OPTS = [tierOpt1, tierOpt2, tierOpt3, tierOpt4, tierOpt5plus, tierOptCustom];
+const cakeInscriptionLabel = document.getElementById('cakeInscriptionLabel');
+const cakeInscriptionEl = document.getElementById('cakeInscription');
+const cakeFinishEl = document.getElementById('cakeFinish');
+
+// Which preset tier counts (or 'custom') are pickable for a given
+// occasion — no entry here means no restriction. Every disallowed tier
+// gets unchecked below, not just the ones a given occasion happens to
+// restrict, so switching occasions always leaves a clean slate rather
+// than a leftover selection from before.
+const TIER_RULES = {
+  Birthday: { allow: [1, 2, 3], note: 'Birthday cakes are available in 1–3 tiers/steps.' },
+  Wedding: { allow: ['custom'], note: "Wedding cakes are fully bespoke — choose Custom and we'll confirm the exact tier count with you on WhatsApp." },
+};
+
+let cakeFinishPrevValue = '';
+
+function applyOccasionRules(){
+  const occasion = cakeOccasionEl.value;
+  const rule = TIER_RULES[occasion];
+
+  birthdayTierNote.textContent = rule ? rule.note : '';
+  birthdayTierNote.style.display = rule ? 'block' : 'none';
+
+  ALL_TIER_OPTS.forEach(opt=>{
     const input = opt.querySelector('input');
-    opt.classList.toggle('tier-option--disabled', isBirthday);
-    input.disabled = isBirthday;
-    if(isBirthday && input.checked){
+    const isCustomOpt = input === tierCustomCheckbox;
+    const key = isCustomOpt ? 'custom' : Number(input.dataset.count);
+    const allowed = !rule || rule.allow.includes(key);
+    opt.classList.toggle('tier-option--disabled', !allowed);
+    input.disabled = !allowed;
+    // Every occasion switch clears whatever tier was picked before,
+    // allowed under the new occasion or not — carrying a selection
+    // over across occasions is more confusing than making the user
+    // re-pick it, and it's what keeps this a true single-select.
+    if(input.checked){
+      input.checked = false;
+      opt.classList.remove('selected');
+      if(isCustomOpt){
+        tierCustomField.style.display = 'none';
+        tierCustomCount.value = '';
+      }
+    }
+  });
+  syncTierRows();
+
+  // Wedding cake wording is almost always just initials on the topper
+  // (e.g. "J & A"), not a full message, so relabel the field instead of
+  // adding a second, wedding-only input.
+  const isWedding = occasion === 'Wedding';
+  cakeInscriptionLabel.textContent = isWedding ? 'Initials on Cake' : 'Inscription / Wording on Cake';
+  cakeInscriptionEl.placeholder = isWedding ? 'e.g. J & A' : 'e.g. Happy 30th, Ada!';
+
+  // Wedding cakes default to (and stay) fondant, the standard finish for
+  // stacked tiers — whatever was picked before is restored once the
+  // occasion changes away from Wedding.
+  if(isWedding){
+    if(!cakeFinishEl.disabled) cakeFinishPrevValue = cakeFinishEl.value;
+    cakeFinishEl.value = 'Fondant';
+    cakeFinishEl.disabled = true;
+  } else if(cakeFinishEl.disabled){
+    cakeFinishEl.disabled = false;
+    cakeFinishEl.value = cakeFinishPrevValue;
+  }
+}
+cakeOccasionEl.addEventListener('change', applyOccasionRules);
+
+// Tiers are checkboxes (not radios) so a selection can be cleared by
+// re-clicking it, but only one may ever be checked at once — checking
+// any of them unchecks whatever else was picked.
+function selectSingleTier(chosenInput){
+  ALL_TIER_OPTS.forEach(opt=>{
+    const input = opt.querySelector('input');
+    if(input !== chosenInput && input.checked){
       input.checked = false;
       opt.classList.remove('selected');
       if(input === tierCustomCheckbox){
@@ -432,18 +537,18 @@ function updateTierAvailability(){
       }
     }
   });
-  syncTierRows();
 }
-cakeOccasionEl.addEventListener('change', updateTierAvailability);
 
 tierSelectEl.querySelectorAll('.tier-option input[data-count]').forEach(input=>{
   input.addEventListener('change', ()=>{
+    if(input.checked) selectSingleTier(input);
     input.closest('.tier-option').classList.toggle('selected', input.checked);
     syncTierRows();
   });
 });
 
 tierCustomCheckbox.addEventListener('change', ()=>{
+  if(tierCustomCheckbox.checked) selectSingleTier(tierCustomCheckbox);
   tierOptCustom.classList.toggle('selected', tierCustomCheckbox.checked);
   tierCustomField.style.display = tierCustomCheckbox.checked ? 'block' : 'none';
   if(!tierCustomCheckbox.checked) tierCustomCount.value = '';
@@ -522,7 +627,7 @@ function validateCakeFields(){
     return null;
   }
   if(date < minOrderDate()){
-    showToast(`We need at least ${MIN_ORDER_LEAD_DAYS} days' notice — please pick a date from ${minOrderDate()} onward.`);
+    showToast(`Please pick a date from ${minOrderDate()} onward — we can't schedule for a past date.`);
     flagInvalidField(dateEl);
     return null;
   }
@@ -568,10 +673,11 @@ function resetCakeFields(){
   tierConfigEl.innerHTML = '';
   document.getElementById('cakeDate').value = '';
   document.getElementById('cakeFlavor').value = '';
-  document.getElementById('cakeFinish').value = '';
+  cakeFinishEl.disabled = false;
+  cakeFinishEl.value = '';
   document.getElementById('cakeInscription').value = '';
   document.getElementById('cakeDesign').value = '';
-  updateTierAvailability();
+  applyOccasionRules();
 }
 
 /* ============================================================
@@ -758,7 +864,7 @@ const CHIN_CHIN_VARIANTS = [
   { id:'cc-bucket', name:'Chin Chin — Bucket', unit:'bucket', price:15000 },
 ];
 const fingerFoodMenu = [
-  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'pack of 12', price:1000 },
+  { id:'meat-pie', name:'Meat Pie', desc:'Buttery pastry, seasoned minced meat', unit:'piece', price:1000 },
   { id:'cake-slices', name:'Cake Slices', desc:'Delicious cake slices for any occasion', unit:'slice', price:3500, needsFlavour:true },
 ];
 const ALL_FF_ITEMS = [...SMALL_CHOPS_VARIANTS, ...CHIN_CHIN_VARIANTS, ...fingerFoodMenu];
@@ -964,10 +1070,6 @@ fingerFoodMenu.forEach(item=>{
 });
 
 function renderFF(){
-  let count = 0, total = 0;
-  const listEl = document.getElementById('ffList');
-  listEl.innerHTML = '';
-
   fingerFoodMenu.forEach(item=>{
     document.getElementById(`ff-qty-${item.id}`).textContent = ffState[item.id];
     if(item.needsFlavour){
@@ -975,30 +1077,8 @@ function renderFF(){
     }
   });
   ffWidgets.forEach(w=> w.syncQty());
-
-  ALL_FF_ITEMS.forEach(item=>{
-    const qty = ffState[item.id];
-    if(qty > 0){
-      count += qty; total += qty * item.price;
-      const flavourNote = item.needsFlavour && ffFlavours[item.id] ? ` — Flavour: ${ffFlavours[item.id]}` : '';
-      const row = document.createElement('div');
-      row.className = 'summary-row';
-      row.innerHTML = `<div><div class="s-name">${item.name} × ${qty}${flavourNote}</div><div class="s-meta">${fmtNaira(item.price * qty)}</div></div>
-        <button type="button" class="s-remove" data-id="${item.id}">Remove</button>`;
-      row.querySelector('.s-remove').addEventListener('click', ()=>{ ffState[item.id] = 0; renderFF(); });
-      listEl.appendChild(row);
-    }
-  });
-
-  document.getElementById('ffCount').textContent = count;
-  document.getElementById('ffTotal').textContent = fmtNaira(total);
-  document.getElementById('ffEmpty').style.display = count ? 'none' : 'block';
-  document.getElementById('ffCheckout').style.display = count ? 'block' : 'none';
-  document.getElementById('fingerFoodSummary').style.display = count ? 'block' : 'none';
   if(typeof refreshCartUI === 'function') refreshCartUI();
 }
-
-document.getElementById('ffCheckoutBtn').addEventListener('click', openCheckoutModal);
 
 /* ============================================================
    CATERING — Soups, Rice, Proteins (liter/qty based)
@@ -1158,7 +1238,7 @@ function buildRiceRow(item){
     <div class="m-extra">
       <span class="m-extra-label">Type</span>
       <div class="liter-chips" data-role="type">
-        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t}</button>`).join('')}
+        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t} (${fmtNaira(RICE_PRICING[t].Standard)}–${fmtNaira(RICE_PRICING[t].Classic)})</button>`).join('')}
       </div>
     </div>
     <div class="m-extra" data-role="style-wrap" style="display:none;">
@@ -1196,6 +1276,16 @@ function buildRiceRow(item){
     renderCatering();
   }
 
+  // Style chips' prices depend on which type is picked (Lunchpack vs
+  // Tray), so their label is (re)written here rather than baked into
+  // the static template.
+  function refreshStyleChipLabels(){
+    if(!sel.type) return;
+    styleChips.querySelectorAll('.liter-chip').forEach(chip=>{
+      chip.textContent = `${chip.dataset.value} (${fmtNaira(RICE_PRICING[sel.type][chip.dataset.value])})`;
+    });
+  }
+
   typeChips.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       const already = chip.classList.contains('selected');
@@ -1211,6 +1301,7 @@ function buildRiceRow(item){
         chip.classList.add('selected');
         sel.type = chip.dataset.value;
         styleWrap.style.display = 'block';
+        refreshStyleChipLabels();
       }
       commit();
     });
@@ -1269,43 +1360,11 @@ cateringProteins.forEach(item=>{
 });
 
 function renderCatering(){
-  let count = 0, total = 0;
-  const listEl = document.getElementById('catList');
-  listEl.innerHTML = '';
-
-  Object.values(catState.soups).forEach(s=>{
-    count += s.qty; total += s.qty * s.unitPrice;
-    const row = document.createElement('div'); row.className = 'summary-row';
-    row.innerHTML = `<div><div class="s-name">${s.name}, ${s.label}${s.qty > 1 ? ` × ${s.qty}` : ''}</div><div class="s-meta">${fmtNaira(s.qty * s.unitPrice)}</div></div>`;
-    listEl.appendChild(row);
-  });
-  Object.values(catState.rice).forEach(r=>{
-    count++; total += r.price;
-    const row = document.createElement('div'); row.className = 'summary-row';
-    row.innerHTML = `<div><div class="s-name">${r.name}, ${r.label}</div><div class="s-meta">${fmtNaira(r.price)}</div></div>`;
-    listEl.appendChild(row);
-  });
   cateringProteins.forEach(p=>{
-    const qty = catState.proteins[p.id];
-    document.getElementById(`cat-qty-${p.id}`).textContent = qty;
-    if(qty > 0){
-      count += qty; total += qty * p.price;
-      const row = document.createElement('div'); row.className = 'summary-row';
-      row.innerHTML = `<div><div class="s-name">${p.name} × ${qty}</div><div class="s-meta">${fmtNaira(qty * p.price)}</div></div>
-        <button type="button" class="s-remove" data-id="${p.id}">Remove</button>`;
-      row.querySelector('.s-remove').addEventListener('click', ()=>{ catState.proteins[p.id] = 0; renderCatering(); });
-      listEl.appendChild(row);
-    }
+    document.getElementById(`cat-qty-${p.id}`).textContent = catState.proteins[p.id];
   });
-
-  document.getElementById('catCount').textContent = count;
-  document.getElementById('catTotal').textContent = fmtNaira(total);
-  document.getElementById('catEmpty').style.display = count ? 'none' : 'block';
-  document.getElementById('catCheckout').style.display = count ? 'block' : 'none';
   if(typeof refreshCartUI === 'function') refreshCartUI();
 }
-
-document.getElementById('catCheckoutBtn').addEventListener('click', openCheckoutModal);
 
 /* ============================================================
    CHECKOUT — one modal, shared by Finger Foods and Catering (cakes
@@ -1418,7 +1477,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     return;
   }
   if(date && date < minOrderDate()){
-    showToast(`We need at least ${MIN_ORDER_LEAD_DAYS} days' notice — please pick a date from ${minOrderDate()} onward.`);
+    showToast(`Please pick a date from ${minOrderDate()} onward — we can't schedule for a past date.`);
     flagInvalidField(dateEl);
     return;
   }
@@ -1759,17 +1818,142 @@ cartDropdown.addEventListener('mouseleave', ()=>{
   if(cartDropdown.classList.contains('open')) scheduleCartAutoDismiss();
 });
 
+const cartBackdrop = document.getElementById('cartBackdrop');
+let bodyScrollLockCount = 0;
+function lockBodyScroll(){
+  if(bodyScrollLockCount === 0) document.body.style.overflow = 'hidden';
+  bodyScrollLockCount++;
+}
+function unlockBodyScroll(){
+  bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+  if(bodyScrollLockCount === 0) document.body.style.overflow = '';
+}
+
+/* ============================================================
+   ONBOARDING WALKTHROUGH — a generic, reusable "spotlight this
+   element and say something about it, once" primitive. Only one step
+   is wired up right now (see the first-add branch in updateCartIcon()
+   below), but showWalkthroughStep() takes any target/text/storageKey
+   so more can be added later without new plumbing.
+============================================================ */
+const walkthroughBackdrop     = document.getElementById('walkthroughBackdrop');
+const walkthroughTip          = document.getElementById('walkthroughTip');
+const walkthroughTipText      = document.getElementById('walkthroughTipText');
+const walkthroughTipDismissBtn = document.getElementById('walkthroughTipDismiss');
+let walkthroughActive = null; // the current step's dismiss(), or null
+
+function positionWalkthroughTip(target){
+  const rect = target.getBoundingClientRect();
+  const margin = 14;
+  walkthroughTip.classList.remove('walkthrough-tip--above');
+  // Measure first at a provisional spot so getBoundingClientRect below
+  // reflects the tip's real (wrapped) size at this viewport width.
+  walkthroughTip.style.left = '0px';
+  walkthroughTip.style.top = '0px';
+  const tipRect = walkthroughTip.getBoundingClientRect();
+
+  let left = Math.min(
+    Math.max(16, rect.right - tipRect.width),
+    window.innerWidth - tipRect.width - 16
+  );
+  let top = rect.bottom + margin;
+  if(top + tipRect.height > window.innerHeight - 16){
+    top = rect.top - tipRect.height - margin;
+    walkthroughTip.classList.add('walkthrough-tip--above');
+  }
+
+  walkthroughTip.style.left = `${left}px`;
+  walkthroughTip.style.top = `${top}px`;
+  const arrowLeft = Math.max(16, Math.min(rect.left + rect.width / 2 - left, tipRect.width - 16));
+  walkthroughTip.style.setProperty('--wt-arrow-left', `${arrowLeft}px`);
+}
+
+function hasSeenWalkthrough(key){
+  try{ return !!localStorage.getItem(key); }catch(e){ return true; } // storage unusable — don't show
+}
+function markWalkthroughSeen(key){
+  try{ localStorage.setItem(key, '1'); }catch(e){}
+}
+
+function showWalkthroughStep({ target, text, storageKey }){
+  if(storageKey && hasSeenWalkthrough(storageKey)) return;
+  if(walkthroughActive) walkthroughActive();
+
+  walkthroughTipText.textContent = text;
+  walkthroughBackdrop.hidden = false;
+  walkthroughTip.hidden = false;
+  target.classList.add('walkthrough-highlight');
+  positionWalkthroughTip(target);
+  requestAnimationFrame(()=>{
+    walkthroughBackdrop.classList.add('open');
+    walkthroughTip.classList.add('open');
+  });
+  lockBodyScroll();
+
+  const reposition = ()=> positionWalkthroughTip(target);
+  window.addEventListener('resize', reposition);
+  window.addEventListener('scroll', reposition, { passive:true, capture:true });
+
+  let dismissed = false;
+  let autoDismissTimer;
+  function dismiss(){
+    if(dismissed) return;
+    dismissed = true;
+    clearTimeout(autoDismissTimer);
+    walkthroughBackdrop.classList.remove('open');
+    walkthroughTip.classList.remove('open');
+    target.classList.remove('walkthrough-highlight');
+    unlockBodyScroll();
+    window.removeEventListener('resize', reposition);
+    window.removeEventListener('scroll', reposition, { capture:true });
+    document.removeEventListener('keydown', onKeydown);
+    walkthroughBackdrop.removeEventListener('click', dismiss);
+    walkthroughTipDismissBtn.removeEventListener('click', dismiss);
+    target.removeEventListener('click', dismiss);
+    setTimeout(()=>{
+      walkthroughBackdrop.hidden = true;
+      walkthroughTip.hidden = true;
+    }, 260);
+    if(storageKey) markWalkthroughSeen(storageKey);
+    if(walkthroughActive === dismiss) walkthroughActive = null;
+  }
+  function onKeydown(e){ if(e.key === 'Escape') dismiss(); }
+
+  document.addEventListener('keydown', onKeydown);
+  walkthroughBackdrop.addEventListener('click', dismiss);
+  walkthroughTipDismissBtn.addEventListener('click', dismiss);
+  // Clicking the spotlighted element itself both ends the tour and
+  // still performs whatever it normally does (e.g. opens the cart) —
+  // nothing here calls preventDefault/stopPropagation.
+  target.addEventListener('click', dismiss);
+
+  autoDismissTimer = setTimeout(dismiss, 8000);
+  walkthroughActive = dismiss;
+}
+
+const WALKTHROUGH_CART_KEY = 'lc_walkthrough_cart_seen_v1';
+// Guards against the initial cart-restore-from-storage render (a page
+// load with a saved cart, not a real "just added something" moment)
+// counting as the first add — flipped true once init below settles.
+let cartOnboardingReady = false;
+
 function openCartDropdown(){
   renderCartDropdown();
   cartDropdown.hidden = false;
   requestAnimationFrame(()=> cartDropdown.classList.add('open'));
   cartIconBtn.setAttribute('aria-expanded', 'true');
+  cartBackdrop.hidden = false;
+  requestAnimationFrame(()=> cartBackdrop.classList.add('open'));
+  lockBodyScroll();
 }
 function closeCartDropdown(){
   cartDropdown.classList.remove('open');
   cartIconBtn.setAttribute('aria-expanded', 'false');
   clearTimeout(cartAutoDismissTimer);
   setTimeout(()=>{ if(!cartDropdown.classList.contains('open')) cartDropdown.hidden = true; }, 240);
+  cartBackdrop.classList.remove('open');
+  setTimeout(()=>{ if(!cartBackdrop.classList.contains('open')) cartBackdrop.hidden = true; }, 240);
+  unlockBodyScroll();
 }
 function toggleCartDropdown(){
   if(cartDropdown.classList.contains('open')) closeCartDropdown();
@@ -1778,6 +1962,16 @@ function toggleCartDropdown(){
 
 cartIconBtn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleCartDropdown(); });
 document.getElementById('cartDropdownClose').addEventListener('click', closeCartDropdown);
+// Unconditional (not gated on the dropdown's own .open class, unlike the
+// generic outside-click listener below) — the backdrop's only job is
+// "tap me to close the cart", so it always does exactly that.
+cartBackdrop.addEventListener('click', closeCartDropdown);
+document.getElementById('cartClearBtn').addEventListener('click', ()=>{
+  cakeCart = [];
+  clearFingerFoodAndCateringCart();
+  refreshCartUI(); // count drops to 0, which hides the widget and closes the dropdown
+  showToast('Cart cleared.');
+});
 document.addEventListener('click', (e)=>{
   if(!cartDropdown.classList.contains('open')) return;
   if(cartWidget.contains(e.target)) return; // clicks on the icon/panel itself aren't "outside"
@@ -1808,10 +2002,22 @@ function updateCartIcon(){
     cartIconBadge.classList.add('pop');
     announceCart(count, total);
 
-    // Auto-pop the dropdown on desktop, only when an item was just
-    // added (not on removals) — mobile stays click-only so nothing
-    // pops open unexpectedly on a small screen.
-    if(count > lastCartCount && isDesktopCart()){
+    const isFirstEverAdd = cartOnboardingReady && count > lastCartCount && lastCartCount === 0;
+
+    // The very first thing ever added, on any device, gets the
+    // one-time walkthrough instead of the usual behavior below —
+    // it's a clearer first "here's your cart" moment than an
+    // unexplained dropdown popping open.
+    if(isFirstEverAdd && !hasSeenWalkthrough(WALKTHROUGH_CART_KEY)){
+      showWalkthroughStep({
+        target: cartIconBtn,
+        text: 'Click here to view & edit everything in your order, then checkout.',
+        storageKey: WALKTHROUGH_CART_KEY
+      });
+    } else if(count > lastCartCount && isDesktopCart()){
+      // Auto-pop the dropdown on desktop, only when an item was just
+      // added (not on removals) — mobile stays click-only so nothing
+      // pops open unexpectedly on a small screen.
       openCartDropdown();
       scheduleCartAutoDismiss();
     }
@@ -1945,3 +2151,7 @@ function refreshCartUI(){ syncCartStates(); updateCartIcon(); saveCartState(); }
 renderFF();
 renderCatering();
 restoreCartState();
+// From here on, any cart-count change reflects a real user action
+// (add/remove), not the initial restore-from-storage render above —
+// safe for the first-add walkthrough to key off of.
+cartOnboardingReady = true;

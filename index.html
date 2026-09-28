@@ -98,7 +98,10 @@
       <div class="cart-dropdown" id="cartDropdown" hidden>
         <div class="cart-dropdown-head">
           <h3>Your Order</h3>
-          <button type="button" class="cart-dropdown-close" id="cartDropdownClose" aria-label="Close">&times;</button>
+          <div class="cart-dropdown-head-actions">
+            <button type="button" class="cart-clear-btn" id="cartClearBtn">Clear Cart</button>
+            <button type="button" class="cart-dropdown-close" id="cartDropdownClose" aria-label="Close">&times;</button>
+          </div>
         </div>
         <div class="cart-dropdown-body" id="cartDropdownBody"></div>
         <div class="cart-dropdown-foot">
@@ -112,6 +115,25 @@
     </div>
   </div>
 </header>
+
+<!-- Cart focus backdrop — a top-level sibling (not nested inside
+     .cart-widget, which has its own transform and would otherwise
+     turn a nested position:fixed backdrop relative to it instead of
+     the viewport). Darkens the page and blocks scroll while the cart
+     dropdown is open; a tap on it closes the cart like any other
+     outside click (see the document click listener in index.js). -->
+<div class="cart-backdrop" id="cartBackdrop" hidden></div>
+
+<!-- One-time onboarding walkthrough — spotlights a target element
+     (e.g. the cart icon) with a dimmed backdrop and a pointing
+     tooltip. Built as one generic pair of elements positioned via JS
+     (see showWalkthroughStep() in index.js) so more steps can reuse
+     it later; only the first-add-to-cart step is wired up for now. -->
+<div class="walkthrough-backdrop" id="walkthroughBackdrop" hidden></div>
+<div class="walkthrough-tip" id="walkthroughTip" role="status" hidden>
+  <p id="walkthroughTipText"></p>
+  <button type="button" class="walkthrough-tip-dismiss" id="walkthroughTipDismiss">Got it</button>
+</div>
 
 <!-- ============================================================
      HERO
@@ -210,9 +232,9 @@
           <div class="field">
             <label>Tiers/Steps <span class="req">*</span></label>
             <div class="tier-select" id="tierSelect">
-              <label class="tier-option"><input type="checkbox" name="tier" value="One Tier" data-count="1">One Tier</label>
-              <label class="tier-option"><input type="checkbox" name="tier" value="Two Tiers" data-count="2">Two Tiers</label>
-              <label class="tier-option"><input type="checkbox" name="tier" value="Three Tiers" data-count="3">Three Tiers</label>
+              <label class="tier-option" id="tierOpt1"><input type="checkbox" name="tier" value="One Tier" data-count="1">One Tier</label>
+              <label class="tier-option" id="tierOpt2"><input type="checkbox" name="tier" value="Two Tiers" data-count="2">Two Tiers</label>
+              <label class="tier-option" id="tierOpt3"><input type="checkbox" name="tier" value="Three Tiers" data-count="3">Three Tiers</label>
               <label class="tier-option" id="tierOpt4"><input type="checkbox" name="tier" value="Four Tiers" data-count="4">Four Tiers</label>
               <label class="tier-option" id="tierOpt5plus"><input type="checkbox" name="tier" value="Five+ Tiers (Grand/Wedding)" data-count="5">Five+ Tiers</label>
               <label class="tier-option" id="tierOptCustom"><input type="checkbox" id="tierCustomCheckbox" value="Custom">Custom</label>
@@ -254,7 +276,7 @@
             </select>
           </div>
           <div class="field">
-            <label for="cakeInscription">Inscription / Wording on Cake</label>
+            <label for="cakeInscription" id="cakeInscriptionLabel">Inscription / Wording on Cake</label>
             <input type="text" id="cakeInscription" placeholder="e.g. Happy 30th, Ada!">
           </div>
           <div class="field">
@@ -285,10 +307,8 @@
           </div>
           <div class="submit-row">
             <div class="cake-actions">
-              <button type="button" class="btn btn-outline" id="cakeAddAnotherBtn" style="border-color: var(--gold-line); color: var(--ink);">Add to Cart</button>
-              <button type="submit" class="btn btn-wine" id="cakeCheckoutBtn">Checkout Now</button>
+              <button type="button" class="btn btn-outline" id="cakeAddAnotherBtn" style="border-color: var(--gold-line); color: var(--ink); width:100%; justify-content:center;">Add to Cart</button>
             </div>
-            <p class="form-note">"Add to Cart" saves this cake and clears the form, so you can add another cake or anything from Finger Foods and Catering. "Checkout Now" sends everything in your cart to WhatsApp, nothing is charged here.</p>
           </div>
         </form>
       </div>
@@ -306,19 +326,7 @@
       <h2>Small chops &amp; party bites</h2>
       <p>Perfect for cocktail hours, birthdays and office parties. Set your quantities and send your order straight to us.</p>
     </div>
-    <div class="menu-layout mt-lg">
-      <div class="menu-list reveal" id="fingerFoodList"></div>
-      <div class="order-summary reveal" id="fingerFoodSummary">
-        <h3>Your Order <span class="count-badge" id="ffCount">0</span></h3>
-        <p class="summary-empty" id="ffEmpty">No items added yet, use the + buttons to build your order.</p>
-        <div class="summary-list" id="ffList"></div>
-        <div id="ffCheckout" style="display:none;">
-          <div class="summary-divider"></div>
-          <div class="summary-total"><span>Estimated Total</span><strong id="ffTotal">₦0</strong></div>
-          <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="ffCheckoutBtn">Checkout</button>
-        </div>
-      </div>
-    </div>
+    <div class="menu-list reveal mt-lg" id="fingerFoodList"></div>
   </div>
 </section>
 
@@ -332,28 +340,15 @@
       <h2>Soups, rice &amp; bulk catering for every event</h2>
       <p>From an intimate gathering to a full owambe, order soups and rice in bulk, add proteins, and tell us about your event. We'll confirm quantities and final pricing on WhatsApp.</p>
     </div>
-    <div class="menu-layout mt-lg">
-      <div class="reveal">
-        <div class="menu-group-title">Soups (sold by the litre)</div>
-        <div class="menu-list" id="soupList"></div>
+    <div class="reveal mt-lg">
+      <div class="menu-group-title">Soups (sold by the litre)</div>
+      <div class="menu-list" id="soupList"></div>
 
-        <div class="menu-group-title">Rice &amp; Sides</div>
-        <div class="menu-list" id="riceList"></div>
+      <div class="menu-group-title">Rice &amp; Sides</div>
+      <div class="menu-list" id="riceList"></div>
 
-        <div class="menu-group-title">Proteins (Add-On)</div>
-        <div class="menu-list" id="proteinList"></div>
-      </div>
-
-      <div class="order-summary reveal" id="cateringSummary">
-        <h3>Your Order <span class="count-badge" id="catCount">0</span></h3>
-        <p class="summary-empty" id="catEmpty">No items added yet, select litres or quantities to begin.</p>
-        <div class="summary-list" id="catList"></div>
-        <div id="catCheckout" style="display:none;">
-          <div class="summary-divider"></div>
-          <div class="summary-total"><span>Estimated Total</span><strong id="catTotal">₦0</strong></div>
-          <button type="button" class="btn btn-wine" style="width:100%; justify-content:center;" id="catCheckoutBtn">Checkout</button>
-        </div>
-      </div>
+      <div class="menu-group-title">Proteins (Add-On)</div>
+      <div class="menu-list" id="proteinList"></div>
     </div>
   </div>
 </section>
@@ -471,6 +466,7 @@
       <h3>Cake Designs</h3>
       <button type="button" class="checkout-close" id="cakeGalleryClose" aria-label="Close">&times;</button>
     </div>
+    <div class="gal-filters cgm-filters" id="cgmFilters"></div>
     <div class="cgm-grid" id="cgmGrid"></div>
     <div id="cgmSentinel"></div>
   </div>

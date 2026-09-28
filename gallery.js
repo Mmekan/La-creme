@@ -113,8 +113,9 @@ const siteNav = document.getElementById('siteNav');
 window.addEventListener('scroll', ()=>{
   siteNav.classList.toggle('scrolled', window.scrollY > 40);
 });
-// Past the page header: the wordmark swaps out for the logo mark (see
-// .nav.past-hero in index.css), leaving just the logo and nav links.
+// The logo mark stays hidden (nav-links only) until the gallery-hero
+// section scrolls out of view, then fades in — see .nav.past-hero
+// .nav-logo in index.css.
 const galleryHero = document.querySelector('.gallery-hero');
 if(galleryHero){
   new IntersectionObserver((entries)=>{
@@ -172,7 +173,7 @@ const ICONS = {
    Add/rename tabs here — each gallery item's `category` below
    must match one of these values exactly.
 ============================================================ */
-const filterCategories = ['All', 'Weddings', 'Cakes', 'Catering & Events', 'Finger Foods'];
+const filterCategories = ['All', ...CAKE_FILTER_CATEGORIES, 'Catering & Events', 'Small Chops'];
 
 /* ============================================================
    GALLERY ITEMS — data now lives in gallery-data.js (shared with
@@ -186,6 +187,10 @@ const categoryCounts = filterCategories.reduce((acc, cat)=>{
   acc[cat] = cat === 'All' ? galleryItems.length : galleryItems.filter(g=> g.category === cat).length;
   return acc;
 }, {});
+// Synthetic aggregate — 'Cakes' isn't a real filter tab anymore (it's
+// split across CAKE_FILTER_CATEGORIES), but the editorial break below
+// still wants one combined count to show.
+categoryCounts['Cakes'] = CAKE_FILTER_CATEGORIES.reduce((n, cat)=> n + categoryCounts[cat], 0);
 
 /* ============================================================
    EDITORIAL INTERSTITIALS
@@ -194,11 +199,10 @@ const categoryCounts = filterCategories.reduce((acc, cat)=>{
    item id they appear directly above — only shown in the 'All' view.
 ============================================================ */
 const interstitials = [
-  { beforeId:1, type:'break', cat:'Weddings', num:'01', text:'The Weddings' },
-  { beforeId:5, type:'break', cat:'Cakes', num:'02', text:'The Cakes' },
+  { beforeId:1, type:'break', cat:'Cakes', num:'01', text:'The Cakes' },
   { beforeId:302, type:'quote', quote:'The cake didn’t just look expensive, it tasted like it too. Guests kept asking who made it.', name:'Ifeoma A.', event:'Wedding Reception, Lekki' },
-  { beforeId:302, type:'break', cat:'Catering & Events', num:'03', text:'The Catering & Styling' },
-  { beforeId:10, type:'break', cat:'Finger Foods', num:'04', text:'The Finger Foods' },
+  { beforeId:302, type:'break', cat:'Catering & Events', num:'02', text:'The Catering & Styling' },
+  { beforeId:10, type:'break', cat:'Small Chops', num:'03', text:'The Small Chops' },
 ];
 
 /* ============================================================
