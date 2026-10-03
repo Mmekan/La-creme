@@ -21,8 +21,12 @@ const CONFIG = {
 
 const contactPhoneDisplayEl = document.getElementById('contactPhoneDisplay');
 if(contactPhoneDisplayEl){
-  contactPhoneDisplayEl.textContent =
-    '+' + CONFIG.whatsappNumber.replace(/(\d{3})(\d{3})(\d{3})(\d+)/, '$1 $2 $3 $4');
+  // Shown to visitors in local format (0806 655 6677), not the +234
+  // international format waLink()/CONFIG.whatsappNumber need for the
+  // wa.me link itself — strip the '234' country code and dial it
+  // locally instead, same as everyone already has it saved as.
+  const localNumber = '0' + CONFIG.whatsappNumber.replace(/^234/, '');
+  contactPhoneDisplayEl.textContent = localNumber.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3');
 }
 
 function waLink(message){

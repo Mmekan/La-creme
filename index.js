@@ -1122,7 +1122,11 @@ const cateringProteins = [
   { id:'fish', name:'Fish (Titus/Croaker)', unit:'per portion', price:3200 },
 ];
 
-const catState = { soups:{}, rice:{}, proteins:{} };
+// rice is an array (not keyed by item id like soups/proteins) — unlike
+// soup/protein, the same rice item can be added more than once with a
+// different configuration each time (see buildRiceRow's "Add to Cart").
+const catState = { soups:{}, rice:[], proteins:{} };
+let riceEntryCounter = 0;
 
 /* Soup: pick a litre size, then which protein it should be made
    with — the protein choice doesn't change price, it just specifies
@@ -1250,30 +1254,61 @@ function buildRiceRow(item){
         ${RICE_STYLES.map(s=> `<li><strong>${s}</strong><span>${RICE_STYLE_NOTES[s]}</span></li>`).join('')}
       </ul>
     </div>
-    <div class="m-extra" data-role="sides-wrap" style="display:none;">
-      <span class="m-extra-label">Choose a Side</span>
-      <div class="liter-chips" data-role="sides">
-        ${RICE_SIDES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
+    <div class="m-extra m-qty-row" data-role="finish-row" style="display:none;">
+      <div data-role="sides-wrap" style="display:none;">
+        <span class="m-extra-label">Choose a Side</span>
+        <div class="liter-chips" data-role="sides">
+          ${RICE_SIDES.map(s=> `<button type="button" class="liter-chip" data-value="${s}">${s}</button>`).join('')}
+        </div>
       </div>
-    </div>`;
+      <div class="qty-with-label" data-role="qty-wrap" style="display:none;">
+        <span class="qty-label">Quantity</span>
+        <div class="qty-control">
+          <button type="button" aria-label="Decrease quantity" data-act="dec">−</button>
+          <span class="qty-val" data-role="qty-val">0</span>
+          <button type="button" aria-label="Increase quantity" data-act="inc">+</button>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="rice-add-btn" data-role="add-btn" style="display:none;">Add to Cart</button>`;
 
-  const sel = { type:'', style:'', sides:'' };
+  const sel = { type:'', style:'', sides:'', qty:1 };
   const typeChips = row.querySelector('[data-role="type"]');
   const styleWrap = row.querySelector('[data-role="style-wrap"]');
   const styleChips = row.querySelector('[data-role="style"]');
+  const finishRow = row.querySelector('[data-role="finish-row"]');
   const sidesWrap = row.querySelector('[data-role="sides-wrap"]');
   const sidesChips = row.querySelector('[data-role="sides"]');
+  const qtyWrap = row.querySelector('[data-role="qty-wrap"]');
+  const qtyVal = row.querySelector('[data-role="qty-val"]');
+  const addBtn = row.querySelector('[data-role="add-btn"]');
 
-  function commit(){
-    if(sel.type && sel.style && (sel.style !== 'Classic' || sel.sides)){
-      const price = RICE_PRICING[sel.type][sel.style];
-      const labelBits = [sel.type, sel.style];
-      if(sel.sides) labelBits.push(sel.sides);
-      catState.rice[item.id] = { name: item.name, label: labelBits.join(', '), price, sel:{ type: sel.type, style: sel.style, sides: sel.sides } };
-    } else {
-      delete catState.rice[item.id];
-    }
-    renderCatering();
+  // Price only exists once type + style (+ sides, for Classic) are all
+  // picked — quantity (and the Add button) only make sense, and only
+  // show, once there's a price to multiply it by.
+  function priceReady(){
+    return !!(sel.type && sel.style && (sel.style !== 'Classic' || sel.sides));
+  }
+
+  // Pure UI sync — no longer touches catState.rice. Picking chips just
+  // stages a selection; it only lands in the cart when Add is clicked
+  // (see addBtn below), so the same item can be configured and added
+  // more than once (e.g. two Jollof orders with different proteins)
+  // instead of a second pick silently overwriting the first.
+  function updateVisibility(){
+    finishRow.style.display = sel.style ? 'flex' : 'none';
+    sidesWrap.style.display = sel.style === 'Classic' ? 'block' : 'none';
+    const ready = priceReady();
+    qtyWrap.style.display = ready ? 'flex' : 'none';
+    addBtn.style.display = ready ? 'flex' : 'none';
+    qtyVal.textContent = ready ? sel.qty : '0'; // keeps syncCartStates() honest pre-selection
+  }
+
+  function resetSelection(){
+    sel.type = ''; sel.style = ''; sel.sides = ''; sel.qty = 1;
+    row.querySelectorAll('.liter-chip.selected').forEach(c=> c.classList.remove('selected'));
+    styleWrap.style.display = 'none';
+    updateVisibility();
   }
 
   // Style chips' prices depend on which type is picked (Lunchpack vs
@@ -1292,8 +1327,7 @@ function buildRiceRow(item){
       typeChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       styleChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      sel.style = ''; sel.sides = '';
-      sidesWrap.style.display = 'none';
+      sel.style = ''; sel.sides = ''; sel.qty = 1; // changing type starts the pick over
       if(already){
         sel.type = '';
         styleWrap.style.display = 'none';
@@ -1303,7 +1337,7 @@ function buildRiceRow(item){
         styleWrap.style.display = 'block';
         refreshStyleChipLabels();
       }
-      commit();
+      updateVisibility();
     });
   });
   styleChips.querySelectorAll('.liter-chip').forEach(chip=>{
@@ -1314,13 +1348,11 @@ function buildRiceRow(item){
       sel.sides = '';
       if(already){
         sel.style = '';
-        sidesWrap.style.display = 'none';
       } else {
         chip.classList.add('selected');
         sel.style = chip.dataset.value;
-        sidesWrap.style.display = sel.style === 'Classic' ? 'block' : 'none';
       }
-      commit();
+      updateVisibility();
     });
   });
   sidesChips.querySelectorAll('.liter-chip').forEach(chip=>{
@@ -1329,8 +1361,42 @@ function buildRiceRow(item){
       sidesChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       sel.sides = already ? '' : chip.dataset.value;
       if(!already) chip.classList.add('selected');
-      commit();
+      updateVisibility();
     });
+  });
+  qtyWrap.querySelector('[data-act="dec"]').addEventListener('click', ()=>{
+    if(sel.qty <= 1) return;
+    sel.qty -= 1;
+    qtyVal.textContent = sel.qty;
+  });
+  qtyWrap.querySelector('[data-act="inc"]').addEventListener('click', ()=>{
+    sel.qty += 1;
+    qtyVal.textContent = sel.qty;
+  });
+  addBtn.addEventListener('click', ()=>{
+    if(!priceReady()) return;
+    const price = RICE_PRICING[sel.type][sel.style];
+    const labelBits = [sel.type, sel.style];
+    if(sel.sides) labelBits.push(sel.sides);
+    // An identical configuration already in the cart isn't a second,
+    // distinct order — fold it into that line's quantity instead of
+    // listing the exact same pick twice. A genuinely different pick
+    // (different side/style/type) still lands as its own line.
+    const existing = catState.rice.find(r=>
+      r.itemId === item.id && r.sel.type === sel.type && r.sel.style === sel.style && r.sel.sides === sel.sides
+    );
+    if(existing){
+      existing.qty += sel.qty;
+      showToast(`Already in your cart — bumped to ${existing.qty} × ${item.name}, ${existing.label}.`);
+    } else {
+      catState.rice.push({
+        key: String(++riceEntryCounter), itemId: item.id, name: item.name,
+        label: labelBits.join(', '), unitPrice: price, qty: sel.qty,
+        sel: { type: sel.type, style: sel.style, sides: sel.sides }
+      });
+    }
+    resetSelection();
+    renderCatering();
   });
 
   return row;
@@ -1519,7 +1585,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   const ffItemLines = ffLines.map(l=> `${l.qty} × ${l.name} — ${fmtNaira(l.qty * l.unitPrice)}`);
   const cateringItemLines = [
     ...Object.values(catState.soups).map(s=> `${s.qty} × ${s.name}, ${s.label} — ${fmtNaira(s.qty * s.unitPrice)}`),
-    ...Object.values(catState.rice).map(r=> `${r.name}, ${r.label} — ${fmtNaira(r.price)}`),
+    ...catState.rice.map(r=> `${r.qty} × ${r.name}, ${r.label} — ${fmtNaira(r.qty * r.unitPrice)}`),
     ...cateringProteins.filter(p=> catState.proteins[p.id] > 0)
       .map(p=> `${catState.proteins[p.id]} × ${p.name} — ${fmtNaira(p.price * catState.proteins[p.id])}`),
   ];
@@ -1598,7 +1664,7 @@ function clearFingerFoodAndCateringCart(){
   document.querySelectorAll('#riceList [data-role="type"] .liter-chip.selected').forEach(chip=> chip.click());
   cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
   catState.soups = {};
-  catState.rice = {};
+  catState.rice = [];
   renderFF();
   renderCatering();
 }
@@ -1647,12 +1713,13 @@ const CART_SOURCES = {
     lines(){
       const out = [];
       // Soup quantity is set via its own selector in the menu (not
-      // adjustable from the cart), and rice is a single size selection —
-      // so both get a remove action here rather than a +/- stepper.
+      // adjustable from the cart), and each rice entry is one committed
+      // Add-to-Cart (see buildRiceRow) — so both get a remove action
+      // here rather than a +/- stepper.
       Object.entries(catState.soups).forEach(([key, s])=>
         out.push({ id:`soup:${key}`, name:`${s.name}, ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
-      Object.entries(catState.rice).forEach(([key, r])=>
-        out.push({ id:`rice:${key}`, name:`${r.name}, ${r.label}`, qty:1, unitPrice:r.price, stepper:false }));
+      catState.rice.forEach(r=>
+        out.push({ id:`rice:${r.key}`, name:`${r.name}, ${r.label}`, qty:r.qty, unitPrice:r.unitPrice, stepper:false }));
       cateringProteins.forEach(p=>{
         if(catState.proteins[p.id] > 0)
           out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:p.price, stepper:true });
@@ -1664,7 +1731,7 @@ const CART_SOURCES = {
       const kind = id.slice(0, sep), key = id.slice(sep + 1);
       if(kind === 'protein') catState.proteins[key] = Math.max(0, qty);
       else if(kind === 'soup') delete catState.soups[key];
-      else if(kind === 'rice') delete catState.rice[key];
+      else if(kind === 'rice') catState.rice = catState.rice.filter(r=> r.key !== key);
       renderCatering();
     }
   },
@@ -1815,18 +1882,25 @@ cartDropdown.addEventListener('mouseenter', ()=>{
 });
 cartDropdown.addEventListener('mouseleave', ()=>{
   cartDropdownHovered = false;
-  if(cartDropdown.classList.contains('open')) scheduleCartAutoDismiss();
+  if(cartOpen) scheduleCartAutoDismiss();
 });
 
 const cartBackdrop = document.getElementById('cartBackdrop');
-let bodyScrollLockCount = 0;
-function lockBodyScroll(){
-  if(bodyScrollLockCount === 0) document.body.style.overflow = 'hidden';
-  bodyScrollLockCount++;
+// The lock has to go on <html>, not <body>: the base reset already sets
+// overflow-x:hidden on <html>, and once the root's overflow isn't
+// `visible` the viewport stops taking its overflow from <body> — so
+// locking <body> alone does nothing to page scrolling.
+// Keyed by owner ('cart', 'walkthrough', ...) rather than counted, so a
+// repeat lock from the same owner can't leak and leave the page frozen
+// (e.g. two cart-opens landing in the same tick).
+const scrollLockOwners = new Set();
+function lockBodyScroll(owner){
+  scrollLockOwners.add(owner);
+  document.documentElement.style.overflow = 'hidden';
 }
-function unlockBodyScroll(){
-  bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
-  if(bodyScrollLockCount === 0) document.body.style.overflow = '';
+function unlockBodyScroll(owner){
+  scrollLockOwners.delete(owner);
+  if(scrollLockOwners.size === 0) document.documentElement.style.overflow = '';
 }
 
 /* ============================================================
@@ -1888,7 +1962,7 @@ function showWalkthroughStep({ target, text, storageKey }){
     walkthroughBackdrop.classList.add('open');
     walkthroughTip.classList.add('open');
   });
-  lockBodyScroll();
+  lockBodyScroll('walkthrough');
 
   const reposition = ()=> positionWalkthroughTip(target);
   window.addEventListener('resize', reposition);
@@ -1903,7 +1977,7 @@ function showWalkthroughStep({ target, text, storageKey }){
     walkthroughBackdrop.classList.remove('open');
     walkthroughTip.classList.remove('open');
     target.classList.remove('walkthrough-highlight');
-    unlockBodyScroll();
+    unlockBodyScroll('walkthrough');
     window.removeEventListener('resize', reposition);
     window.removeEventListener('scroll', reposition, { capture:true });
     document.removeEventListener('keydown', onKeydown);
@@ -1937,26 +2011,42 @@ const WALKTHROUGH_CART_KEY = 'lc_walkthrough_cart_seen_v1';
 // counting as the first add — flipped true once init below settles.
 let cartOnboardingReady = false;
 
+// `cartOpen` rather than the .open class: that class lands a frame later
+// (see the rAF below), so two adds in the same frame would otherwise both
+// look like "not open yet" and each re-run the open path, double-locking.
+let cartOpen = false;
+// Opening isn't always a direct click on the widget — adding an item
+// auto-opens the cart too, and that click (e.g. a menu "+") bubbles past
+// cartWidget up to the outside-click listener below in this same tick.
+// Suppress it for the rest of this tick so that bubble doesn't read as
+// "clicked outside" and immediately close the cart it just opened.
+let suppressOutsideClose = false;
 function openCartDropdown(){
   renderCartDropdown();
+  if(cartOpen) return; // already showing — just refreshed its contents
+  cartOpen = true;
+  suppressOutsideClose = true;
+  setTimeout(()=>{ suppressOutsideClose = false; }, 0);
   cartDropdown.hidden = false;
   requestAnimationFrame(()=> cartDropdown.classList.add('open'));
   cartIconBtn.setAttribute('aria-expanded', 'true');
   cartBackdrop.hidden = false;
   requestAnimationFrame(()=> cartBackdrop.classList.add('open'));
-  lockBodyScroll();
+  lockBodyScroll('cart');
 }
 function closeCartDropdown(){
+  if(!cartOpen) return;
+  cartOpen = false;
   cartDropdown.classList.remove('open');
   cartIconBtn.setAttribute('aria-expanded', 'false');
   clearTimeout(cartAutoDismissTimer);
-  setTimeout(()=>{ if(!cartDropdown.classList.contains('open')) cartDropdown.hidden = true; }, 240);
+  setTimeout(()=>{ if(!cartOpen) cartDropdown.hidden = true; }, 240);
   cartBackdrop.classList.remove('open');
-  setTimeout(()=>{ if(!cartBackdrop.classList.contains('open')) cartBackdrop.hidden = true; }, 240);
-  unlockBodyScroll();
+  setTimeout(()=>{ if(!cartOpen) cartBackdrop.hidden = true; }, 240);
+  unlockBodyScroll('cart');
 }
 function toggleCartDropdown(){
-  if(cartDropdown.classList.contains('open')) closeCartDropdown();
+  if(cartOpen) closeCartDropdown();
   else openCartDropdown();
 }
 
@@ -1973,12 +2063,12 @@ document.getElementById('cartClearBtn').addEventListener('click', ()=>{
   showToast('Cart cleared.');
 });
 document.addEventListener('click', (e)=>{
-  if(!cartDropdown.classList.contains('open')) return;
+  if(!cartOpen || suppressOutsideClose) return;
   if(cartWidget.contains(e.target)) return; // clicks on the icon/panel itself aren't "outside"
   closeCartDropdown();
 });
 document.addEventListener('keydown', (e)=>{
-  if(e.key === 'Escape' && cartDropdown.classList.contains('open')) closeCartDropdown();
+  if(e.key === 'Escape' && cartOpen) closeCartDropdown();
 });
 
 function updateCartIcon(){
@@ -1987,14 +2077,14 @@ function updateCartIcon(){
   if(!count){
     cartWidget.hidden = true;
     lastCartCount = 0;
-    if(cartDropdown.classList.contains('open')) closeCartDropdown();
+    if(cartOpen) closeCartDropdown();
     return;
   }
 
   cartWidget.hidden = false;
   cartIconBadge.textContent = count;
   cartDropdownTotal.textContent = fmtNaira(total);
-  if(cartDropdown.classList.contains('open')) renderCartDropdown();
+  if(cartOpen) renderCartDropdown();
 
   if(count !== lastCartCount){
     cartIconBadge.classList.remove('pop');
@@ -2032,6 +2122,14 @@ function updateCartIcon(){
 const prevCardQty = new WeakMap();
 function syncCartStates(){
   document.querySelectorAll('.menu-item').forEach(card=>{
+    if(riceList.contains(card)){
+      // Rice's own .qty-val is an in-progress stepper for a not-yet-
+      // added selection, not cart truth (see buildRiceRow's Add
+      // button) — "in cart" means at least one committed entry for
+      // this item, checked against catState.rice directly instead.
+      card.classList.toggle('in-cart', catState.rice.some(r=> r.itemId === card.dataset.itemId));
+      return;
+    }
     const val = card.querySelector('.qty-val');
     if(!val){
       // Soup/rice rows have no stepper — they're "in cart" once a
@@ -2112,12 +2210,21 @@ function restoreCartState(){
       if(!clickChip(row, '[data-role="protein"] .liter-chip[data-value="' + s.sel.protein + '"]')) return;
       for(let i = 1; i < qtyOf(s.qty); i++) row.querySelector('[data-act="inc"]').click();
     });
-    Object.entries((saved.cat && saved.cat.rice) || {}).forEach(([id, r])=>{
-      const row = document.querySelector('#riceList [data-item-id="' + id + '"]');
-      if(!row || !r.sel) return;
+    // Rice is an array of committed entries now (possibly several for the
+    // same item), not one slot per item id — replay each one in full:
+    // stage its chips/qty on that item's row, then click Add, same as a
+    // real user would, so it lands back in catState.rice as its own entry
+    // and the row resets clean before the next saved entry (if any).
+    (Array.isArray(saved.cat && saved.cat.rice) ? saved.cat.rice : []).forEach(r=>{
+      if(!r || !r.sel || !r.itemId) return;
+      const row = document.querySelector('#riceList [data-item-id="' + r.itemId + '"]');
+      if(!row) return;
       if(!clickChip(row, '[data-role="type"] .liter-chip[data-value="' + r.sel.type + '"]')) return;
       if(!clickChip(row, '[data-role="style"] .liter-chip[data-value="' + r.sel.style + '"]')) return;
       if(r.sel.sides) clickChip(row, '[data-role="sides"] .liter-chip[data-value="' + r.sel.sides + '"]');
+      for(let i = 1; i < qtyOf(r.qty); i++) row.querySelector('[data-role="qty-wrap"] [data-act="inc"]').click();
+      const addBtn = row.querySelector('[data-role="add-btn"]');
+      if(addBtn) addBtn.click();
     });
     renderCatering();
 
@@ -2131,7 +2238,7 @@ function restoreCartState(){
     // older menu) is dropped rather than left to fail on every load.
     try{ localStorage.removeItem(CART_STORAGE_KEY); }catch(e){}
     ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
-    catState.soups = {}; catState.rice = {};
+    catState.soups = {}; catState.rice = [];
     cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
     cakeCart = [];
     renderFF();

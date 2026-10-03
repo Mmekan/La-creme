@@ -189,8 +189,11 @@ const categoryCounts = filterCategories.reduce((acc, cat)=>{
 }, {});
 // Synthetic aggregate — 'Cakes' isn't a real filter tab anymore (it's
 // split across CAKE_FILTER_CATEGORIES), but the editorial break below
-// still wants one combined count to show.
-categoryCounts['Cakes'] = CAKE_FILTER_CATEGORIES.reduce((n, cat)=> n + categoryCounts[cat], 0);
+// still wants one combined count to show. Includes the photos still
+// tagged plain 'Cakes' (the catch-all for ones that don't fit a specific
+// occasion/recipient tab) — they're cakes too, just not on their own tab.
+categoryCounts['Cakes'] = CAKE_FILTER_CATEGORIES.reduce((n, cat)=> n + categoryCounts[cat], 0)
+  + galleryItems.filter(g=> g.category === 'Cakes').length;
 
 /* ============================================================
    EDITORIAL INTERSTITIALS
@@ -376,15 +379,21 @@ let currentBlockCategory = null;
 function itemsForFilter(filter){
   return filter === 'All' ? galleryItems : galleryItems.filter(g=> g.category === filter);
 }
+// Returns true if anything was rendered, so the caller can start a fresh
+// masonry block afterwards — interstitials append straight to galGrid, so
+// tiles added to an older block would otherwise sort above them.
 function maybeInsertInterstitials(beforeId){
-  if(activeFilter !== 'All') return;
+  if(activeFilter !== 'All') return false;
+  let inserted = false;
   interstitials.forEach(x=>{
     const key = x.beforeId + '-' + x.type;
     if(x.beforeId === beforeId && !insertedInterstitials.has(key)){
       insertedInterstitials.add(key);
       if(x.type === 'break') renderBreak(x); else renderQuote(x);
+      inserted = true;
     }
   });
+  return inserted;
 }
 function sentinelIsNear(){
   const rect = galSentinel.getBoundingClientRect();
@@ -394,31 +403,35 @@ function loadMore(){
   if(loading || nextIndex >= workingItems.length) return;
   loading = true;
 
-  const startItem = workingItems[nextIndex];
-  maybeInsertInterstitials(startItem.id);
-
-  const cat = startItem.category;
-  let end = nextIndex;
-  while(end < workingItems.length && workingItems[end].category === cat && (end - nextIndex) < BATCH_SIZE) end++;
-
-  if(currentBlockCategory !== cat){
-    currentBlock = document.createElement('div');
-    currentBlock.className = 'masonry-block';
-    galGrid.appendChild(currentBlock);
-    currentBlockCategory = cat;
-  }
+  // A batch is always BATCH_SIZE items, regardless of how often the
+  // category changes within it — a category change (or an interstitial)
+  // only starts a new masonry block, it doesn't cut the batch short.
+  // The 'All' view interleaves categories heavily, so tying batch size
+  // to the length of a same-category run would load it a tile at a time.
+  const batchEnd = Math.min(nextIndex + BATCH_SIZE, workingItems.length);
   const newTiles = [];
-  for(let i = nextIndex; i < end; i++){
-    const tile = makeTile(workingItems[i]);
+  const touchedBlocks = new Set();
+
+  while(nextIndex < batchEnd){
+    const item = workingItems[nextIndex];
+    if(maybeInsertInterstitials(item.id)) currentBlock = null;
+    if(!currentBlock || currentBlockCategory !== item.category){
+      currentBlock = document.createElement('div');
+      currentBlock.className = 'masonry-block';
+      galGrid.appendChild(currentBlock);
+      currentBlockCategory = item.category;
+    }
+    const tile = makeTile(item);
     newTiles.push(tile);
     currentBlock.appendChild(tile);
+    touchedBlocks.add(currentBlock);
+    nextIndex++;
   }
 
-  nextIndex = end;
   loading = false;
-  const block = currentBlock;
+  const blocks = [...touchedBlocks];
   requestAnimationFrame(()=>{
-    layoutBlock(block);
+    blocks.forEach(layoutBlock);
     staggerReveal(newTiles);
     // IntersectionObserver only fires on boundary crossings — if the
     // sentinel is still within range after this chunk lands (e.g. the
