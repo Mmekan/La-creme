@@ -24,7 +24,7 @@ These were settled during brainstorming and are not reopened here.
 |---|---|---|
 | Staging layer | **None — upload direct to Worker** | Drive cannot push to a Worker (no webhook); detection requires polling on the free tier's limited cron. It adds OAuth plumbing and a second copy to guard. The Worker already sits between the page and R2. |
 | Publishing gate | **Review, then approve** | Nothing unvetted reaches the live gallery. |
-| Upload page auth | **Shared 6-digit PIN** | Owner never deals with a login; strangers cannot upload. |
+| Upload page auth | **None — unlisted URL only** | The owner is the only holder of the link and the site owner approves every item, so nothing reaches the gallery unvetted. |
 | Image handling | **Resize client-side on her phone** | A 23-photo batch goes up in seconds, not minutes on mobile data. Keeps the Worker request well under its size ceiling. |
 | Category list | **Matches the gallery filter bar** | One shared constant; cannot drift. |
 | Gallery publishing | **Worker serves a manifest; `gallery.js` fetches it** | Approve in admin → live. No paste, no commit, no deploy. |
@@ -47,20 +47,21 @@ These were settled during brainstorming and are not reopened here.
 ```
 Owner (mobile)                Worker (la-creme-orders)              Cloudflare
 ──────────────                ──────────────────────              ─────────
-upload.html
-  ├─ PIN ──────────────────►  POST /api/upload
-  ├─ category                   ├─ verify PIN (timing-safe)
-  ├─ pick photos                ├─ R2 PUT  gallery/<slug>/<id>.jpg
-  ├─ resize on device           ├─ R2 HEAD read-back  ← verify
-  └─ upload one at a time       ├─ INSERT D1 row (pending)
-       with progress            └─ Telegram: new batch
-                                
+upload.html  (unlisted URL)
+  ├─ category ──────────────►  POST /api/upload
+  ├─ pick photos                ├─ IP rate-limit check
+  ├─ resize on device           ├─ validate category
+  ├─ upload one at a time       ├─ R2 PUT  gallery/<slug>/<id>.jpg
+  └─ with progress              ├─ R2 HEAD read-back  ← verify
+                                ├─ INSERT D1 row (pending)
+                                └─ Telegram: new batch
+
 gallery.html ───────────────►  GET /api/gallery  ──────────────►  reads D1
   └─ merges into grid           (approved only)                    (public)
 
 admin.html
   └─ Approve / Reject ───────►  PATCH /api/uploads/:id
-                                 └─ status → approved  (now in manifest)
+                                └─ status → approved  (now in manifest)
 ```
 
 **Safety order.** Every upload is `R2 PUT → R2 HEAD read-back → D1 INSERT`.
@@ -118,14 +119,15 @@ enforcement point.
 
 ## 5. Upload page (new: `upload.html`, `upload.js`)
 
-Mobile-first. Four steps, one tap each, all controls thumb-sized.
+Mobile-first. Three steps, one tap each, all controls thumb-sized.
 
-1. **PIN** — 6 digits, numeric keypad, remembered in `localStorage`.
-2. **Category** — one dropdown, required. Asked *before* file selection so the
+1. **Category** — one dropdown, required. Asked *before* file selection so the
    tag is bound to everything that follows.
-3. **Photos** — large target opening camera roll or camera. `multiple`,
+2. **Photos** — large target opening camera roll or camera. `multiple`,
    `accept="image/*"`. Thumbnails render as they are chosen.
-4. **Done** — "12 photos sent ✅".
+3. **Done** — "12 photos sent ✅".
+
+No login, no PIN, no account. The page is reached by its unlisted URL only.
 
 ### 5.1 Client-side resize
 
@@ -148,7 +150,6 @@ Each upload is `multipart/form-data` with:
 
 | Field | Value |
 |---|---|
-| `pin` | 6-digit code |
 | `category` | one of `MEDIA_CATEGORIES` |
 | `file` | the JPEG blob |
 | `clientWidth` / `clientHeight` | post-resize dimensions, for aspect ratio |
@@ -163,9 +164,9 @@ reported to the owner — **never silently dropped**.
 All on the existing `la-creme-orders` Worker, sharing its CORS helper and
 `json()` responder.
 
-### 6.1 `POST /api/upload` — public, PIN-gated
+### 6.1 `POST /api/upload` — public, unlisted-URL access
 
-Multipart. Validates PIN → validates category → `R2 PUT` → `R2 HEAD`
+Multipart. IP rate-limit check → validates category → `R2 PUT` → `R2 HEAD`
 read-back → `INSERT` D1 → returns `201` with `{ id, r2Key, imageUrl }`.
 
 `imageUrl` uses the existing `R2_BASE_URL` so the admin dashboard can render a
@@ -193,11 +194,28 @@ deleted) so a mis-click is recoverable; a separate cleanup is out of scope.
 
 ### 6.4 Auth model
 
-- **Owner upload:** `UPLOAD_PIN` secret, compared with the existing
-  timing-safe `safeEqual()`. Rate-limited per IP — 10 failed attempts per
-  15 minutes, mirroring the existing `login_attempts` pattern.
-- **Owner admin:** reuses the existing `ADMIN_PASSWORD` / `SESSION_SECRET` /
-  `isAuthed()` flow unchanged. No new auth system.
+**Owner upload: none.** `POST /api/upload` is unauthenticated and protected
+only by the URL being unlisted. She never sees a login, a code, or an account.
+
+The exposure this leaves is **quota and storage, not the gallery** — an
+unknown caller could upload junk files, but nothing reaches the live site
+without explicit approval in `admin.html`. The mitigation is therefore
+rate limiting rather than authentication:
+
+- **Per-IP rate limit on uploads** — 30 files per hour and 20 distinct hours
+  per day per IP, tracked in a new `upload_rate` table. Mirrors the existing
+  `login_attempts` pattern (time-windowed rows keyed by IP), so it is a small
+  addition using an approach already in the codebase.
+- **Per-request body cap** — rejects anything over ~2MB, well above the
+  ~300KB post-resize target, so a single call cannot push a large payload.
+- **Total batch cap** — a batch may not exceed 200 files.
+
+Exceeding a limit returns `429` with a plain message; her page shows a
+friendly "Too many uploads right now — try again later" rather than an error.
+
+**Owner admin:** reuses the existing `ADMIN_PASSWORD` / `SESSION_SECRET` /
+`isAuthed()` flow unchanged. No new auth system. This is the boundary that
+actually matters — it is what gates publishing.
 
 ---
 
@@ -232,6 +250,15 @@ CREATE TABLE IF NOT EXISTS upload_items (
 );
 CREATE INDEX IF NOT EXISTS idx_items_batch ON upload_items(batch_id);
 CREATE INDEX IF NOT EXISTS idx_items_status ON upload_items(status);
+
+-- Rate limiting for the unauthenticated upload endpoint (§6.4).
+-- Time-windowed rows keyed by IP, mirroring the existing login_attempts
+-- pattern. Old rows are pruned on each write.
+CREATE TABLE IF NOT EXISTS upload_rate (
+  ip TEXT NOT NULL,
+  ts INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rate_ip ON upload_rate(ip, ts);
 ```
 
 `image_url` is denormalised so the dashboard and manifest need no join and no
@@ -345,9 +372,21 @@ existing XSS-safe pattern documented at `admin.js:3`.
 
 ## 11. Security notes
 
-- The PIN gates the *upload* endpoint. It is not a security boundary against a
-  determined attacker — it stops drive-by junk uploads and keeps the R2 bucket
-  from being filled. Rate limiting backs it up.
+Stated plainly, because the upload endpoint has no authentication by decision:
+
+- **`POST /api/upload` is open to anyone who has the URL.** The protection is
+  the URL being unlisted. If it is ever posted publicly, shared in a group
+  chat, or indexed, anyone can upload files to the bucket. Keeping it
+  unlisted is doing real work here and is the single most important
+  operational habit — see §14.
+- **The blast radius of abuse is storage and quota, not the gallery.** Junk
+  uploads sit in R2 costing storage and Worker requests; they are invisible on
+  the site and removable in `admin.html`. The per-IP limits in §6.4 bound
+  this. Approving is the real gate, and it stays password-protected.
+- **Rejected and unapproved files still occupy R2 storage.** A spammer who
+  respects the rate limit can still accumulate data. If storage cost ever
+  becomes a concern, a cleanup job deleting `rejected`/`failed` items older
+  than 30 days is the fix — deliberately out of scope for now.
 - R2 objects under `gallery/` are **publicly readable by URL**, exactly as
   every current gallery image is. Uploading does not make anything private.
   If private media is ever needed, that is a signed-URL change, out of scope
@@ -366,11 +405,11 @@ Each phase is independently verifiable in the browser.
 1. **`MEDIA_CATEGORIES`** in `config.js`; repoint `gallery.js` and `index.js`;
    remove `CAKE_FILTER_CATEGORIES`. Verify the gallery filter bar is unchanged.
 2. **`schema-media.sql`** — create both tables, apply to remote D1.
-3. **Worker** — `POST /api/upload` + PIN + R2 write/verify. Testable with
-   `curl` before any UI exists.
+3. **Worker** — `POST /api/upload` + IP rate limiting + R2 write/verify.
+   Testable with `curl` before any UI exists.
 4. **Worker** — `GET /api/gallery` + admin endpoints. Testable with `curl`.
-5. **`upload.html` / `upload.js`** — PIN, dropdown, resize, one-at-a-time
-   upload with progress.
+5. **`upload.html` / `upload.js`** — dropdown, resize, one-at-a-time upload
+   with progress. No login step.
 6. **`gallery.js`** manifest merge. Verify: upload a test image, approve it,
    see it live.
 7. **`admin.html` / `admin.js`** — Uploads section.
@@ -398,5 +437,6 @@ Phases 1–4 are backend-only and can ship before the owner sees anything.
       messages the bot).
 - [ ] Confirm the R2 bucket name to bind in `wrangler.toml`.
 - [ ] Decide whether `upload.html` is linked from the main site nav or kept
-      unlisted and shared by URL only (unlisted is the default — an
-      unlisted URL plus the PIN means a search engine will not surface it).
+      unlisted and shared by URL only. **Unlisted is strongly recommended** —
+      it is now the only thing protecting an unauthenticated upload endpoint,
+      so a nav link would expose it to every visitor and to search engines.
