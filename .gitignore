@@ -11,6 +11,9 @@ Thumbs.db
 # One-off local admin tool, not part of the site
 _image-review.html
 
+# CodeGraph local index (machine-generated, rebuild with `codegraph init`)
+.codegraph/
+
 # Cloudflare Worker local dev state / secrets
 .wrangler/
 .dev.vars
