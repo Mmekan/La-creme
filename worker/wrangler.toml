@@ -8,6 +8,14 @@ database_name = "la-creme-orders"
 # Filled in by: npx wrangler d1 create la-creme-orders
 database_id = "56b749e6-a899-4126-b93b-9c5b4a5a222a"
 
+# Media bucket the upload pipeline writes to. Inside the Worker, files are
+# read/written via env.MEDIA rather than by bucket name.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "la-creme-media"
+
 # Secrets (never put these in this file), set with:
 #   npx wrangler secret put ADMIN_PASSWORD
 #   npx wrangler secret put SESSION_SECRET
+#   npx wrangler secret put TELEGRAM_BOT_TOKEN
+#   npx wrangler secret put TELEGRAM_CHAT_ID

@@ -463,8 +463,8 @@ Phases 1–4 are backend-only and can ship before the owner sees anything.
       exactly, and the live URL returns 200 for `img/` and `img/offload/`
       paths. Bucket layout is `img/`, `img/offload/`, `videos/` — keys are
       flat prefixes, not real folders.
-- [ ] Add `TELEGRAM_CHAT_ID` as a Worker secret (§8).
-- [ ] Add the R2 binding to `worker/wrangler.toml`:
+- [x] Add `TELEGRAM_CHAT_ID` as a Worker secret (§8).
+- [x] R2 binding added to `worker/wrangler.toml`:
 
   ```toml
   [[r2_buckets]]
@@ -473,7 +473,9 @@ Phases 1–4 are backend-only and can ship before the owner sees anything.
   ```
 
   The bucket already exists (334 objects, 538 MB) — no `r2 bucket create`
-  needed.
+  needed. Verified with `wrangler deploy --dry-run`, which reports
+  `env.MEDIA (la-creme-media) R2 Bucket` alongside the existing `env.DB`.
+  The Worker code reaches the bucket as `env.MEDIA`.
 
 > **Gotcha for build/testing:** `wrangler r2 object put`/`get` write to a
 > **local miniflare cache** by default and silently ignore the real bucket.
