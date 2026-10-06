@@ -1,6 +1,10 @@
 name = "la-creme-orders"
 main = "index.js"
 compatibility_date = "2025-01-01"
+# Served at la-creme-orders.lacreme.workers.dev — the public URL the site
+# (config.js: ordersApi) and the upload page talk to. Without this the
+# Worker deploys but is unreachable (Cloudflare edge returns error 1042).
+workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
