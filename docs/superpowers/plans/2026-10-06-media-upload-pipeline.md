@@ -515,7 +515,7 @@ Expected: `Uploaded la-creme-orders`, no errors, then prints `https://la-creme-o
 
 ```bash
 cd "/c/xampp/htdocs/La creme"
-node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+node -e "require('fs').writeFileSync(require('os').tmpdir()+'/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
 ls -la /tmp/lc-test.jpg
 ```
 
@@ -560,7 +560,7 @@ Expected, in order: `201`, `400`, `400`, `400`, and test 1's body contains a non
 
 ```bash
 cd "/c/xampp/htdocs/La creme/worker"
-KEY=$(cd .. && node -e "const fs=require('fs');const t=fs.readFileSync('/tmp/t1','utf8');console.log(JSON.parse(t).r2Key)")
+KEY=$(cd .. && node -e "const fs=require('fs');const t=fs.readFileSync(require('os').tmpdir()+'/t1','utf8');console.log(JSON.parse(t).r2Key)")
 echo "key: $KEY"
 npx wrangler r2 object get "la-creme-media/$KEY" --remote --file /tmp/got.jpg
 ls -la /tmp/got.jpg
@@ -837,7 +837,7 @@ Expected: `Uploaded la-creme-orders`, prints the `workers.dev` URL.
 ```bash
 W="https://la-creme-orders.lacreme.workers.dev"
 cd "/c/xampp/htdocs/La creme"
-node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+node -e "require('fs').writeFileSync(require('os').tmpdir()+'/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
 
 CB="e2e$(date +%s)"
 echo "--- upload (expect 201) ---"
@@ -853,7 +853,7 @@ curl -s "$W/api/gallery?cb=$RANDOM$RANDOM"; echo
 echo "--- login ---"
 curl -s -o /tmp/login -X POST "$W/api/login" -H "Content-Type: application/json" \
   -d '{"password":"YOUR_ADMIN_PASSWORD"}'
-TOK=$(node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/login','utf8')).token)")
+TOK=$(node -e "console.log(JSON.parse(require('fs').readFileSync(require('os').tmpdir()+'/login','utf8')).token)")
 [ -n "$TOK" ] && echo "token ok" || { echo "LOGIN FAILED — check ADMIN_PASSWORD"; exit 1; }
 
 echo "--- list batches (expect 1 row, stored_count 1) ---"
@@ -1604,7 +1604,7 @@ npx --yes serve -l 8080 "/c/xampp/htdocs/La creme"
 ```bash
 W="https://la-creme-orders.lacreme.workers.dev"
 cd "/c/xampp/htdocs/La creme"
-node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+node -e "require('fs').writeFileSync(require('os').tmpdir()+'/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
 CB="g6$(date +%s)"
 curl -s -o /tmp/up -w "upload: %{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Small Chops" -F "clientBatchId=$CB" -F "batchTotal=1" \
@@ -1960,7 +1960,7 @@ Upload two test photos first so the panel has content:
 ```bash
 W="https://la-creme-orders.lacreme.workers.dev"
 cd "/c/xampp/htdocs/La creme"
-node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+node -e "require('fs').writeFileSync(require('os').tmpdir()+'/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
 CB="adm$(date +%s)"
 for i in 1 2; do
   curl -s -o /dev/null -w "%{http_code} " -X POST "$W/api/upload" \
@@ -2144,7 +2144,7 @@ Expected: `Uploaded la-creme-orders`, no errors.
 ```bash
 W="https://la-creme-orders.lacreme.workers.dev"
 cd "/c/xampp/htdocs/La creme"
-node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+node -e "require('fs').writeFileSync(require('os').tmpdir()+'/lc-test.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
 curl -s -o /tmp/n1 -w "upload: %{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Wedding Cakes" -F "clientBatchId=tg$(date +%s)" -F "batchTotal=2" \
   -F "clientWidth=4" -F "clientHeight=3" -F "filename=tg1.jpg" \
@@ -2268,7 +2268,7 @@ npx --yes serve -l 8080 "/c/xampp/htdocs/La creme"
 9. **Category guard** — from the terminal. (Create the test JPEG first; nothing earlier in this step makes one:)
 
    ```bash
-   node -e "require('fs').writeFileSync('/tmp/guard.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
+   node -e "require('fs').writeFileSync(require('os').tmpdir()+'/guard.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
    curl -s -o /dev/null -w "%{http_code}\n" -X POST "https://la-creme-orders.lacreme.workers.dev/api/upload" \
      -F "category=Cakes" -F "clientBatchId=guard$(date +%s)" -F "batchTotal=1" \
      -F "file=@$(cygpath -m /tmp/guard.jpg);type=image/jpeg"
