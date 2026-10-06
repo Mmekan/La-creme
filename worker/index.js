@@ -124,6 +124,15 @@ const cors = {
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...cors } });
 
+// Same as json(), but cacheable. Only GET /api/gallery uses it — the
+// manifest changes only when you approve or reject something, so a
+// minute of edge caching is safe and spares a D1 read per gallery view.
+const jsonCached = (data, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', ...cors },
+  });
+
 const clip = (v, max) => String(v == null ? '' : v).slice(0, max);
 
 /* ---------- session tokens: "<expiry>.<hmac>" ---------- */
@@ -298,6 +307,108 @@ async function handleUpload(request, env) {
   return json({ id: key, r2Key: key, imageUrl }, 201);
 }
 
+async function handleGallery(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT i.id, i.image_url, i.width, i.height, b.category
+       FROM upload_items i
+       JOIN upload_batches b ON b.id = i.batch_id
+      WHERE i.status = 'Approved'
+      ORDER BY i.approved_at DESC, i.id DESC
+      LIMIT 500`
+  ).all();
+
+  // Shape matches GALLERY_ITEMS so gallery.js can append these straight
+  // onto the hardcoded array. id is namespaced 'u<rowid>' so it can never
+  // collide with the numeric ids in gallery-data.js (spec 9).
+  return jsonCached(results.map(r => ({
+    id: 'u' + r.id,
+    category: r.category,
+    image: r.image_url,
+    aspect: (r.width > 0 && r.height > 0) ? Number((r.width / r.height).toFixed(4)) : 0.75,
+    iconKey: 'cake',
+    caption: '',
+    sub: '',
+  })));
+}
+
+async function handleListUploads(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT b.id, b.received_at, b.category, b.file_count, b.stored_count,
+            b.failed_count, b.total_bytes, b.status,
+            COALESCE(SUM(CASE WHEN i.status = 'Approved' THEN 1 ELSE 0 END), 0) AS approved,
+            COALESCE(SUM(CASE WHEN i.status = 'Pending'  THEN 1 ELSE 0 END), 0) AS pending,
+            COALESCE(SUM(CASE WHEN i.status = 'Rejected' THEN 1 ELSE 0 END), 0) AS rejected,
+            COALESCE(SUM(CASE WHEN i.status = 'Failed'   THEN 1 ELSE 0 END), 0) AS failed
+       FROM upload_batches b
+       LEFT JOIN upload_items i ON i.batch_id = b.id
+      GROUP BY b.id
+      ORDER BY b.received_at DESC
+      LIMIT 100`
+  ).all();
+  return json({ batches: results });
+}
+
+async function handleGetUpload(env, id) {
+  const batch = await env.DB.prepare(
+    'SELECT * FROM upload_batches WHERE id = ?'
+  ).bind(id).first();
+  if (!batch) return json({ error: 'Not found' }, 404);
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM upload_items WHERE batch_id = ? ORDER BY id'
+  ).bind(id).all();
+  return json({ batch, items: results });
+}
+
+async function handleUpdateUpload(request, env, id) {
+  let body;
+  try { body = await request.json(); } catch (e) { return json({ error: 'Bad request' }, 400); }
+  const status = String(body.status || '');
+  // 'Pending' is accepted as well as the two spec 6.3 statuses so a
+  // mis-click is genuinely reversible: spec 6.3 says a rejected item's
+  // R2 object is "retained … so a mis-click is recoverable", and without
+  // a way back to Pending that claim would be false — Approve would be
+  // the only escape and it would publish without review.
+  if (status !== 'Approved' && status !== 'Rejected' && status !== 'Pending') {
+    return json({ error: 'Bad status' }, 400);
+  }
+
+  const item = await env.DB.prepare(
+    'SELECT * FROM upload_items WHERE id = ?'
+  ).bind(id).first();
+  if (!item) return json({ error: 'Not found' }, 404);
+  if (item.status === 'Failed') {
+    return json({ error: 'This photo never reached storage — re-send it from the upload page.' }, 409);
+  }
+
+  await env.DB.prepare(
+    'UPDATE upload_items SET status = ?, approved_at = ? WHERE id = ?'
+  ).bind(status, status === 'Approved' ? new Date().toISOString() : null, id).run();
+  return json({ ok: true, status });
+}
+
+async function handleRetryUpload(env, id) {
+  const item = await env.DB.prepare(
+    'SELECT * FROM upload_items WHERE id = ?'
+  ).bind(id).first();
+  if (!item) return json({ error: 'Not found' }, 404);
+  if (item.status !== 'Failed') return json({ error: 'Only failed photos can be retried.' }, 400);
+
+  // The bytes are never retained server-side, so retry can only recover a
+  // case where the R2 write landed but we failed to confirm it. If the
+  // object genuinely is not there, say so plainly — the owner re-sends
+  // from her phone, which is what spec 8's failure message tells her.
+  const head = await env.MEDIA.head(item.r2_key);
+  if (head && head.size === item.bytes) {
+    await env.DB.prepare(
+      `UPDATE upload_items
+          SET status = 'Pending', error = NULL, image_url = ?
+        WHERE id = ?`
+    ).bind(`${R2_BASE_URL}/${item.r2_key}`, id).run();
+    return json({ ok: true, recovered: true });
+  }
+  return json({ error: 'The photo never reached storage — re-send it from the upload page.' }, 409);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
@@ -306,12 +417,20 @@ export default {
       if (url.pathname === '/api/orders' && request.method === 'POST') return await handleCreateOrder(request, env);
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
       if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env);
+      if (url.pathname === '/api/gallery' && request.method === 'GET') return await handleGallery(env);
 
       if (url.pathname.startsWith('/api/')) {
         if (!(await isAuthed(request, env))) return json({ error: 'Unauthorized' }, 401);
         if (url.pathname === '/api/orders' && request.method === 'GET') return await handleListOrders(url, env);
         const m = url.pathname.match(/^\/api\/orders\/([\w-]+)$/);
         if (m && request.method === 'PATCH') return await handleUpdateOrder(request, env, m[1]);
+        if (url.pathname === '/api/uploads' && request.method === 'GET') return await handleListUploads(env);
+        // Match /retry before /:id — a bare prefix match would swallow it.
+        const mr = url.pathname.match(/^\/api\/uploads\/(\d+)\/retry$/);
+        if (mr && request.method === 'POST') return await handleRetryUpload(env, Number(mr[1]));
+        const mu = url.pathname.match(/^\/api\/uploads\/(\d+)$/);
+        if (mu && request.method === 'GET') return await handleGetUpload(env, Number(mu[1]));
+        if (mu && request.method === 'PATCH') return await handleUpdateUpload(request, env, Number(mu[1]));
       }
       return json({ error: 'Not found' }, 404);
     } catch (err) {
