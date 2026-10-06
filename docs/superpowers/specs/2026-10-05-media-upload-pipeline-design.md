@@ -51,7 +51,7 @@ upload.html  (unlisted URL)
   ├─ category ──────────────►  POST /api/upload
   ├─ pick photos                ├─ IP rate-limit check
   ├─ resize on device           ├─ validate category
-  ├─ upload one at a time       ├─ R2 PUT  gallery/<slug>/<id>.jpg
+  ├─ upload one at a time       ├─ R2 PUT  img/<category-slug>/<id>.jpg
   └─ with progress              ├─ R2 HEAD read-back  ← verify
                                 ├─ INSERT D1 row (pending)
                                 └─ Telegram: new batch
@@ -289,9 +289,25 @@ is already durably in R2. The only states the owner can act on are **Pending
 
 ## 8. Notifications (Telegram)
 
-Bot **@RellikBeatsBot** (display name "MmekaBot"). Secrets:
-`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, set with `npx wrangler secret put`.
-No token is committed to the repo or written to any file the agent can read.
+**Confirmed values:**
+
+| Item | Value |
+|---|---|
+| Bot | **@RellikBeatsBot** (display name "MmekaBot") |
+| Chat ID | **5541964557** (`@Solarellik`, "SolaRellik") |
+| R2 bucket | **`la-creme-media`** |
+| Secrets | `TELEGRAM_BOT_TOKEN` ✅ set · `TELEGRAM_CHAT_ID` ⬜ **still needed** |
+
+`TELEGRAM_BOT_TOKEN` is already stored via `npx wrangler secret put`. The
+token pasted into chat during planning was revoked and replaced; the live
+value now exists only in Cloudflare's encrypted store and is never written to
+the repo or to any file the agent can read.
+
+`TELEGRAM_CHAT_ID` is not a credential, so it can be added the same way:
+
+```
+npx wrangler secret put TELEGRAM_CHAT_ID     # value: 5541964557
+```
 
 Sent fire-and-forget from the Worker via `fetch` to `api.telegram.org` — a
 Telegram failure must never fail an upload. Wrapped in try/catch, logged, and
@@ -387,7 +403,7 @@ Stated plainly, because the upload endpoint has no authentication by decision:
   respects the rate limit can still accumulate data. If storage cost ever
   becomes a concern, a cleanup job deleting `rejected`/`failed` items older
   than 30 days is the fix — deliberately out of scope for now.
-- R2 objects under `gallery/` are **publicly readable by URL**, exactly as
+- R2 objects under `img/` are **publicly readable by URL**, exactly as
   every current gallery image is. Uploading does not make anything private.
   If private media is ever needed, that is a signed-URL change, out of scope
   here.
@@ -433,10 +449,34 @@ Phases 1–4 are backend-only and can ship before the owner sees anything.
 
 ## 14. Open items
 
-- [ ] Owner confirms the Telegram chat ID (`@userinfobot` after the owner
-      messages the bot).
-- [ ] Confirm the R2 bucket name to bind in `wrangler.toml`.
-- [ ] Decide whether `upload.html` is linked from the main site nav or kept
-      unlisted and shared by URL only. **Unlisted is strongly recommended** —
-      it is now the only thing protecting an unauthenticated upload endpoint,
-      so a nav link would expose it to every visitor and to search engines.
+- [x] Telegram chat ID — `5541964557` (`@Solarellik`).
+- [x] R2 bucket name — `la-creme-media`.
+- [x] `upload.html` stays **unlisted**. No link, button, or nav entry from
+      `index.html` or `gallery.html` — the URL is shared by message only.
+      Since the upload endpoint is unauthenticated, this is the layer that
+      matters; a stray nav link would expose it publicly and to search
+      engines.
+- [x] **Bucket confirmed: `la-creme-media` is the bucket behind
+      `R2_BASE_URL`.** Verified three ways — `wrangler r2 bucket dev-url get`
+      maps it to `pub-a9f72716…r2.dev`, a real gallery image fetched from
+      the bucket is 75,062 bytes matching the live URL's `Content-Length`
+      exactly, and the live URL returns 200 for `img/` and `img/offload/`
+      paths. Bucket layout is `img/`, `img/offload/`, `videos/` — keys are
+      flat prefixes, not real folders.
+- [ ] Add `TELEGRAM_CHAT_ID` as a Worker secret (§8).
+- [ ] Add the R2 binding to `worker/wrangler.toml`:
+
+  ```toml
+  [[r2_buckets]]
+  binding = "MEDIA"
+  bucket_name = "la-creme-media"
+  ```
+
+  The bucket already exists (334 objects, 538 MB) — no `r2 bucket create`
+  needed.
+
+> **Gotcha for build/testing:** `wrangler r2 object put`/`get` write to a
+> **local miniflare cache** by default and silently ignore the real bucket.
+> Always pass `--remote` when probing the live bucket, or you will conclude
+> an object is missing when it isn't (and vice versa). `wrangler r2 bucket
+> info` is always remote.
