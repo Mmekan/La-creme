@@ -173,7 +173,7 @@ const ICONS = {
    Add/rename tabs here — each gallery item's `category` below
    must match one of these values exactly.
 ============================================================ */
-const filterCategories = ['All', ...CAKE_FILTER_CATEGORIES, 'Catering & Events', 'Small Chops'];
+const filterCategories = ['All', ...MEDIA_CATEGORIES];
 
 /* ============================================================
    GALLERY ITEMS — data now lives in gallery-data.js (shared with

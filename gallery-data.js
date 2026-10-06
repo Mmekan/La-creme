@@ -25,19 +25,6 @@
    then add an entry below with `image: mediaUrl('img/your-file.jpg')`.
 ============================================================ */
 
-// The cake-only subset of categories below — shared so gallery.js's
-// filter bar and index.html's cake-design modal (which is cakes-only)
-// both build their tabs from the same list instead of drifting apart.
-const CAKE_FILTER_CATEGORIES = [
-  'Traditional Wedding Cakes',
-  'Anniversary',
-  'Cakes for Boys',
-  'Cakes for Girls',
-  'Cakes for Men',
-  'Cakes for Women',
-  'Wedding Cakes',
-];
-
 const GALLERY_ITEMS = [
   // — Weddings —
   { id:1, category:'Wedding Cakes', span2:true, aspect:1.4, iconKey:'cake', tone:'', image:mediaUrl('img/504807796_9099742323462413_1120354441484283313_n.jpg'), caption:'Under the Chandeliers', sub:'Reception centerpiece, styled with hanging florals & crystal light', label:'Featured' },

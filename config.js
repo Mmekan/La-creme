@@ -12,12 +12,41 @@ const CONFIG = {
   whatsappNumber: '2348066556677',
   businessName: 'La Crème',
 
-  // Base URL of the order API Worker (see worker/README.md), e.g.
-  // 'https://la-creme-orders.<your-subdomain>.workers.dev'. Orders are
+  // Base URL of the order API Worker (see worker/README.md). Orders are
   // logged to it and the admin page (admin.html) reads from it. Leave ''
   // to disable logging (orders still go to WhatsApp).
-  ordersApi: ''
+  ordersApi: 'https://la-creme-orders.lacreme.workers.dev'
 };
+
+/* ============================================================
+   MEDIA CATEGORIES — single source of truth for every gallery
+   filter tab, the cake modal's tabs, and the upload page's
+   dropdown (upload.js). Order matters: it is the on-screen tab
+   order in gallery.html and index.html.
+
+   NOTE FOR THE WORKER: worker/index.js carries its own copy of
+   this list (it cannot import config.js — that file calls
+   document.getElementById at load). The two must stay in sync.
+   Task 3 Step 4 verifies the server rejects an unknown category,
+   so drift fails loudly rather than silently.
+============================================================ */
+const MEDIA_CATEGORIES = [
+  'Traditional Wedding Cakes',
+  'Anniversary',
+  'Cakes for Boys',
+  'Cakes for Girls',
+  'Cakes for Men',
+  'Cakes for Women',
+  'Wedding Cakes',
+  'Catering & Events',
+  'Small Chops',
+];
+
+// Cake-only subset, derived rather than hand-listed so it can never
+// drift from MEDIA_CATEGORIES again (that drift is what stranded 23
+// 'Cakes'-tagged photos on no tab at all). Consumers: gallery.js's
+// 'Cakes' aggregate count and index.js's cake-design modal.
+const CAKE_FILTER_CATEGORIES = MEDIA_CATEGORIES.filter(c => c !== 'Catering & Events' && c !== 'Small Chops');
 
 const contactPhoneDisplayEl = document.getElementById('contactPhoneDisplay');
 if(contactPhoneDisplayEl){
