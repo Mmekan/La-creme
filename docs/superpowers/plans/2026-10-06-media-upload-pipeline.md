@@ -259,7 +259,7 @@ cd "/c/xampp/htdocs/La creme/worker"
 npx wrangler d1 execute la-creme-orders --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
 ```
 
-Expected result set contains all six table names:
+Expected result set contains all five table names:
 
 ```
 login_attempts
