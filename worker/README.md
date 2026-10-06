@@ -17,6 +17,7 @@ Copy the `database_id` it prints into `wrangler.toml`, then:
 
 ```
 npx wrangler d1 execute la-creme-orders --remote --file=schema.sql
+npx wrangler d1 execute la-creme-orders --remote --file=schema-media.sql
 npx wrangler secret put ADMIN_PASSWORD     # the password you'll log in with
 npx wrangler secret put SESSION_SECRET     # any long random string
 npx wrangler deploy
