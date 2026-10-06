@@ -22,6 +22,7 @@
 - **Live Worker URL:** `https://la-creme-orders.lacreme.workers.dev`
 - **R2 bucket:** `la-creme-media`, reached from Worker code as `env.MEDIA`. Upload keys are `img/<category-slug>/<id>.jpg`.
 - **Wrangler gotcha:** `wrangler r2 object put`/`get` default to a **local miniflare cache**. Always pass `--remote` when probing the live bucket. `wrangler r2 bucket info` is always remote.
+- **Git Bash / MSYS curl gotcha:** MSYS does not path-convert inside a quoted `-F "file=@/tmp/..."` argument, so curl cannot find the file. That is why every upload test here uses `$(cygpath -m /tmp/...)` — it yields a native `C:/...` path. Keep that form when writing new upload tests. (Found in Task 3; without it a `curl` silently uploads nothing useful or errors.)
 - **Categories are duplicated across the client/server boundary by necessity** — `config.js` runs in the browser (and calls `document`), so the Worker cannot import it. Both copies carry a cross-reference comment, and Task 3 Step 4 verifies server-side rejection of an unknown category so drift fails loudly.
 
 ---
@@ -518,7 +519,7 @@ node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSk
 ls -la /tmp/lc-test.jpg
 ```
 
-Expected: a ~630 byte file exists.
+Expected: a 160 byte file exists.
 
 - [ ] **Step 6: Write the failing curl tests**
 
@@ -530,13 +531,13 @@ echo "--- 1. happy path (expect 201) ---"
 curl -s -o /tmp/t1 -w "%{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Wedding Cakes" -F "clientBatchId=$BID" -F "batchTotal=1" \
   -F "clientWidth=1" -F "clientHeight=1" -F "filename=probe.jpg" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 cat /tmp/t1; echo
 
 echo "--- 2. unknown category (expect 400) ---"
 curl -s -o /tmp/t2 -w "%{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Cakes" -F "clientBatchId=$BID" -F "batchTotal=1" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 cat /tmp/t2; echo
 
 echo "--- 3. missing file (expect 400) ---"
@@ -547,7 +548,7 @@ cat /tmp/t3; echo
 echo "--- 4. bad batch id (expect 400) ---"
 curl -s -o /tmp/t4 -w "%{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Wedding Cakes" -F "clientBatchId=x" -F "batchTotal=1" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 cat /tmp/t4; echo
 ```
 
@@ -565,7 +566,7 @@ npx wrangler r2 object get "la-creme-media/$KEY" --remote --file /tmp/got.jpg
 ls -la /tmp/got.jpg
 ```
 
-Expected: `Download complete.` and a ~630 byte file.
+Expected: `Download complete.` and a 160 byte file.
 
 > `--remote` is mandatory. Without it wrangler reads/writes its local miniflare cache and will report success for objects that never reached Cloudflare (see the gotcha in Global Constraints).
 
@@ -586,7 +587,7 @@ W="https://la-creme-orders.lacreme.workers.dev"
 for i in $(seq 1 32); do
   code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$W/api/upload" \
     -F "category=Wedding Cakes" -F "clientBatchId=ratelimit$(date +%s)" \
-    -F "batchTotal=1" -F "file=@/tmp/lc-test.jpg;type=image/jpeg")
+    -F "batchTotal=1" -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg")
   printf "%s " "$code"
 done
 echo
@@ -843,7 +844,7 @@ echo "--- upload (expect 201) ---"
 curl -s -o /tmp/up -w "%{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Small Chops" -F "clientBatchId=$CB" -F "batchTotal=1" \
   -F "clientWidth=4" -F "clientHeight=3" -F "filename=e2e.jpg" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 cat /tmp/up; echo
 
 echo "--- manifest before approval (expect []) ---"
@@ -1608,7 +1609,7 @@ CB="g6$(date +%s)"
 curl -s -o /tmp/up -w "upload: %{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Small Chops" -F "clientBatchId=$CB" -F "batchTotal=1" \
   -F "clientWidth=4" -F "clientHeight=3" -F "filename=g6.jpg" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 TOK=$(curl -s -X POST "$W/api/login" -H "Content-Type: application/json" -d '{"password":"YOUR_ADMIN_PASSWORD"}' | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).token))")
 BID=$(curl -s "$W/api/uploads" -H "Authorization: Bearer $TOK" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).batches[0].id))")
 IID=$(curl -s "$W/api/uploads/$BID" -H "Authorization: Bearer $TOK" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).items[0].id))")
@@ -1965,7 +1966,7 @@ for i in 1 2; do
   curl -s -o /dev/null -w "%{http_code} " -X POST "$W/api/upload" \
     -F "category=Catering & Events" -F "clientBatchId=$CB" -F "batchTotal=2" \
     -F "clientWidth=4" -F "clientHeight=3" -F "filename=photo$i.jpg" \
-    -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+    -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 done
 echo
 npx --yes serve -l 8080 "/c/xampp/htdocs/La creme"
@@ -2147,7 +2148,7 @@ node -e "require('fs').writeFileSync('/tmp/lc-test.jpg', Buffer.from('/9j/4AAQSk
 curl -s -o /tmp/n1 -w "upload: %{http_code}\n" -X POST "$W/api/upload" \
   -F "category=Wedding Cakes" -F "clientBatchId=tg$(date +%s)" -F "batchTotal=2" \
   -F "clientWidth=4" -F "clientHeight=3" -F "filename=tg1.jpg" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 ```
 
 Expected **within ~2 seconds, on the phone running Telegram as `@Solarellik`**:
@@ -2167,7 +2168,7 @@ If nothing arrives: confirm the bot conversation is open (send any message to `@
 time curl -s -o /dev/null -w "total: %{time_total}s\n" -X POST "$W/api/upload" \
   -F "category=Wedding Cakes" -F "clientBatchId=tg$(date +%s)" -F "batchTotal=1" \
   -F "clientWidth=4" -F "clientHeight=3" -F "filename=tg2.jpg" \
-  -F "file=@/tmp/lc-test.jpg;type=image/jpeg"
+  -F "file=@$(cygpath -m /tmp/lc-test.jpg);type=image/jpeg"
 ```
 
 Expected: `201` and `total:` comfortably under 1s. A total that tracks Telegram's latency would mean the call is being awaited rather than handed to `ctx.waitUntil()` — go back to Step 3.
@@ -2264,12 +2265,14 @@ npx --yes serve -l 8080 "/c/xampp/htdocs/La creme"
 6. **gallery.html reload** — that photo appears, `data-id` starts with `u`, its category tab count is +1.
 7. **Reject one** → gone from the gallery, still visible in admin.
 8. **Restore the rejected one to `Pending`** → still absent from the gallery.
-9. **Category guard** — from the terminal:
+9. **Category guard** — from the terminal. (Create the test JPEG first; nothing earlier in this step makes one:)
 
    ```bash
+   node -e "require('fs').writeFileSync('/tmp/guard.jpg', Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==','base64'))"
    curl -s -o /dev/null -w "%{http_code}\n" -X POST "https://la-creme-orders.lacreme.workers.dev/api/upload" \
      -F "category=Cakes" -F "clientBatchId=guard$(date +%s)" -F "batchTotal=1" \
-     -F "file=@/tmp/guard.jpg;type=image/jpeg"
+     -F "file=@$(cygpath -m /tmp/guard.jpg);type=image/jpeg"
+   rm -f /tmp/guard.jpg
    ```
 
    Expected `400`. (`'Cakes'` exists in the gallery data but is not a real tab — the Worker must refuse it.)
