@@ -16,6 +16,104 @@ const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Cancelled'];
 const ORDER_NO_RE = /^\d{8}-\d{9}-[A-Z]{1,3}$/;
 
+/* ---------- media upload pipeline ----------
+   Spec: docs/superpowers/specs/2026-10-05-media-upload-pipeline-design.md
+------------------------------------------------ */
+
+// Mirror of MEDIA_CATEGORIES in config.js. The Worker cannot import
+// config.js — that file calls document.getElementById at load, which
+// throws outside a browser. Keep the two lists identical; Task 1's
+// config.js carries the matching cross-reference comment, and Step 4
+// below verifies the server rejects a category the client doesn't offer.
+const MEDIA_CATEGORIES = [
+  'Traditional Wedding Cakes',
+  'Anniversary',
+  'Cakes for Boys',
+  'Cakes for Girls',
+  'Cakes for Men',
+  'Cakes for Women',
+  'Wedding Cakes',
+  'Catering & Events',
+  'Small Chops',
+];
+
+const R2_BASE_URL = 'https://pub-a9f72716b1e94d4bb55753e389d9903d.r2.dev';
+const UPLOAD_MAX_BYTES = 2 * 1024 * 1024;            // spec 6.4 body cap
+const UPLOAD_MAX_BATCH = 200;                        // spec 6.4 batch cap
+const RATE_WINDOW_MS = 60 * 60 * 1000;               // 1 hour
+const RATE_MAX_PER_WINDOW = 30;                      // spec 6.4: 30 files/hour
+const RATE_DAY_MS = 24 * 60 * 60 * 1000;
+const RATE_MAX_HOURS_PER_DAY = 20;                   // spec 6.4: 20 distinct hours/day
+
+// 'Catering & Events' -> 'catering-and-events'. Keys are our own, so
+// anything non-slug-safe just gets dropped rather than escaped.
+function slugifyCategory(cat) {
+  return String(cat).toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+// Returns true if this IP has exhausted its allowance. Inserts a
+// timestamped row when allowed, so the *next* call sees it.
+async function uploadRateLimited(ip, env) {
+  const now = Date.now();
+  await env.DB.prepare('DELETE FROM upload_rate WHERE ts < ?').bind(now - RATE_DAY_MS).run();
+
+  const hour = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
+  ).bind(ip, now - RATE_WINDOW_MS).all();
+  if (hour.results[0].n >= RATE_MAX_PER_WINDOW) return true;
+
+  // ts / 3600000 is integer division in SQLite, so this counts distinct
+  // hour-buckets rather than hours — matches "20 distinct hours per day".
+  const day = await env.DB.prepare(
+    'SELECT COUNT(DISTINCT (ts / 3600000)) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
+  ).bind(ip, now - RATE_DAY_MS).all();
+  if (day.results[0].n >= RATE_MAX_HOURS_PER_DAY) return true;
+
+  await env.DB.prepare('INSERT INTO upload_rate (ip, ts) VALUES (?, ?)').bind(ip, now).run();
+  return false;
+}
+
+// Creates the batch row on the file's first arrival, otherwise returns
+// the existing one. Separate from the insert so handleUpload stays flat.
+async function ensureBatch(env, clientBatchId, category, declaredTotal, nowIso) {
+  const existing = await env.DB.prepare(
+    'SELECT * FROM upload_batches WHERE client_batch_id = ?'
+  ).bind(clientBatchId).first();
+  if (existing) return existing;
+
+  await env.DB.prepare(
+    `INSERT INTO upload_batches
+       (client_batch_id, received_at, category, file_count, status)
+     VALUES (?, ?, ?, ?, 'Pending')`
+  ).bind(clientBatchId, nowIso, category, declaredTotal).run();
+  return await env.DB.prepare(
+    'SELECT * FROM upload_batches WHERE client_batch_id = ?'
+  ).bind(clientBatchId).first();
+}
+
+// Folds one file's outcome into its batch. Every expression in the SET
+// clause reads the row's pre-update values, which is what makes the
+// status CASE work: failed_count inside the CASE is the count *before*
+// this file, so `failed_count + <failedDelta> > 0` correctly catches the
+// case where this very file is the first failure.
+async function bumpBatch(env, batch, storedDelta, failedDelta, bytes) {
+  await env.DB.prepare(
+    `UPDATE upload_batches
+        SET stored_count = stored_count + ?,
+            failed_count = failed_count + ?,
+            total_bytes  = total_bytes + ?,
+            status = CASE
+              WHEN stored_count + failed_count + ? + ? >= file_count THEN
+                CASE WHEN failed_count + ? > 0 THEN 'Partial' ELSE 'Complete' END
+              ELSE 'Pending'
+            END
+      WHERE id = ?`
+  ).bind(storedDelta, failedDelta, bytes, storedDelta, failedDelta, failedDelta, batch.id).run();
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -127,6 +225,79 @@ async function handleUpdateOrder(request, env, orderNumber) {
   return json({ ok: true });
 }
 
+async function handleUpload(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+  // Cheapest rejection first — never parse a body we're going to refuse.
+  const declared = Number(request.headers.get('content-length') || 0);
+  if (declared > UPLOAD_MAX_BYTES) return json({ error: 'That photo is too large.' }, 413);
+  if (await uploadRateLimited(ip, env)) {
+    return json({ error: 'Too many uploads right now — try again later.' }, 429);
+  }
+
+  let form;
+  try { form = await request.formData(); } catch (e) { return json({ error: 'Bad request' }, 400); }
+
+  const file = form.get('file');
+  const category = String(form.get('category') || '');
+  const clientBatchId = String(form.get('clientBatchId') || '').trim();
+  const declaredTotal = Number(form.get('batchTotal')) || 1;
+  const filename = clip(form.get('filename') || (file && file.name) || 'photo', 200);
+
+  if (!file || typeof file === 'string') return json({ error: 'No photo received.' }, 400);
+  if (!MEDIA_CATEGORIES.includes(category)) return json({ error: 'Unknown category.' }, 400);
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(clientBatchId)) return json({ error: 'Bad batch id.' }, 400);
+  if (declaredTotal < 1 || declaredTotal > UPLOAD_MAX_BATCH) {
+    return json({ error: 'Too many photos in one upload.' }, 429);
+  }
+
+  const bytes = await file.arrayBuffer();
+  if (bytes.byteLength === 0) return json({ error: 'That file is empty.' }, 400);
+  if (bytes.byteLength > UPLOAD_MAX_BYTES) return json({ error: 'That photo is too large.' }, 413);
+
+  const nowIso = new Date().toISOString();
+  const batch = await ensureBatch(env, clientBatchId, category, declaredTotal, nowIso);
+  if (batch.category !== category) return json({ error: 'One upload must stay in one category.' }, 400);
+  if (batch.stored_count + batch.failed_count >= UPLOAD_MAX_BATCH) {
+    return json({ error: 'Too many photos in one upload.' }, 429);
+  }
+
+  const width = Math.max(0, Math.min(20000, Number(form.get('clientWidth')) || 0));
+  const height = Math.max(0, Math.min(20000, Number(form.get('clientHeight')) || 0));
+  const key = `img/${slugifyCategory(category)}/${crypto.randomUUID()}.jpg`;
+
+  let imageUrl = '', failure = null;
+  try {
+    await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: 'image/jpeg' } });
+    const head = await env.MEDIA.head(key);
+    if (!head || head.size !== bytes.byteLength) throw new Error('read-back size mismatch');
+    imageUrl = `${R2_BASE_URL}/${key}`;
+  } catch (err) {
+    failure = err && err.message ? err.message : String(err);
+  }
+
+  if (failure) {
+    // Record the failure rather than 500-ing: the client will retry the
+    // whole file, and if it also fails we still have a row to show.
+    await env.DB.prepare(
+      `INSERT INTO upload_items
+         (batch_id, filename, r2_key, image_url, bytes, width, height, status, error, received_at)
+       VALUES (?, ?, ?, '', ?, ?, ?, 'Failed', ?, ?)`
+    ).bind(batch.id, filename, key, bytes.byteLength, width, height, clip(failure, 300), nowIso).run();
+    await bumpBatch(env, batch, 0, 1, 0);
+    return json({ error: 'We could not store that photo. Please try again.' }, 502);
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO upload_items
+       (batch_id, filename, r2_key, image_url, bytes, width, height, status, received_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`
+  ).bind(batch.id, filename, key, imageUrl, bytes.byteLength, width, height, nowIso).run();
+  await bumpBatch(env, batch, 1, 0, bytes.byteLength);
+
+  return json({ id: key, r2Key: key, imageUrl }, 201);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
@@ -134,6 +305,7 @@ export default {
     try {
       if (url.pathname === '/api/orders' && request.method === 'POST') return await handleCreateOrder(request, env);
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
+      if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env);
 
       if (url.pathname.startsWith('/api/')) {
         if (!(await isAuthed(request, env))) return json({ error: 'Unauthorized' }, 401);
