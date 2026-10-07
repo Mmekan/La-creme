@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!--
+  UNLISTED PAGE. Never link this from index.html or gallery.html, and
+  never add a nav entry for it. POST /api/upload has no authentication
+  (see spec 6.4 / 11) — keeping the URL out of the site and out of
+  search engines is the only thing protecting the bucket from junk
+  uploads. Share the URL with the business owner by message only.
+-->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#7A0A1D">
+<title>Upload Photos | La Crème</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<script src="config.js" defer></script>
+<script src="upload.js" defer></script>
+<style>
+  :root{ --wine:#7A0A1D; --ink:#18130F; --ivory:#FBF4E9; --muted:#6b6058; --line:#e4d9c8; --gold:#C7A155; --card:#fff; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--ivory); -webkit-text-size-adjust:100%; }
+  button,select,input{ font:inherit; }
+  [hidden]{ display:none !important; }
+  .wrap{ max-width:560px; margin:0 auto; padding:26px 18px calc(44px + env(safe-area-inset-bottom)); }
+  h1{ margin:0 0 4px; font-size:1.5rem; letter-spacing:.01em; }
+  .hint{ color:var(--muted); font-size:.93rem; margin:0; }
+  .step{ margin:28px 0 0; }
+  .lbl{ display:block; font-weight:600; font-size:.78rem; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin-bottom:9px; }
+  .field{ width:100%; padding:15px 14px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:16px; min-height:54px; appearance:auto; }
+  .field:focus{ outline:2px solid var(--wine); outline-offset:1px; }
+  .big{ display:block; width:100%; min-height:58px; padding:16px; border-radius:12px; border:1px dashed var(--wine); background:#fff; color:var(--wine); font-weight:600; font-size:1.02rem; cursor:pointer; }
+  .big.primary{ border:1px solid var(--wine); background:var(--wine); color:#fff; }
+  .big.primary:disabled{ opacity:.55; cursor:default; }
+  .big.ghost{ border:1px solid var(--line); background:transparent; color:var(--ink); }
+  .err{ color:#b00020; font-size:.9rem; margin:9px 0 0; min-height:1.2em; }
+  .thumbs{ list-style:none; margin:16px 0 0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:8px; }
+  .thumbs li{ position:relative; aspect-ratio:1; border-radius:9px; overflow:hidden; background:#ece4d6; border:1px solid var(--line); }
+  .thumbs img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .thumbs .badge{ position:absolute; right:4px; bottom:4px; font-size:.66rem; line-height:1.5; background:rgba(122,10,29,.94); color:#fff; padding:1px 6px; border-radius:999px; }
+  .thumbs li.bad .badge{ background:#b00020; }
+  .thumbs li.prep{ display:grid; place-items:center; font-size:.78rem; color:var(--muted); }
+  .prog{ margin-top:16px; }
+  .progBar{ height:9px; border-radius:999px; background:#e8dfcf; overflow:hidden; }
+  .progBar span{ display:block; height:100%; width:0; background:var(--wine); transition:width .18s linear; }
+  .done{ text-align:center; padding:34px 16px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .done .tick{ font-size:2.7rem; line-height:1; }
+  .done .count{ font-size:1.15rem; font-weight:600; margin:12px 0 4px; }
+  .done .big{ margin-top:22px; }
+  @media (max-width:430px){ .thumbs{ grid-template-columns:repeat(auto-fill,minmax(66px,1fr)); } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Upload Photos</h1>
+  <p class="hint">Choose a category, then pick your photos.</p>
+
+  <section class="step">
+    <label class="lbl" for="category">1 · Category</label>
+    <select id="category" class="field" aria-describedby="catErr">
+      <option value="">Choose a category…</option>
+    </select>
+    <p class="err" id="catErr" role="alert"></p>
+  </section>
+
+  <section class="step">
+    <span class="lbl">2 · Photos</span>
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    <button class="big" type="button" id="pickBtn">Choose photos</button>
+    <p class="hint" id="pickHint"></p>
+    <ul class="thumbs" id="thumbs"></ul>
+    <p class="err" id="prepErr" role="alert"></p>
+  </section>
+
+  <section class="step">
+    <button class="big primary" type="button" id="sendBtn" hidden>Send photos</button>
+    <div class="prog" id="prog" hidden>
+      <div class="progBar"><span id="progFill"></span></div>
+      <p class="hint" id="progText"></p>
+    </div>
+    <p class="err" id="sendErr" role="alert"></p>
+  </section>
+
+  <section class="step done" id="done" hidden>
+    <div class="tick" aria-hidden="true">✅</div>
+    <p class="count" id="doneCount"></p>
+    <p class="hint">They'll appear in the gallery once they've been reviewed.</p>
+    <button class="big ghost" type="button" id="againBtn">Send more</button>
+  </section>
+
+  <p class="err" id="fatal" role="alert"></p>
+</main>
+</body>
+</html>
