@@ -183,17 +183,21 @@ const filterCategories = ['All', ...MEDIA_CATEGORIES];
 ============================================================ */
 const galleryItems = GALLERY_ITEMS.map(item => ({ ...item, icon: ICONS[item.iconKey] }));
 
-const categoryCounts = filterCategories.reduce((acc, cat)=>{
-  acc[cat] = cat === 'All' ? galleryItems.length : galleryItems.filter(g=> g.category === cat).length;
-  return acc;
-}, {});
-// Synthetic aggregate — 'Cakes' isn't a real filter tab anymore (it's
-// split across CAKE_FILTER_CATEGORIES), but the editorial break below
-// still wants one combined count to show. Includes the photos still
-// tagged plain 'Cakes' (the catch-all for ones that don't fit a specific
-// occasion/recipient tab) — they're cakes too, just not on their own tab.
-categoryCounts['Cakes'] = CAKE_FILTER_CATEGORIES.reduce((n, cat)=> n + categoryCounts[cat], 0)
-  + galleryItems.filter(g=> g.category === 'Cakes').length;
+const categoryCounts = {};
+function recomputeCategoryCounts(){
+  Object.keys(categoryCounts).forEach(k=> delete categoryCounts[k]);
+  filterCategories.forEach(cat=>{
+    categoryCounts[cat] = cat === 'All' ? galleryItems.length : galleryItems.filter(g=> g.category === cat).length;
+  });
+  // Synthetic aggregate — 'Cakes' isn't a real filter tab anymore (it's
+  // split across CAKE_FILTER_CATEGORIES), but the editorial break below
+  // still wants one combined count to show. Includes the photos still
+  // tagged plain 'Cakes' (the catch-all for ones that don't fit a specific
+  // occasion/recipient tab) — they're cakes too, just not on their own tab.
+  categoryCounts['Cakes'] = CAKE_FILTER_CATEGORIES.reduce((n, cat)=> n + (categoryCounts[cat] || 0), 0)
+    + galleryItems.filter(g=> g.category === 'Cakes').length;
+}
+recomputeCategoryCounts();
 
 /* ============================================================
    EDITORIAL INTERSTITIALS
@@ -468,26 +472,99 @@ new IntersectionObserver((entries)=>{
 const galFilters = document.getElementById('galFilters');
 const urlFilter = new URLSearchParams(location.search).get('filter');
 const initialFilter = filterCategories.includes(urlFilter) ? urlFilter : 'All';
-let initialFilterBtn = null;
-filterCategories.forEach((cat)=>{
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'gal-filter' + (cat === initialFilter ? ' active' : '');
-  btn.innerHTML = `${cat} <span class="gf-count">${categoryCounts[cat]}</span>`;
-  btn.addEventListener('click', ()=>{
-    if(activeFilter === cat) return;
-    galFilters.querySelectorAll('.gal-filter').forEach(b=> b.classList.remove('active'));
-    btn.classList.add('active');
-    resetGrid(cat);
+activeFilter = initialFilter;
+
+function buildFilterButtons(){
+  galFilters.replaceChildren();
+  filterCategories.forEach((cat)=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gal-filter' + (cat === activeFilter ? ' active' : '');
+    btn.innerHTML = `${cat} <span class="gf-count">${categoryCounts[cat] || 0}</span>`;
+    btn.addEventListener('click', ()=>{
+      if(activeFilter === cat) return;
+      galFilters.querySelectorAll('.gal-filter').forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      resetGrid(cat);
+    });
+    galFilters.appendChild(btn);
   });
-  galFilters.appendChild(btn);
-  if(cat === initialFilter) initialFilterBtn = btn;
-});
+}
+buildFilterButtons();
+
 // Only matters when the tab bar itself scrolls (narrow screens) and
 // the pre-selected filter isn't the first tab — keeps the active
 // one from landing off-screen.
-if(initialFilter !== 'All') initialFilterBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
+const initialFilterBtn = galFilters.querySelector('.gal-filter.active');
+if(initialFilterBtn && activeFilter !== 'All') initialFilterBtn.scrollIntoView({ inline: 'center', block: 'nearest' });
+
 resetGrid(initialFilter);
+
+/* ============================================================
+   LIVE MANIFEST — approved uploads, fetched after first paint.
+   Hardcoded GALLERY_ITEMS renders first; this only ever adds to it,
+   so a slow or unreachable API never delays the gallery (spec 9).
+============================================================ */
+function mergeManifestItems(items){
+  if(!Array.isArray(items) || !items.length) return false;
+  const seen = new Set(galleryItems.map(g=> g.id));
+  const fresh = [];
+  items.forEach(raw=>{
+    if(!raw || seen.has(raw.id)) return;          // dedupe by id
+    seen.add(raw.id);
+    // iconKey -> this page's ICONS, exactly as static items are resolved
+    // at gallery.js:184. Uploaded items always carry an image, so the
+    // icon only shows if the image later fails to load.
+    fresh.push({ ...raw, icon: ICONS[raw.iconKey] || ICONS.cake });
+  });
+  if(!fresh.length) return false;
+  // R13: newest uploads go at the FRONT of the gallery, date-added
+  // newest first (the Worker already returns manifest items newest-first),
+  // not appended after the hardcoded items.
+  galleryItems.unshift(...fresh);
+
+  recomputeCategoryCounts();
+  buildFilterButtons();
+  // Re-render. This can reshuffle the grid once shortly after load if
+  // the API was slow — acceptable, because the alternative (never
+  // refreshing) would leave approved photos invisible until a reload.
+  if(filterCategories.includes(activeFilter)) resetGrid(activeFilter);
+  return true;
+}
+
+async function loadManifest(){
+  if(!CONFIG.ordersApi) return;
+  const KEY = 'lcGalleryManifest';
+
+  // 3s session cache (spec 9) — gallery.html is navigated to often
+  // enough that refetching on every visit would be needless D1 reads.
+  try{
+    const raw = sessionStorage.getItem(KEY);
+    if(raw){
+      const at = Number(sessionStorage.getItem(KEY + 'At') || 0);
+      if(Date.now() - at < 3000){ mergeManifestItems(JSON.parse(raw)); return; }
+    }
+  }catch(e){ /* corrupt cache — fall through to a real fetch */ }
+
+  try{
+    const ctl = new AbortController();
+    const timer = setTimeout(()=> ctl.abort(), 3000);          // spec 9: ~3s
+    const res = await fetch(`${CONFIG.ordersApi}/api/gallery`, { signal: ctl.signal });
+    clearTimeout(timer);
+    if(!res.ok) return;
+    const items = await res.json();
+    try{
+      sessionStorage.setItem(KEY, JSON.stringify(items));
+      sessionStorage.setItem(KEY + 'At', String(Date.now()));
+    }catch(e){ /* quota — still merge, just don't cache */ }
+    mergeManifestItems(items);
+  }catch(err){
+    // Offline, timed out, or the Worker is down. The hardcoded items
+    // are already on screen and the site behaves exactly as it does
+    // today (spec 9) — nothing else to do.
+  }
+}
+loadManifest();
 
 /* ============================================================
    VIDEO TESTIMONIALS
