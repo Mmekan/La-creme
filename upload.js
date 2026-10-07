@@ -123,7 +123,11 @@ async function onFiles(files){
       li.className = '';
       li.replaceChildren(img);
     }catch(err){
-      entry.status = 'failed';
+      // 'broken', not 'failed': blob is null, so this photo can never be
+      // sent — queueing it would append the literal string "null" as a
+      // 4-byte file the Worker happily stores. Excluded from the send
+      // queue; only network failures (status 'failed', blob intact) retry.
+      entry.status = 'broken';
       entry.error = err && err.message ? err.message : 'Could not prepare that photo.';
       li.className = 'bad';
       li.replaceChildren(Object.assign(document.createElement('span'), { className:'badge', textContent:'failed' }));
@@ -303,6 +307,10 @@ function reset(){
   $('prepErr').textContent = '';
   $('catErr').textContent = '';
   $('done').hidden = true;
-  // Same CLIENT_BATCH_ID — a second session from the same page view is
-  // still the same logical upload, so it stays one dashboard row.
+  // Fresh CLIENT_BATCH_ID: a re-send from this new session declares its
+  // own batchTotal, so file_count can reconcile instead of freezing at
+  // the first session's total while stored_count keeps climbing — and
+  // switching category for the next batch can't collide with the old
+  // row (the Worker would 400 "one upload must stay in one category").
+  newBatchId();
 }
