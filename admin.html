@@ -71,6 +71,29 @@
   .actions select{ padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   .none{ color:var(--muted); text-align:center; padding:40px 10px; }
 
+  /* section tabs */
+  .tabs{ display:flex; gap:4px; padding:10px 24px 0; background:var(--ivory); border-bottom:1px solid var(--line); position:sticky; top:53px; z-index:4; }
+  .tab{ padding:11px 18px; border:0; background:transparent; color:var(--muted); font-weight:600; font-size:.9rem; border-bottom:2px solid transparent; cursor:pointer; }
+  .tab:hover{ color:var(--ink); }
+  .tab.active{ color:var(--wine); border-bottom-color:var(--wine); }
+
+  /* upload item statuses */
+  .pill.Pending{ background:#fff3d6; color:#8a5a00; }
+  .pill.Approved{ background:#e2f4e6; color:#1d6b32; }
+  .pill.Rejected{ background:#f1f1f1; color:#999; }
+  .pill.Failed{ background:#fde8ea; color:var(--wine); }
+
+  /* batch detail: photo cards */
+  .up-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:14px; }
+  .up-card{ border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff; display:flex; flex-direction:column; }
+  .up-card img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; background:#efe7d9; }
+  .up-card .broken{ display:grid; place-items:center; aspect-ratio:1; background:#efe7d9; color:var(--muted); font-size:.8rem; }
+  .up-card .meta{ padding:9px 10px; font-size:.76rem; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  .up-card .meta .fname{ color:var(--ink); font-weight:600; word-break:break-all; }
+  .up-card .msg{ padding:0 10px; font-size:.74rem; color:#b00020; }
+  .up-card .acts{ display:flex; gap:6px; padding:9px 10px 10px; margin-top:auto; }
+  .up-card .acts .btn{ flex:1; padding:9px 6px; font-size:.78rem; }
+
   /* receipt: hidden on screen, the only thing printed */
   #receipt{ display:none; }
   @media print{
@@ -99,14 +122,20 @@
 
 <div id="appView" hidden>
   <header class="top">
-    <h1>LA CRÈME · ORDERS</h1>
+    <h1 id="pageTitle">LA CRÈME · ORDERS</h1>
     <div class="right">
       <span id="updated" style="font-size:.78rem;opacity:.7"></span>
       <button class="btn" id="refreshBtn" type="button">Refresh</button>
       <button class="btn" id="logoutBtn" type="button">Sign out</button>
     </div>
   </header>
-  <main>
+
+  <nav class="tabs">
+    <button class="tab active" id="tabOrders" type="button">Orders</button>
+    <button class="tab" id="tabUploads" type="button">Uploads</button>
+  </nav>
+
+  <main id="ordersPanel">
     <section>
       <div class="filters">
         <input class="field" id="search" type="search" placeholder="Search number, name, phone or items">
@@ -120,6 +149,14 @@
       <div class="list" id="list"></div>
     </section>
     <aside class="detail" id="detail"><div class="none">Select an order to see the full details.</div></aside>
+  </main>
+
+  <main id="uploadsPanel" hidden>
+    <section>
+      <p class="stats" id="upStats"></p>
+      <div class="list" id="batchList"></div>
+    </section>
+    <aside class="detail" id="batchDetail"><div class="none">Select an upload to see its photos.</div></aside>
   </main>
 </div>
 

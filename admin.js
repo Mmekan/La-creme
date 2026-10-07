@@ -66,7 +66,22 @@ $('loginForm').addEventListener('submit', async (e)=>{
   }
 });
 $('logoutBtn').addEventListener('click', signOut);
-$('refreshBtn').addEventListener('click', ()=> loadOrders());
+$('tabOrders').addEventListener('click', ()=> switchTab('orders'));
+$('tabUploads').addEventListener('click', ()=> switchTab('uploads'));
+$('refreshBtn').addEventListener('click', ()=> refreshActive());
+
+function switchTab(which){
+  const orders = which === 'orders';
+  $('tabOrders').classList.toggle('active', orders);
+  $('tabUploads').classList.toggle('active', !orders);
+  $('ordersPanel').hidden = !orders;
+  $('uploadsPanel').hidden = orders;
+  $('pageTitle').textContent = orders ? 'LA CRÈME · ORDERS' : 'LA CRÈME · UPLOADS';
+  if(!orders) loadUploads();
+}
+function refreshActive(){
+  if($('uploadsPanel').hidden) loadOrders(); else loadUploads();
+}
 
 /* ---------- list ---------- */
 STATUSES.forEach(s=> $('statusFilter').append(el('option', { value: s, text: s })));
@@ -185,6 +200,159 @@ function printReceipt(o){
   window.print();
 }
 
+/* ---------- uploads ---------- */
+let batches = [];
+let selectedBatchId = null;
+
+function fmtBytes(n){
+  n = Number(n) || 0;
+  if(n < 1024) return n + ' B';
+  if(n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+async function loadUploads(){
+  try{
+    const data = await api('/api/uploads');
+    batches = data.batches;
+    $('upStats').textContent = batches.length
+      ? `${batches.length} upload${batches.length === 1 ? '' : 's'} · ${batches.reduce((n, b)=> n + b.file_count, 0)} photos`
+      : 'No uploads yet.';
+    $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    renderUploadList();
+    if(selectedBatchId) renderBatchDetail();
+  }catch(err){
+    $('upStats').textContent = err.message;
+  }
+}
+
+function renderUploadList(){
+  const list = $('batchList');
+  list.replaceChildren();
+  if(!batches.length){
+    list.append(el('div', { class:'empty', text:'No uploads yet.' }));
+    return;
+  }
+  batches.forEach(b=>{
+    const parts = [];
+    if(b.approved) parts.push(`${b.approved} approved`);
+    if(b.pending)  parts.push(`${b.pending} pending`);
+    if(b.rejected) parts.push(`${b.rejected} rejected`);
+    if(b.failed)   parts.push(`${b.failed} failed`);
+
+    const row = el('div', { class:'row' + (b.id === selectedBatchId ? ' active' : ''), tabindex:'0' },
+      el('div', {},
+        el('div', { class:'no', text:`${b.file_count} photo${b.file_count === 1 ? '' : 's'} · ${b.category}` }),
+        el('div', { class:'who', text:parts.join(' · ') })
+      ),
+      el('div', { class:'meta' },
+        el('div', { class:'total', text:fmtBytes(b.total_bytes) }),
+        el('div', { text:fmtDate(b.received_at) }),
+        el('span', { class:`pill ${b.status}`, text:b.status })
+      )
+    );
+    const open = ()=>{ selectedBatchId = b.id; renderUploadList(); renderBatchDetail(); };
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') open(); });
+    list.append(row);
+  });
+}
+
+async function renderBatchDetail(){
+  const box = $('batchDetail');
+  box.replaceChildren();
+  if(!selectedBatchId){
+    box.append(el('div', { class:'none', text:'Select an upload to see its photos.' }));
+    return;
+  }
+  box.append(el('div', { class:'none', text:'Loading…' }));
+
+  let data;
+  try{
+    data = await api(`/api/uploads/${selectedBatchId}`);
+  }catch(err){
+    box.replaceChildren(el('div', { class:'none', text:err.message }));
+    return;
+  }
+  const { batch, items } = data;
+
+  box.replaceChildren(
+    el('h2', { text:`${batch.file_count} photo${batch.file_count === 1 ? '' : 's'}` }),
+    el('div', { class:'sub', text:`${batch.category} · ${fmtDate(batch.received_at)} · ${fmtBytes(batch.total_bytes)}` })
+  );
+  const grid = el('div', { class:'up-grid' });
+  items.forEach(it=> grid.append(uploadCard(it)));
+  box.append(grid);
+}
+
+function uploadCard(item){
+  const card = el('div', { class:'up-card' });
+
+  if(item.image_url){
+    const img = el('img', { alt:'' });
+    img.loading = 'lazy';
+    img.src = item.image_url;
+    // Rejected items keep their object (spec 6.3), so this renders too —
+    // only the manifest excludes them.
+    img.addEventListener('error', ()=>{
+      const broken = el('div', { class:'broken', text:'no preview' });
+      img.replaceWith(broken);
+    });
+    card.append(img);
+  } else {
+    card.append(el('div', { class:'broken', text:'no preview' }));
+  }
+
+  card.append(el('div', { class:'meta' },
+    el('div', { class:'fname', text:item.filename || '' }),
+    el('div', { text:`${item.width}×${item.height} · ${fmtBytes(item.bytes)}` }),
+    el('span', { class:`pill ${item.status}`, text:item.status })
+  ));
+  if(item.error) card.append(el('div', { class:'msg', text:item.error }));
+
+  const acts = el('div', { class:'acts' });
+  if(item.status === 'Pending'){
+    acts.append(
+      btn('Approve', 'btn', ()=> setUploadStatus(item, 'Approved')),
+      btn('Reject', 'btn ghost', ()=> setUploadStatus(item, 'Rejected'))
+    );
+  } else if(item.status === 'Approved'){
+    acts.append(btn('Unpublish', 'btn ghost', ()=> setUploadStatus(item, 'Pending')));
+  } else if(item.status === 'Rejected'){
+    acts.append(
+      btn('Approve', 'btn', ()=> setUploadStatus(item, 'Approved')),
+      btn('Restore', 'btn ghost', ()=> setUploadStatus(item, 'Pending'))
+    );
+  } else if(item.status === 'Failed'){
+    acts.append(btn('Retry', 'btn', ()=> retryUpload(item)));
+  }
+  card.append(acts);
+  return card;
+}
+
+function btn(label, cls, onClick){
+  const b = el('button', { class:cls, type:'button', text:label });
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function setUploadStatus(item, status){
+  try{
+    await api(`/api/uploads/${item.id}`, { method:'PATCH', body: JSON.stringify({ status }) });
+  }catch(err){ alert(err.message); return; }
+  // Gallery picks this up on its next load — no code edit, no deploy.
+  await loadUploads();
+  await renderBatchDetail();
+}
+
+async function retryUpload(item){
+  try{
+    await api(`/api/uploads/${item.id}/retry`, { method:'POST' });
+  }catch(err){ alert(err.message); return; }
+  await loadUploads();
+  await renderBatchDetail();
+}
+
 /* ---------- boot ---------- */
 if(sessionStorage.getItem(TOKEN_KEY)) showApp();
-setInterval(()=>{ if(!$('appView').hidden && !document.hidden) loadOrders(); }, 60000);
+setInterval(()=>{ if(!$('appView').hidden && !document.hidden) refreshActive(); }, 60000);
