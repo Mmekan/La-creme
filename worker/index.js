@@ -114,6 +114,24 @@ async function bumpBatch(env, batch, storedDelta, failedDelta, bytes) {
   ).bind(storedDelta, failedDelta, bytes, storedDelta, failedDelta, failedDelta, batch.id).run();
 }
 
+// Fire-and-forget. Never throws: a Telegram outage must not fail an
+// upload (spec 8). Callers hand the returned promise to ctx.waitUntil()
+// rather than awaiting it, so the upload responds without waiting on
+// Telegram but Cloudflare still keeps the Worker alive until it lands.
+async function sendTelegram(env, text) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text }),
+    });
+    if (!res.ok) console.error('telegram:', res.status, await res.text());
+  } catch (err) {
+    console.error('telegram:', err && err.message ? err.message : err);
+  }
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -234,7 +252,7 @@ async function handleUpdateOrder(request, env, orderNumber) {
   return json({ ok: true });
 }
 
-async function handleUpload(request, env) {
+async function handleUpload(request, env, ctx) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
 
   // Cheapest rejection first — never parse a body we're going to refuse.
@@ -294,6 +312,16 @@ async function handleUpload(request, env) {
        VALUES (?, ?, ?, '', ?, ?, ?, 'Failed', ?, ?)`
     ).bind(batch.id, filename, key, bytes.byteLength, width, height, clip(failure, 300), nowIso).run();
     await bumpBatch(env, batch, 0, 1, 0);
+    // Once per batch — a 23-file batch that fails 5 times must not buzz
+    // the phone 5 times (spec 8).
+    if (!batch.failure_notified) {
+      await env.DB.prepare('UPDATE upload_batches SET failure_notified = 1 WHERE id = ?').bind(batch.id).run();
+      ctx.waitUntil(sendTelegram(env,
+        `⚠️ Upload Issue\n` +
+        `${batch.failed_count + 1} of ${batch.file_count} photo${batch.file_count === 1 ? '' : 's'} failed to store (${batch.category}).\n` +
+        `The file is still on her phone — ask her to retry.`
+      ));
+    }
     return json({ error: 'We could not store that photo. Please try again.' }, 502);
   }
 
@@ -302,6 +330,16 @@ async function handleUpload(request, env) {
        (batch_id, filename, r2_key, image_url, bytes, width, height, status, received_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`
   ).bind(batch.id, filename, key, imageUrl, bytes.byteLength, width, height, nowIso).run();
+  // First successful file in this batch -> one notification for the whole
+  // upload, not one per photo (spec 8: "sent once per batch").
+  if (batch.stored_count === 0 && batch.failed_count === 0) {
+    ctx.waitUntil(sendTelegram(env,
+      `🔔 New Gallery Upload\n` +
+      `${batch.file_count} photo${batch.file_count === 1 ? '' : 's'} uploaded by the business owner.\n` +
+      `Category: ${batch.category}\n` +
+      `Awaiting your review`
+    ));
+  }
   await bumpBatch(env, batch, 1, 0, bytes.byteLength);
 
   return json({ id: key, r2Key: key, imageUrl }, 201);
@@ -419,13 +457,15 @@ async function handleRetryUpload(env, id) {
 }
 
 export default {
-  async fetch(request, env) {
+  // ctx is Cloudflare's execution context: ctx.waitUntil() is what lets
+  // a notification keep running after this handler returns its Response.
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     try {
       if (url.pathname === '/api/orders' && request.method === 'POST') return await handleCreateOrder(request, env);
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
-      if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env);
+      if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env, ctx);
       if (url.pathname === '/api/gallery' && request.method === 'GET') return await handleGallery(env);
 
       if (url.pathname.startsWith('/api/')) {
