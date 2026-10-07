@@ -331,8 +331,10 @@ async function handleUpload(request, env, ctx) {
      VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?)`
   ).bind(batch.id, filename, key, imageUrl, bytes.byteLength, width, height, nowIso).run();
   // First successful file in this batch -> one notification for the whole
-  // upload, not one per photo (spec 8: "sent once per batch").
-  if (batch.stored_count === 0 && batch.failed_count === 0) {
+  // upload, not one per photo (spec 8: "sent once per batch"). Gate on
+  // stored_count alone: an earlier failure in this batch must not silence
+  // the "needs review" message.
+  if (batch.stored_count === 0) {
     ctx.waitUntil(sendTelegram(env,
       `🔔 New Gallery Upload\n` +
       `${batch.file_count} photo${batch.file_count === 1 ? '' : 's'} uploaded by the business owner.\n` +
