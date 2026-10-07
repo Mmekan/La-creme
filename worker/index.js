@@ -308,12 +308,15 @@ async function handleUpload(request, env) {
 }
 
 async function handleGallery(env) {
+  // Manifest is date-added, newest first: order by received_at (upload
+  // time), not approved_at — approving an older batch after a newer one
+  // must not bury the newer photos.
   const { results } = await env.DB.prepare(
     `SELECT i.id, i.image_url, i.width, i.height, b.category
        FROM upload_items i
        JOIN upload_batches b ON b.id = i.batch_id
       WHERE i.status = 'Approved'
-      ORDER BY i.approved_at DESC, i.id DESC
+      ORDER BY i.received_at DESC, i.id DESC
       LIMIT 500`
   ).all();
 
@@ -399,6 +402,12 @@ async function handleRetryUpload(env, id) {
   // from her phone, which is what spec 8's failure message tells her.
   const head = await env.MEDIA.head(item.r2_key);
   if (head && head.size === item.bytes) {
+    // handleUpload's failure path bumped this batch (failed +1); reverse
+    // it now that the photo recovered, or GET /api/uploads would keep
+    // reporting the batch as failed/Partial forever. bumpBatch recomputes
+    // status, so a fully-recovered batch returns to Complete.
+    const batch = await env.DB.prepare('SELECT * FROM upload_batches WHERE id = ?').bind(item.batch_id).first();
+    if (batch) await bumpBatch(env, batch, 1, -1, item.bytes);
     await env.DB.prepare(
       `UPDATE upload_items
           SET status = 'Pending', error = NULL, image_url = ?
