@@ -18,6 +18,14 @@ database_id = "56b749e6-a899-4126-b93b-9c5b4a5a222a"
 binding = "MEDIA"
 bucket_name = "la-creme-media"
 
+# Daily retention sweep (retentionSweep in index.js): purges Rejected/Failed
+# upload_items older than 30 days. 03:23 UTC, deliberately off the :00 mark
+# so it never lands in the top-of-the-hour scheduler stampede.
+# wrangler wants the single [triggers] table here — [[triggers]] (array of
+# tables) fails config validation.
+[triggers]
+crons = ["23 3 * * *"]
+
 # Secrets (never put these in this file), set with:
 #   npx wrangler secret put ADMIN_PASSWORD
 #   npx wrangler secret put SESSION_SECRET

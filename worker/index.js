@@ -458,6 +458,80 @@ async function handleRetryUpload(env, id) {
   return json({ error: 'The photo never reached storage — re-send it from the upload page.' }, 409);
 }
 
+/* ---------- scheduled: 30-day retention sweep ---------- */
+// Runs daily via [triggers] in wrangler.toml. Purges Rejected/Failed
+// upload_items once they are older than the owner-approved 30-day window.
+// Approved and Pending are never candidates: a mis-click has to stay
+// recoverable for the full 30 days (see the comment on handleUpdateUpload),
+// and a Pending item is still waiting on review.
+async function retentionSweep(env) {
+  // received_at is always written as new Date().toISOString(), so a plain
+  // string comparison against another ISO-8601 cutoff is correct.
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { results: items } = await env.DB.prepare(
+    `SELECT id, batch_id, r2_key, bytes, status
+       FROM upload_items
+      WHERE status IN ('Rejected','Failed') AND received_at < ?
+      ORDER BY received_at
+      LIMIT 200`
+  ).bind(cutoff).all();
+
+  // Per-batch arithmetic, accumulated as rows disappear, so handleListUploads'
+  // stored_count/failed_count/total_bytes keep agreeing with its live item
+  // aggregates (otherwise the dashboard shows ghost counts after a sweep).
+  const deltas = new Map(); // batch_id -> { stored, failed, bytes }
+  const counts = { Rejected: 0, Failed: 0 };
+  let errors = 0;
+
+  for (const item of items) {
+    try {
+      // R2 first: if this throws, the row survives untouched and the next
+      // run retries. The reverse order could strand an orphan object forever.
+      await env.MEDIA.delete(item.r2_key);
+      await env.DB.prepare('DELETE FROM upload_items WHERE id = ?').bind(item.id).run();
+    } catch (err) {
+      errors++;
+      console.error(`retention sweep: could not delete item ${item.id} (${item.r2_key}):`, err);
+      continue;
+    }
+    counts[item.status]++;
+    const d = deltas.get(item.batch_id) || { stored: 0, failed: 0, bytes: 0 };
+    if (item.status === 'Rejected') {
+      d.stored -= 1;
+      d.bytes -= item.bytes;  // stored items added their bytes (handleUpload)
+    } else {
+      d.failed -= 1;          // the failure path added 0 bytes, so subtract 0
+    }
+    deltas.set(item.batch_id, d);
+  }
+
+  let batchesRemoved = 0;
+  for (const [batchId, d] of deltas) {
+    try {
+      const { results } = await env.DB.prepare(
+        'SELECT COUNT(*) AS n FROM upload_items WHERE batch_id = ?'
+      ).bind(batchId).all();
+      if (results[0].n === 0) {
+        await env.DB.prepare('DELETE FROM upload_batches WHERE id = ?').bind(batchId).run();
+        batchesRemoved++;
+        continue;
+      }
+      // Batch still has live items: reconcile the counters in place.
+      const batch = await env.DB.prepare('SELECT * FROM upload_batches WHERE id = ?').bind(batchId).first();
+      if (batch) await bumpBatch(env, batch, d.stored, d.failed, d.bytes);
+    } catch (err) {
+      errors++;
+      console.error(`retention sweep: could not reconcile batch ${batchId}:`, err);
+    }
+  }
+
+  const deleted = counts.Rejected + counts.Failed;
+  console.log(
+    `retention sweep: ${deleted} deleted (${counts.Failed} failed, ${counts.Rejected} rejected), ` +
+    `${batchesRemoved} batches removed, ${errors} errors`
+  );
+}
+
 export default {
   // ctx is Cloudflare's execution context: ctx.waitUntil() is what lets
   // a notification keep running after this handler returns its Response.
@@ -487,6 +561,18 @@ export default {
     } catch (err) {
       console.error(err);
       return json({ error: 'Server error' }, 500);
+    }
+  },
+
+  // Cron entry point (see [triggers] in wrangler.toml). Awaited rather
+  // than deferred with ctx.waitUntil() so the summary and any failure are
+  // always flushed to this invocation's logs before it returns; the catch
+  // keeps an unexpected throw from becoming an unhandled rejection.
+  async scheduled(event, env, ctx) {
+    try {
+      await retentionSweep(env);
+    } catch (err) {
+      console.error('retention sweep failed:', err);
     }
   },
 };
