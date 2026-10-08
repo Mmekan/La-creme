@@ -284,10 +284,20 @@ function finish(){
     return;
   }
 
-  // Never drop a failure silently (spec 5.2).
+  // Never drop a failure silently (spec 5.2). The Worker's own reason —
+  // the 429 rate-limit text, "One upload must stay in one category.",
+  // "That photo is too large." — is appended so a permanent rejection
+  // doesn't read as a flaky network with a Retry that can never succeed.
+  const firstError = [...new Set(
+    prepared
+      .filter(p=> p.status === 'failed')
+      .map(p=> (p.error || '').trim())
+      .filter(Boolean)
+  )][0] || '';
   $('sendErr').textContent =
     `${sent} sent, ${failed} not sent. ` +
-    `Those ${failed} are still on your phone — tap Retry to send them again.`;
+    `Those ${failed} are still on your phone — tap Retry to send them again.` +
+    (firstError ? ` ${firstError}${/[.!?]$/.test(firstError) ? '' : '.'}` : '');
   $('sendBtn').hidden = false;
   const retryable = prepared.filter(p=> p.status === 'failed').length;
   $('sendBtn').textContent = `Retry ${retryable} photo${retryable === 1 ? '' : 's'}`;

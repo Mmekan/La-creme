@@ -170,8 +170,11 @@ const ICONS = {
 
 /* ============================================================
    FILTER CATEGORIES
-   Add/rename tabs here — each gallery item's `category` below
-   must match one of these values exactly.
+   The tabs are generated from MEDIA_CATEGORIES in config.js
+   (line 33) — add, rename, or reorder them THERE, not here, or
+   the two sites of truth drift apart again. Each gallery item's
+   `category` (gallery-data.js) must match one of those values
+   exactly.
 ============================================================ */
 const filterCategories = ['All', ...MEDIA_CATEGORIES];
 
