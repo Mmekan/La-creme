@@ -1489,6 +1489,13 @@ function openCheckoutModal(){
     showToast('Your cart is empty.');
     return;
   }
+  for(const item of ALL_FF_ITEMS){
+    if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
+      showToast(`Please select a flavour for ${item.name}.`);
+      flagInvalidField(document.getElementById(`ff-flavour-${item.id}`));
+      return;
+    }
+  }
   closeCartDropdown();
   renderCheckoutModal();
   openModal(checkoutModal);
@@ -1585,7 +1592,6 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   for(const item of ALL_FF_ITEMS){
     if(item.needsFlavour && ffState[item.id] > 0 && !ffFlavours[item.id]){
       showToast(`Please select a flavour for ${item.name}.`);
-      closeModal(checkoutModal);
       flagInvalidField(document.getElementById(`ff-flavour-${item.id}`));
       return;
     }
