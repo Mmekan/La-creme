@@ -967,10 +967,10 @@ function buildSmallChopsItem(){
 
   wrap.syncQty = ()=>{ if(currentVariant) qtyVal.textContent = ffState[currentVariant.id]; };
   wrap.restoreSelection = ()=>{
-    const v = SMALL_CHOPS_VARIANTS.find(x=> ffState[x.id] > 0);
-    if(!v) return;
-    typeWrap.querySelector('[data-value="' + v.type + '"]').click();
-    styleChipsEl.querySelector('[data-id="' + v.id + '"]').click();
+    SMALL_CHOPS_VARIANTS.filter(x=> ffState[x.id] > 0).forEach(v=>{
+      typeWrap.querySelector('[data-value="' + v.type + '"]').click();
+      styleChipsEl.querySelector('[data-id="' + v.id + '"]').click();
+    });
   };
   return wrap;
 }
