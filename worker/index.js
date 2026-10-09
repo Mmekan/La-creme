@@ -128,7 +128,7 @@ async function sendTelegram(env, text) {
     });
     if (!res.ok) console.error('telegram:', res.status, await res.text());
   } catch (err) {
-    console.error('telegram:', err && err.message ? err.message : err);
+    console.error('telegram:', err && err.name ? err.name : 'error');
   }
 }
 
