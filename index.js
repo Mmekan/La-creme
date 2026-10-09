@@ -1462,7 +1462,7 @@ function renderCheckoutModal(){
   [...ffLines, ...catLines, ...CART_SOURCES.cake.lines()].forEach(line=>{
     const row = document.createElement('div');
     row.className = 'checkout-review-row';
-    row.innerHTML = `<span>${line.name}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${line.priceLabel || fmtNaira(line.qty * line.unitPrice)}</span>`;
+    row.innerHTML = `<span>${escapeHtml(line.name)}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${line.priceLabel || fmtNaira(line.qty * line.unitPrice)}</span>`;
     reviewEl.appendChild(row);
   });
 
