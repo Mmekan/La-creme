@@ -424,8 +424,8 @@ async function handleUpdateUpload(request, env, id) {
   }
 
   await env.DB.prepare(
-    'UPDATE upload_items SET status = ?, approved_at = ? WHERE id = ?'
-  ).bind(status, status === 'Approved' ? new Date().toISOString() : null, id).run();
+    'UPDATE upload_items SET status = ? WHERE id = ?'
+  ).bind(status, id).run();
   return json({ ok: true, status });
 }
 
