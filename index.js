@@ -1206,7 +1206,7 @@ function buildSoupRow(item){
         sel.qty = 1;
         qtyVal.textContent = '1';
         proteinWrap.style.display = 'block';
-        qtyWrap.style.display = 'flex';
+        qtyWrap.style.display = 'none';
       }
       commit();
     });
@@ -1230,6 +1230,7 @@ function buildSoupRow(item){
       proteinChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       sel.protein = already ? '' : chip.dataset.value;
       if(!already) chip.classList.add('selected');
+      qtyWrap.style.display = sel.protein ? 'flex' : 'none';
       commit();
     });
   });
