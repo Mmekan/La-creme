@@ -775,6 +775,14 @@ function finalizeCakeOrder(){
     refreshCartUI();
   }
 
+  for (const c of cakeCart) {
+    if (c.date < minOrderDate()) {
+      showToast(`Please re-pick the date for your ${c.tiersLabel} cake — it is now past due.`);
+      flagInvalidField(document.getElementById('cakeDate'));
+      return;
+    }
+  }
+
   const nameEl = document.getElementById('cakeName');
   const phoneEl = document.getElementById('cakePhone');
   const name = nameEl.value;
@@ -1593,6 +1601,13 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
   const orderNo = generateOrderNumber(name);
   const cakes = cakeCart.slice(); // cakes queued via "Add to Cart" ride along in this order
+  for (const c of cakes) {
+    if (c.date < minOrderDate()) {
+      showToast(`Please re-pick the date for your ${c.tiersLabel} cake — it is now past due.`);
+      flagInvalidField(document.getElementById('cakeDate'));
+      return;
+    }
+  }
 
   const message = fitWhatsAppMessage((detail)=> {
     const strip = (arr)=> detail === 'summary'
