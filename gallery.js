@@ -15,7 +15,7 @@ const NEWS_ITEMS = [
   {
     tag: 'New Arrival',
     title: 'Cake Slices',
-    price: '₦4,000 / slice',
+    price: '₦3,500 / slice',
     blurb: 'Delicious cake slices for any occasion, now on the Finger Foods menu.',
     images: [
       mediaUrl('img/cakeslice1-sm.jpg'),
