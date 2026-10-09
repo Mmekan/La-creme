@@ -180,7 +180,7 @@ function isValidPhone(value){
 function bindMediaSkeleton(frameEl, mediaEl){
   frameEl.classList.add('skel');
   const clear = ()=> frameEl.classList.remove('skel');
-  if(mediaEl.tagName === 'IMG' && mediaEl.complete && mediaEl.naturalWidth > 0){ clear(); return; }
+  if(mediaEl.tagName === 'IMG' && mediaEl.complete){ clear(); return; }
   mediaEl.addEventListener(mediaEl.tagName === 'VIDEO' ? 'loadeddata' : 'load', clear, { once:true });
   mediaEl.addEventListener('error', clear, { once:true });
 }
