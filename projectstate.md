@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-05 (after Phase 5 — upload clear-selection + admin session window)
-**HEAD:** `f6fdb99` · all work below is in the **working tree, not committed yet**
+**Updated:** 2026-11-05 (after Phase 5, committed and verified)
+**HEAD:** `5f08ff6` · working tree clean · Phases 1–5 landed in `2cdf261`
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -117,6 +117,9 @@ on reload · remove and clear both correct · `node --check` clean.
   reset, **category preserved** — ✅
 - Clear mid-resize (2 photos queued, cleared immediately): nothing
   repopulates, 0 prepared, 0 thumbnails — ✅
+- Clear during an in-flight send (stubbed request): disabled, click does
+  nothing, prepared/thumbnails untouched, re-enabled after the send finishes,
+  "1 photo sent ✅" shown — ✅
 - Admin session: no entry → login shown; valid entry → token returned;
   expired → `null` and entry removed; garbage JSON → `null` and entry removed;
   a valid written entry is what boot reads — ✅
@@ -126,19 +129,11 @@ on reload · remove and clear both correct · `node --check` clean.
 
 ## Repo state
 
-```
- M admin.js     (+28)
- M config.js    (+42)
- M gallery.html (+5)
- M gallery.js   (+4)
- M index.css    (+170)
- M index.html   (+48)
- M index.js     (+374)
- M upload.html  (+2)
- M upload.js    (+15)
-```
-
-These nine files hold **Phases 1–5, all uncommitted**. Nothing has been pushed.
+- `2cdf261` — Phases 1–5 across nine files (546 insertions, 142 deletions).
+  They share one commit because the hunks interleave inside the same files,
+  so a per-phase split would need hand-built partial patches.
+- `5f08ff6` — these two tracking docs.
+- Working tree clean. Nothing has been pushed.
 
 ---
 
@@ -146,10 +141,10 @@ These nine files hold **Phases 1–5, all uncommitted**. Nothing has been pushed
 
 - WhatsApp message composition was not captured end-to-end (submitting opens
   `wa.me`). Its soup lines come from the array verified in Phase 4.
-- A real upload was not run, so "Clear disabled during send" is verified by
-  code inspection, not by clicking it mid-upload.
+- The upload **send** itself was exercised against a stubbed `XMLHttpRequest`,
+  not the real worker: Clear is confirmed disabled mid-flight, the click is a
+  no-op, and it re-enables after `finish()`. No bytes were sent to R2.
 - Admin login with a **real** token was not exercised against the worker; the
   probe tested the session-window logic only, to avoid poking production.
 - Real touch hardware and a true 390px viewport were not exercised — headless
   Chrome on Windows has a ~497px minimum layout width.
-- Phases 4–5 are not committed, so the diff is the only record of them.

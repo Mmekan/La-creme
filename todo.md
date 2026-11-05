@@ -7,15 +7,16 @@ Companion to `projectstate.md`.
 
 ## Do first
 
-- [ ] **Commit Phases 1–5.** Nine files are modified and uncommitted
-      (`admin.js`, `config.js`, `gallery.html`, `gallery.js`, `index.css`,
-      `index.html`, `index.js`, `upload.html`, `upload.js`). One commit per
-      phase keeps the Phase 4 soup rewrite reviewable on its own.
+- [x] **Commit Phases 1–5.** Landed as `2cdf261` (one commit — the phase hunks
+      interleave inside the same files, so a clean split needs partial patches).
+      Tracking docs in `5f08ff6`. Nothing pushed.
 - [ ] **Confirm the password question with the owner.** The upload page has
       no password to remove — the gate is the admin page, and its re-ask window
       is now 15 minutes. If she meant a different gate, say which.
-- [ ] **Try an upload on a phone** and press Clear selection mid-send: it
-      should refuse while sending and clear fully once finished.
+- [x] **Clear selection mid-send.** Verified against a stubbed request: the
+      button is disabled during the send, the click is a no-op, and it
+      re-enables afterwards. A real-device pass is still nice to have but no
+      longer blocking.
 
 ## Next — Phase 6 (#8): order from a gallery image
 
