@@ -20,13 +20,44 @@ Companion to `projectstate.md`.
 
 ## Next — Phase 6 (#8): order from a gallery image
 
-- [ ] Add an in-context CTA inside the gallery lightbox, e.g. **"Order Small Chops."**
-- [ ] Map gallery image/category → menu destination (Small Chops is the
-      confirmed first case).
-- [ ] Navigate to that section, scroll the target row into view and
-      highlight/pulse it.
-- [ ] Expand the row's quantity/selection controls so it's ready to order.
-- [ ] Handle both same-page (main site) and gallery → homepage navigation.
+Defined 2026-11-05, in the owner's words: in the gallery, an **Order** button
+that takes the viewer to the menu for whatever they're looking at, preselects
+where it can, and says what to do next.
+
+### 6a — Order CTA in the gallery lightbox
+
+- [ ] Add an **Order** button to the lightbox (next to the caption), labelled
+      per the image's category — "Order this cake", "Order Small Chops".
+- [ ] Map from the image's `category` (the item's own, not just the active
+      filter — the "Cakes" catch-all has no tab of its own):
+
+      Wedding Cakes, Traditional Wedding Cakes → cakes, occasion **Wedding**
+      Anniversary                              → cakes, occasion **Anniversary**
+      Cakes, Cakes for Boys/Girls/Men/Women    → cakes, occasion **Birthday**
+      Small Chops                              → finger-foods
+      Catering & Events                        → catering   (needs a decision)
+
+- [ ] Navigate cross-page to `index.html` with a small query signal
+      (e.g. `?order=cake&occasion=Birthday#cakes`).
+- [ ] On arrival, `index.js` reads that signal once, sets the occasion select,
+      scrolls the section into view, pulses the relevant row, and opens its
+      quantity/selection controls.
+- [ ] Toasts on arrival:
+      - cake → **"How would you like the cake?"**
+      - small chops → **"Complete your small chops order."**
+- [ ] Clear the query signal after use so a refresh doesn't re-fire the toast
+      or re-force the occasion.
+
+### 6b — Gallery nav
+
+- [x] Replace the dead "Gallery" link in the gallery page's nav with **Home**
+      (was `opacity:.6; pointer-events:none`).
+
+### Open questions
+
+- Where do **Catering & Events** photos send people — `#catering`, or no CTA?
+- Should the Order button also sit on the filter bar (order "this category")
+  or only in the lightbox (order "this photo")?
 
 ## Then — final regression sweep
 

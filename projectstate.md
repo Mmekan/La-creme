@@ -1,6 +1,6 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-05 (after Phase 5, committed and verified)
+**Updated:** 2026-11-05 (Phase 5 shipped; Phase 6 specified, gallery nav fixed)
 **HEAD:** `5f08ff6` · working tree clean · Phases 1–5 landed in `2cdf261`
 
 This file is the "where am I" record. Update it after each task.
@@ -22,7 +22,7 @@ in that order. Phase plan text lives in the past session
 | 3 | #5, #9, #10, #11, #12, #13 — content/config corrections | ✅ done |
 | 4 | #14 — soups use the rice cart mechanism | ✅ done |
 | **5** | **#7 — upload "Clear selection" + admin password asks once per 15 min** | **✅ done** |
-| 6 | #8 — order directly from a gallery image | ⬜ not started |
+| 6 | #8 — order directly from a gallery image | ⬜ specified, not started |
 
 ---
 
@@ -97,6 +97,23 @@ of belongs to [admin.html](admin.html). That is what changed here.
 - The server's own token is still 12h — this only controls how often the
   password is re-asked, so the window is a convenience, not a security
   boundary. Token is now readable from localStorage for those 15 minutes.
+
+---
+
+## Phase 6 — specified, not built
+
+Owner's requirement, recorded 2026-11-05:
+
+1. **Gallery nav** — the dead "Gallery" link (`opacity:.6; pointer-events:none`)
+   is replaced with a working **Home** link. Done: `gallery.html:94`.
+2. **Order from a gallery image** — an Order button in the lightbox that routes
+   by the image's category: wedding/anniversary cakes pick that occasion, every
+   other cake picks **Birthday**, and Small Chops goes to the finger-food menu.
+   Arrival shows a toast ("How would you like the cake?" / "Complete your small
+   chops order") and opens the target row's controls.
+
+Full checklist and the two open questions (Catering & Events destination;
+lightbox-only vs. filter-bar button) are in `todo.md`.
 
 ---
 
