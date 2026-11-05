@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-05 (Phase 5 shipped; Phase 6 specified, gallery nav fixed)
-**HEAD:** `5f08ff6` · working tree clean · Phases 1–5 landed in `2cdf261`
+**Updated:** 2026-11-05 (Phase 6 built — gallery Order button, arrivals, event booking)
+**HEAD:** `5f08ff6` · Phase 6 uncommitted · Phases 1–5 landed in `2cdf261`
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -22,7 +22,7 @@ in that order. Phase plan text lives in the past session
 | 3 | #5, #9, #10, #11, #12, #13 — content/config corrections | ✅ done |
 | 4 | #14 — soups use the rice cart mechanism | ✅ done |
 | **5** | **#7 — upload "Clear selection" + admin password asks once per 15 min** | **✅ done** |
-| 6 | #8 — order directly from a gallery image | ⬜ specified, not started |
+| **6** | **#8 — order directly from a gallery image** | **✅ built, uncommitted** |
 
 ---
 
@@ -100,20 +100,83 @@ of belongs to [admin.html](admin.html). That is what changed here.
 
 ---
 
-## Phase 6 — specified, not built
+## What Phase 6 changed (#8)
 
-Owner's requirement, recorded 2026-11-05:
+Files: `gallery.html`, `gallery.js`, `index.html`, `index.js`, `index.css`.
 
-1. **Gallery nav** — the dead "Gallery" link (`opacity:.6; pointer-events:none`)
-   is replaced with a working **Home** link. Done: `gallery.html:94`.
-2. **Order from a gallery image** — an Order button in the lightbox that routes
-   by the image's category: wedding/anniversary cakes pick that occasion, every
-   other cake picks **Birthday**, and Small Chops goes to the finger-food menu.
-   Arrival shows a toast ("How would you like the cake?" / "Complete your small
-   chops order") and opens the target row's controls.
+### Gallery side
 
-Full checklist and the two open questions (Catering & Events destination;
-lightbox-only vs. filter-bar button) are in `todo.md`.
+- **Lightbox Order button** (`#lightboxOrder`), under the caption. `ORDER_ROUTES`
+  in `gallery.js` keys off the item's **own** `category`, not the active filter,
+  so the "Cakes" catch-all (which has no tab) still gets a route:
+
+  | category | label | goes to |
+  |---|---|---|
+  | Wedding Cakes, Traditional Wedding Cakes | Order this cake | `?order=cake&occasion=Wedding#cakes` |
+  | Anniversary | Order this cake | `?order=cake&occasion=Anniversary#cakes` |
+  | Cakes, Cakes for Boys/Girls/Men/Women | Order this cake | `?order=cake&occasion=Birthday#cakes` |
+  | Small Chops | Order Small Chops | `?order=smallchops#finger-foods` |
+  | Catering & Events | Book your event | `?order=catering#catering` |
+
+  An unrouted category hides the button rather than showing a dead link.
+- The dead **Gallery** nav link is a working **Home** link (`gallery.html:94`).
+
+### Menu side
+
+- `handleOrderArrival()` in `index.js` reads `?order=` once at boot:
+  - **cake** — sets the occasion select (validated against the form's own
+    options first, so a hand-edited `?occasion=` can't blank the select),
+    scrolls `#cakes` into view, pulses the cake form,
+    toast *"How would you like the cake?"*
+  - **smallchops** — scrolls `#finger-foods`, pulses the first row,
+    toast *"Complete your small chops order."*
+  - **catering** — scrolls the **booking card** into view (centre) and pulses
+    it, toast *"Planning an event? Tap Book Event Catering below."*
+  - then `history.replaceState()` drops the query but keeps the hash, so a
+    refresh re-lands on the section without re-firing the toast or occasion.
+- `.arrival-pulse` (one-shot gold ring, 2.8s) in `index.css`.
+
+### Book catering for an event
+
+The owner's addition: apart from building a litres-and-proteins cart, a host
+should be able to just book the spread.
+
+- **Book Event Catering** card in `#catering`, between the intro and the soup
+  list: heading, one line of reassurance, wine button.
+- The button is a `wa.me` link whose message pre-types the four things we
+  can't quote without — `Event type:`, `Date:`, `Guests:`, `Venue:` — each on
+  its own line, for the customer to fill in WhatsApp. Set in `index.js` next to
+  the other generic WA buttons; it works with or without the `?order=` arrival.
+- Layout: flex row that wraps (text left / button right), button goes
+  full-width under 620px. Verified at 1258 / 738 / 512px — no horizontal
+  overflow at any of them.
+
+Still open: whether the Order button should also sit on the gallery filter bar
+(order "this category") — currently lightbox-only, as specified.
+
+### Checkout — the cake order's delivery carries over
+
+Reported 2026-11-05: a cake plus finger foods/catering goes through the combined
+checkout, which asked **Delivery/Pickup and the address again from a blank
+slate** — even though the cake form had just collected exactly that. The step
+had to stay (it's the one delivery line for the whole order); what was wrong
+was it starting empty.
+
+- `carryCakeDeliveryIntoCheckout()` (called from `openCheckoutModal()`):
+  when a cake is in the cart and the cake form has a delivery answer, the chip
+  is preselected and, for Delivery, the address is copied across if the
+  checkout address is still empty.
+- A gold-bordered note under the chips says where it came from — *"Carried
+  over from your cake order, address included. If this one is going somewhere
+  else, change it above."* — so it reads as a confirm-or-change, not a silent
+  setting.
+- Clicking either chip hides the note: the value on screen is then the
+  customer's own, not a carried one.
+- Skipped when there's no cake, when the cake form never answered delivery,
+  or when the customer already picked in this modal (reopening doesn't
+  overwrite their choice).
+- The delivery chip handler was folded into `applyCheckoutDelivery()` so the
+  prefill and a real click run identical logic.
 
 ---
 
@@ -142,6 +205,34 @@ on reload · remove and clear both correct · `node --check` clean.
   a valid written entry is what boot reads — ✅
 - `node --check upload.js` and `node --check admin.js` clean — ✅
 
+### Phase 6 (headless Chrome probes, deleted afterwards)
+
+Gallery — every category that has photos gets the right label + href
+(Wedding/Traditional→Wedding, Anniversary→Anniversary, the four "for …" tabs
+and the "Cakes" catch-all→Birthday, Small Chops→finger-foods,
+Catering & Events→catering); an unrouted category hides the button.
+
+Arrivals — `?order=cake&occasion=Wedding|Anniversary|Birthday` preselects that
+occasion; `occasion=Nope` leaves the select untouched instead of blanking it;
+`?order=smallchops` pulses a finger-food row; `?order=catering` pulses the
+booking card; every arrival clears the query and keeps the hash; a plain load
+shows no toast and no pulse; the cart still initialises.
+
+Booking card — layout measured at 1258 / 738 / 512px (wraps, button full width
+when narrow, no page overflow) and screenshotted in isolation at 1280 / 560.
+`node --check index.js` and `node --check gallery.js` clean.
+
+Checkout carry-over — cake (Delivery + "12 Iyala Street, Uyo") plus a finger-food
+line: chip preselected, address copied, note shown. Switching to Pickup hides
+the note and clears the address. Reopening keeps the customer's own Pickup.
+Cake form set to Pickup carries Pickup. No cake → nothing carried. Cake in cart
+with no delivery answered → nothing carried, plain ask. Submitting that order
+composes a message with the carried `Delivery, 12 Iyala Street, Uyo` line, the
+`*Cakes*` block and the finger-food lines.
+
+Not exercised: real touch hardware, a true 390px viewport (headless Chrome on
+Windows bottoms out around 497px), and an actual WhatsApp send.
+
 ---
 
 ## Repo state
@@ -150,7 +241,8 @@ on reload · remove and clear both correct · `node --check` clean.
   They share one commit because the hunks interleave inside the same files,
   so a per-phase split would need hand-built partial patches.
 - `5f08ff6` — these two tracking docs.
-- Working tree clean. Nothing has been pushed.
+- **Uncommitted:** Phase 6 across `gallery.html`, `gallery.js`, `index.html`,
+  `index.js`, `index.css`. Nothing has been pushed.
 
 ---
 

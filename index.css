@@ -649,6 +649,24 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 }
 .menu-group-title:first-child{ margin-top: 0; }
 
+/* Event-catering CTA — the catering section's own way in, for hosts who
+   want a quote rather than a litres-and-proteins cart. Sits between the
+   section intro and the soup list so it's the first thing you meet. */
+.catering-book{
+  display:flex; align-items:center; justify-content:space-between;
+  gap: 20px 28px; flex-wrap:wrap;
+  margin-bottom: 52px; padding: 26px 30px;
+  border: 1px solid var(--gold-line); border-radius: 14px;
+  background: linear-gradient(135deg, rgba(199,161,85,0.13), rgba(199,161,85,0.03));
+}
+.catering-book h3{ font-family: var(--font-display); font-size: 1.34rem; }
+.catering-book p{ margin-top: 7px; color: var(--text-muted); font-size: 0.92rem; max-width: 50ch; }
+.catering-book .btn{ flex: 0 0 auto; }
+@media (max-width: 620px){
+  .catering-book{ padding: 22px 20px; }
+  .catering-book .btn{ width: 100%; justify-content: center; }
+}
+
 /* Order summary drawer */
 .order-summary{
   position: sticky; top: 100px; background: var(--ink); color: var(--ivory);
@@ -735,6 +753,22 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .lightbox-info{ text-align:center; margin-top: 18px; max-width: 640px; }
 .lightbox-caption{ color: var(--ivory); font-family: var(--font-display); font-size: 1.25rem; }
 .lightbox-sub{ color: rgba(251,244,233,0.6); font-size: 0.86rem; margin-top: 4px; }
+.lightbox-order{
+  display:inline-flex; align-items:center; justify-content:center;
+  margin-top: 16px; padding: 11px 24px; border-radius: 30px;
+  background: var(--wine); color: #fff;
+  font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase;
+  transition: background .2s ease;
+}
+.lightbox-order:hover{ background: var(--wine-bright); }
+.lightbox-order[hidden]{ display:none; } /* display:inline-flex above would otherwise beat the UA [hidden] rule */
+
+/* One-shot ring around the menu the gallery's Order button sent you to. */
+@keyframes arrivalPulse{
+  0%, 100%{ box-shadow: 0 0 0 0 rgba(199,161,85,0); }
+  25%, 65%{ box-shadow: 0 0 0 5px rgba(199,161,85,0.5); }
+}
+.arrival-pulse{ animation: arrivalPulse 1.3s ease-in-out 2; border-radius: 14px; }
 .lightbox-nav{
   position: absolute; top:50%; transform: translateY(-50%); color: var(--ivory);
   width: 46px; height:46px; border-radius:50%; border: 1px solid rgba(251,244,233,0.3);
@@ -794,6 +828,16 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   font-size: 0.92rem; margin-bottom: 26px;
 }
 .checkout-total strong{ font-family: var(--font-display); font-size: 1.3rem; color: var(--ink); }
+/* Says where a prefilled field came from (currently the cake order's
+   delivery), so a carried-over answer reads as a question to confirm
+   rather than a silent setting. */
+.checkout-carry-note{
+  margin-top: 12px; padding: 10px 14px;
+  border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0;
+  background: rgba(199,161,85,0.14);
+  font-size: 0.82rem; line-height: 1.5; color: var(--text-muted);
+}
+.checkout-carry-note[hidden]{ display: none; }
 @media (max-width: 640px){
   .checkout-panel{ padding: 0 26px 26px; }
   .checkout-panel > .checkout-head{ padding: 20px 0 14px; }

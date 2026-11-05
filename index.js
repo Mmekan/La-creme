@@ -100,6 +100,19 @@ const genericWaMessage = `Hello ${CONFIG.businessName}! I'd like to enquire abou
   if(el){ el.href = waLink(genericWaMessage); }
 });
 
+/* The catering section's own CTA, for hosts who want us to plan and price
+   the spread rather than build a litres-and-proteins cart themselves. The
+   blanks are deliberate — they're the four things we can't quote without,
+   and filling them in WhatsApp is quicker than a form they'd abandon. */
+const cateringWaMessage = `Hello ${CONFIG.businessName}! I'd like to book catering for an event.
+
+Event type:
+Date:
+Guests:
+Venue: `;
+const cateringBookBtn = document.getElementById('cateringBookBtn');
+if(cateringBookBtn){ cateringBookBtn.href = waLink(cateringWaMessage); }
+
 /* ============================================================
    TOAST
 ============================================================ */
@@ -1619,6 +1632,7 @@ function openCheckoutModal(){
   }
   closeCartDropdown();
   renderCheckoutModal();
+  carryCakeDeliveryIntoCheckout();
   openModal(checkoutModal);
 }
 document.getElementById('checkoutClose').addEventListener('click', ()=> closeModal(checkoutModal));
@@ -1637,17 +1651,50 @@ document.querySelectorAll('#checkoutServiceType .chip').forEach(c=>{
 
 const checkoutAddressField = document.getElementById('checkoutAddressField');
 const checkoutAddressInput = document.getElementById('checkoutAddress');
+const checkoutDeliveryNote = document.getElementById('checkoutDeliveryNote');
 let checkoutDelivery = '';
+
+function applyCheckoutDelivery(value){
+  document.querySelectorAll('#checkoutDelivery .chip').forEach(x=>{
+    x.classList.toggle('active', x.dataset.value === value);
+  });
+  checkoutDelivery = value;
+  const needsAddress = value === 'Delivery';
+  checkoutAddressField.style.display = needsAddress ? 'block' : 'none';
+  if(!needsAddress) checkoutAddressInput.value = '';
+}
+
 document.querySelectorAll('#checkoutDelivery .chip').forEach(c=>{
   c.addEventListener('click', ()=>{
-    document.querySelectorAll('#checkoutDelivery .chip').forEach(x=> x.classList.remove('active'));
-    c.classList.add('active');
-    checkoutDelivery = c.dataset.value;
-    const needsAddress = checkoutDelivery === 'Delivery';
-    checkoutAddressField.style.display = needsAddress ? 'block' : 'none';
-    if(!needsAddress) checkoutAddressInput.value = '';
+    applyCheckoutDelivery(c.dataset.value);
+    // Once they've picked for themselves, the "we carried this over" hint
+    // no longer describes what's on screen.
+    checkoutDeliveryNote.hidden = true;
   });
 });
+
+/* The cake form already asked for Delivery/Pickup and the address, and this
+   modal then asked again from a blank slate — a host who'd just typed their
+   venue out had to type it a second time. Carry the cake order's answer
+   across and say where it came from, so the step still runs (the combined
+   message carries one delivery line for the whole order) but starts
+   answered: confirm it, or pick the other option. */
+function carryCakeDeliveryIntoCheckout(){
+  checkoutDeliveryNote.hidden = true;
+  // Nothing to carry, no delivery picked on the cake form yet, or the
+  // customer has already chosen in this modal — their own answer wins.
+  if(!cakeCart.length || !cakeDelivery || checkoutDelivery) return;
+
+  applyCheckoutDelivery(cakeDelivery);
+  if(cakeDelivery === 'Delivery'){
+    const cakeAddress = cakeDeliveryAddressInput.value.trim();
+    if(cakeAddress && !checkoutAddressInput.value.trim()) checkoutAddressInput.value = cakeAddress;
+  }
+  checkoutDeliveryNote.textContent = cakeDelivery === 'Delivery'
+    ? 'Carried over from your cake order, address included. If this one is going somewhere else, change it above.'
+    : 'Carried over from your cake order. If this one needs collecting instead, change it above.';
+  checkoutDeliveryNote.hidden = false;
+}
 
 document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
   e.preventDefault();
@@ -2419,13 +2466,66 @@ function restoreCartState(){
 
 function refreshCartUI(){ syncCartStates(); updateCartIcon(); saveCartState(); }
 
-// Both call refreshCartUI() internally — must run after every const/
-// function above is initialized (cartWidget, prevCardQty, etc.), or
-// the page throws a TDZ ReferenceError on load and the cart widget
-// never initializes. See git history for the incident.
+/* ============================================================
+   GALLERY → MENU ARRIVALS — the gallery lightbox's Order button
+   links here with ?order=… (plus ?occasion=… for cakes). Land on the
+   right menu, pulse it, say what to do next, then drop the query so
+   a refresh doesn't repeat the prompt.
+============================================================ */
+function pulseArrival(el){
+  if(!el) return;
+  el.classList.remove('arrival-pulse');
+  void el.offsetWidth;
+  el.classList.add('arrival-pulse');
+  setTimeout(()=> el.classList.remove('arrival-pulse'), 2800);
+}
+
+function handleOrderArrival(){
+  const params = new URLSearchParams(location.search);
+  const order = params.get('order');
+  if(!order) return;
+
+  if(order === 'cake'){
+    // Only an occasion the form actually offers — the query is
+    // user-editable, and an unknown value would leave the select blank.
+    const occasion = params.get('occasion');
+    if(occasion && [...cakeOccasionEl.options].some(o=> o.value === occasion)){
+      cakeOccasionEl.value = occasion;
+      cakeOccasionEl.dispatchEvent(new Event('change'));
+    }
+    document.getElementById('cakes').scrollIntoView({ behavior:'smooth', block:'start' });
+    pulseArrival(document.getElementById('cakeForm'));
+    showToast('How would you like the cake?');
+  } else if(order === 'smallchops'){
+    const section = document.getElementById('finger-foods');
+    section.scrollIntoView({ behavior:'smooth', block:'start' });
+    pulseArrival(section.querySelector('.menu-item'));
+    showToast('Complete your small chops order.');
+  } else if(order === 'catering'){
+    // Land on the booking CTA, not the soup list: someone who tapped
+    // "Book your event" on a catering photo wants a quote, not litres.
+    const book = document.getElementById('cateringBook');
+    (book || document.getElementById('catering')).scrollIntoView({ behavior:'smooth', block:'center' });
+    pulseArrival(book);
+    showToast('Planning an event? Tap Book Event Catering below.');
+  } else {
+    return;
+  }
+
+  // Keep the hash so a refresh still lands on the section, but drop the
+  // query so it doesn't re-pulse or re-force the occasion.
+  history.replaceState(null, '', location.pathname + location.hash);
+}
+
+// renderFF()/renderCatering()/restoreCartState() call refreshCartUI()
+// internally — they must run after every const/function above is
+// initialized (cartWidget, prevCardQty, etc.), or the page throws a TDZ
+// ReferenceError on load and the cart widget never initializes. See git
+// history for the incident.
 renderFF();
 renderCatering();
 restoreCartState();
+handleOrderArrival();
 // From here on, any cart-count change reflects a real user action
 // (add/remove), not the initial restore-from-storage render above —
 // safe for the first-add walkthrough to key off of.

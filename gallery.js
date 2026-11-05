@@ -631,8 +631,27 @@ const lightboxCaption = document.getElementById('lightboxCaption');
 const lightboxSub = document.getElementById('lightboxSub');
 const lightboxPrev = document.getElementById('lightboxPrev');
 const lightboxNext = document.getElementById('lightboxNext');
+const lightboxOrder = document.getElementById('lightboxOrder');
 let lbIndex = 0;
 let lbItems = [];
+
+/* Where a photo's Order button sends you, keyed by its own `category`
+   (not the active filter — the 'Cakes' catch-all has no tab). Wedding and
+   anniversary cakes preselect that occasion; every other cake starts at
+   Birthday, the catch-all the cake form expects. index.js reads the
+   ?order= query on arrival and does the scrolling, pulsing and toast. */
+const ORDER_ROUTES = {
+  'Wedding Cakes':             { label:'Order this cake',     href:'index.html?order=cake&occasion=Wedding#cakes' },
+  'Traditional Wedding Cakes': { label:'Order this cake',     href:'index.html?order=cake&occasion=Wedding#cakes' },
+  'Anniversary':               { label:'Order this cake',     href:'index.html?order=cake&occasion=Anniversary#cakes' },
+  'Cakes for Boys':            { label:'Order this cake',     href:'index.html?order=cake&occasion=Birthday#cakes' },
+  'Cakes for Girls':           { label:'Order this cake',     href:'index.html?order=cake&occasion=Birthday#cakes' },
+  'Cakes for Men':             { label:'Order this cake',     href:'index.html?order=cake&occasion=Birthday#cakes' },
+  'Cakes for Women':           { label:'Order this cake',     href:'index.html?order=cake&occasion=Birthday#cakes' },
+  'Cakes':                     { label:'Order this cake',     href:'index.html?order=cake&occasion=Birthday#cakes' },
+  'Small Chops':               { label:'Order Small Chops',   href:'index.html?order=smallchops#finger-foods' },
+  'Catering & Events':         { label:'Book your event',     href:'index.html?order=catering#catering' },
+};
 
 function openLightbox(id){
   lbItems = galleryItems.filter(g=> activeFilter === 'All' || g.category === activeFilter);
@@ -650,6 +669,14 @@ function renderLightbox(){
   lightboxCaption.hidden = !item.caption;
   lightboxSub.textContent = item.sub;
   lightboxSub.hidden = !item.sub;
+  const route = ORDER_ROUTES[item.category];
+  lightboxOrder.hidden = !route;
+  if(route){
+    lightboxOrder.textContent = route.label;
+    lightboxOrder.href = route.href;
+  } else {
+    lightboxOrder.removeAttribute('href');
+  }
   lightboxPrev.style.opacity = lbIndex > 0 ? '1' : '0.25';
   lightboxNext.style.opacity = lbIndex < lbItems.length - 1 ? '1' : '0.25';
 }
