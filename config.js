@@ -197,6 +197,15 @@ const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled
 function openModal(modalEl){
   modalEl._lastFocused = document.activeElement;
   modalEl.classList.add('open');
+  // Any close control inside the modal marked data-modal-close just
+  // works, from any page — the sticky bar a tall panel gains at the
+  // bottom is one of these.
+  if(!modalEl._closeBound){
+    modalEl._closeBound = true;
+    modalEl.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-modal-close]')) closeModal(modalEl);
+    });
+  }
   const focusables = modalEl.querySelectorAll(FOCUSABLE_SELECTOR);
   if(focusables.length) focusables[0].focus();
   modalEl._trapHandler = (e)=>{
@@ -219,4 +228,37 @@ function closeModal(modalEl){
   if(modalEl._lastFocused && typeof modalEl._lastFocused.focus === 'function'){
     modalEl._lastFocused.focus();
   }
+}
+
+/* ============================================================
+   SCROLLABLE FILTER BARS — on narrow screens the filter tabs turn
+   into a horizontal scroller (see .gal-filters in index.css), which
+   gave no hint that more tabs exist off-screen. This marks the bar
+   (its .filter-bar wrapper, which owns the "Swipe →" pill) as
+   scrollable and keeps .can-scroll-left / .can-scroll-right on the
+   scroller itself so the CSS edge-fades track the real position.
+   Used by gallery.html's tabs and the cake modal's tabs. Returns a
+   sync() the caller can re-run after rebuilding the tab list.
+============================================================ */
+function initScrollableFilters(scroller){
+  const bar = scroller && scroller.closest('.filter-bar');
+  if(!bar) return ()=>{};
+  const sync = ()=>{
+    const max = scroller.scrollWidth - scroller.clientWidth;
+    const scrollable = max > 8;
+    const x = scroller.scrollLeft;
+    bar.classList.toggle('is-scrollable', scrollable);
+    scroller.classList.toggle('can-scroll-left', scrollable && x > 8);
+    scroller.classList.toggle('can-scroll-right', scrollable && x < max - 8);
+  };
+  scroller.addEventListener('scroll', ()=>{
+    // The hint is a one-time nudge: once the bar has moved, it has done
+    // its job and stays gone for the rest of this page view.
+    if(scroller.scrollLeft > 8) bar.classList.add('filters-scrolled');
+    sync();
+  }, { passive:true });
+  window.addEventListener('resize', sync);
+  if(typeof ResizeObserver === 'function') new ResizeObserver(sync).observe(scroller);
+  sync();
+  return sync;
 }

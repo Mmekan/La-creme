@@ -33,6 +33,10 @@ newBatchId();
 
 let prepared = [];      // [{ blob, width, height, name, status, error, onProgress }]
 let sending = false;
+// Bumped by reset(). Resizes are async, so a batch that was cleared while
+// its photos were still preparing must not push results into the new
+// selection (or repopulate a list that was just emptied).
+let selectionGen = 0;
 let BATCH_TOTAL = 0;    // set in sendAll() — the count the Worker records
 const sleep = (ms)=> new Promise(r=> setTimeout(r, ms));
 
@@ -55,6 +59,7 @@ $('pickBtn').addEventListener('click', ()=> $('fileInput').click());
 $('fileInput').addEventListener('change', (e)=> onFiles([...e.target.files]));
 $('sendBtn').addEventListener('click', sendAll);
 $('againBtn').addEventListener('click', reset);
+$('clearBtn').addEventListener('click', ()=>{ if(!sending) reset(); });
 
 /* ---------- resize ---------- */
 async function resizeImage(file){
@@ -93,6 +98,7 @@ async function resizeImage(file){
 /* ---------- selection ---------- */
 async function onFiles(files){
   if(!files.length) return;
+  const gen = selectionGen;
   if(prepared.length + files.length > MAX_FILES){
     $('prepErr').textContent = `You can send up to ${MAX_FILES} photos at a time.`;
     files = files.slice(0, MAX_FILES - prepared.length);
@@ -105,6 +111,7 @@ async function onFiles(files){
   // during the resize loop rather than after it.
   const list = $('thumbs');
   for(const file of files){
+    if(gen !== selectionGen) return; // cleared while this batch was queued
     const li = document.createElement('li');
     li.className = 'prep';
     li.textContent = 'Preparing…';
@@ -115,6 +122,7 @@ async function onFiles(files){
 
     try{
       const out = await resizeImage(file);
+      if(gen !== selectionGen) return; // cleared mid-resize
       entry.blob = out.blob; entry.width = out.width; entry.height = out.height;
       entry.status = 'ready';
       const img = document.createElement('img');
@@ -135,11 +143,13 @@ async function onFiles(files){
     }
   }
 
+  if(gen !== selectionGen) return; // cleared while the last photo resized
   const ready = prepared.filter(p=> p.status === 'ready').length;
   $('pickHint').textContent = `${prepared.length} photo${prepared.length === 1 ? '' : 's'} selected · ${ready} ready`;
   $('pickBtn').textContent = 'Choose more photos';
   $('sendBtn').hidden = ready === 0;
   $('sendBtn').textContent = `Send ${ready} photo${ready === 1 ? '' : 's'}`;
+  $('clearBtn').hidden = prepared.length === 0;
 }
 
 /* ---------- upload ---------- */
@@ -201,6 +211,7 @@ async function sendAll(){
 
   sending = true;
   $('sendBtn').disabled = true;
+  $('clearBtn').disabled = true; // no clearing out from under an in-flight batch
   $('sendErr').textContent = '';
   $('prog').hidden = false;
   updateProgress(0, 0);
@@ -276,6 +287,7 @@ function finish(){
 
   $('prog').hidden = true;
   $('sendBtn').hidden = true;
+  $('clearBtn').disabled = false;
 
   if(failed === 0){
     $('doneCount').textContent = `${sent} photo${sent === 1 ? '' : 's'} sent ✅`;
@@ -304,6 +316,7 @@ function finish(){
 }
 
 function reset(){
+  selectionGen++;
   prepared = [];
   $('thumbs').replaceChildren();
   $('fileInput').value = '';
@@ -311,6 +324,8 @@ function reset(){
   $('pickBtn').textContent = 'Choose photos';
   $('sendBtn').hidden = true;
   $('sendBtn').disabled = false;
+  $('clearBtn').hidden = true;
+  $('clearBtn').disabled = false;
   $('prog').hidden = true;
   $('progFill').style.width = '0%';
   $('sendErr').textContent = '';

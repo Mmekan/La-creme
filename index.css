@@ -46,7 +46,11 @@ body{
   line-height: 1.6;
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  /* clip, not hidden: hidden makes <body> a scroll container, which
+     silently stops position:sticky working for anything inside it
+     (the gallery filter bar) — clip contains overflow the same way
+     without taking scrolling away from the viewport. */
+  overflow-x: clip;
   width: 100%;
   max-width: 100vw; /* FIX: hard safety cap so no descendant, fixed or
                         otherwise, can push the page wider than the
@@ -528,13 +532,13 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   display:block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--text-muted); margin-bottom: 8px; font-weight: 500;
 }
-.rice-add-btn{
+.cart-add-btn{
   display:flex; align-items:center; justify-content:center; width:100%;
   margin-top: 14px; padding: 10px 16px; border-radius: 30px;
   background: var(--wine); color: #fff; font-size: 0.78rem; letter-spacing: 0.04em;
   transition: background .2s ease;
 }
-.rice-add-btn:hover{ background: var(--wine-bright); }
+.cart-add-btn:hover{ background: var(--wine-bright); }
 .menu-item .m-extra .field{ margin-bottom: 0; }
 .menu-item .m-qty-row{ display:flex; flex-wrap: wrap; align-items:center; justify-content:space-between; gap: 16px; }
 .menu-item .m-qty-row .m-price{ margin-top: 0; }
@@ -565,6 +569,79 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 }
 .liter-chip:hover{ border-color: var(--wine); }
 .liter-chip.selected{ background: var(--wine); border-color: var(--wine); color: var(--ivory); }
+
+/* ============================================================
+   FINGER FOOD PREVIEW — round "see it" button beside each dish
+   name, and the one shared photo viewer it opens (openFfPreview()
+   in index.js). The button stays 28px so it reads as tappable on
+   a phone without crowding the dish name.
+============================================================ */
+.m-head{ display:flex; align-items:center; gap: 8px; }
+.ff-peek{
+  width: 28px; height: 28px; flex-shrink:0; border-radius: 50%;
+  border: 1px solid var(--gold-line); background: rgba(199,161,85,0.12);
+  color: var(--wine-deep); display:inline-flex; align-items:center; justify-content:center;
+  transition: background .2s ease, color .2s ease, border-color .2s ease, transform .2s ease;
+}
+.ff-peek svg{ width: 15px; height: 15px; }
+.ff-peek:hover, .ff-peek:focus-visible{ background: var(--wine); border-color: var(--wine); color: var(--ivory); }
+.ff-peek:active{ transform: scale(0.92); }
+
+.ff-peek-wrap{ position: relative; display: inline-flex; }
+
+/* First time a dish is chosen it lights up like the cart icon does,
+   with a toast pointing at it — see maybeShowFfPeekCallout(). */
+.ff-peek.is-highlighted{
+  background: var(--wine); border-color: var(--wine); color: var(--ivory);
+  animation: ffPeekRing 1.6s ease-out infinite;
+}
+@keyframes ffPeekRing{
+  0%{ box-shadow: 0 0 0 0 rgba(200,16,46,0.45); }
+  70%{ box-shadow: 0 0 0 10px rgba(200,16,46,0); }
+  100%{ box-shadow: 0 0 0 0 rgba(200,16,46,0); }
+}
+.ff-peek-toast{
+  position:absolute; left: calc(100% + 8px); top: 50%; transform: translateY(-50%);
+  z-index: 3; width: max-content; max-width: 132px; padding: 6px 11px; border-radius: 20px;
+  background: var(--ink); color: var(--ivory); font-size: 0.72rem; line-height: 1.3;
+  letter-spacing: 0.02em; cursor: pointer; text-align: left;
+  box-shadow: 0 8px 18px -8px rgba(24,19,15,0.5);
+  animation: ffToastIn .3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ff-peek-toast::before{
+  content:''; position:absolute; right: 100%; top: 50%; transform: translateY(-50%);
+  border: 5px solid transparent; border-right-color: var(--ink);
+}
+@keyframes ffToastIn{ from{ opacity:0; transform: translateY(-50%) translateX(-4px); } to{ opacity:1; transform: translateY(-50%); } }
+
+.ff-preview-modal{
+  position: fixed; inset:0; z-index: 650;
+  display:flex; align-items:center; justify-content:center; padding: 24px;
+  opacity:0; pointer-events:none; transition: opacity .3s ease;
+}
+.ff-preview-modal.open{ opacity:1; pointer-events:auto; }
+.ff-preview-backdrop{ position:absolute; inset:0; background: rgba(24,19,15,0.82); }
+.ff-preview-panel{
+  position: relative; width: 100%; max-width: 680px; max-height: 86vh; overflow-y: auto;
+  background: var(--ivory); border-radius: 4px; padding: 0 28px 28px; box-shadow: var(--shadow-card);
+  transform: translateY(12px); transition: transform .3s ease;
+}
+.ff-preview-modal.open .ff-preview-panel{ transform: none; }
+.ff-preview-panel > .checkout-head{
+  position: sticky; top: 0; z-index: 2;
+  background: var(--ivory); padding: 22px 0 14px; border-bottom: 1px solid var(--gold-line);
+}
+.ff-preview-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; }
+.ff-preview-grid[hidden]{ display:none; }
+.ff-preview-grid .media-frame{ aspect-ratio: 4 / 3; border-radius: 3px; }
+.ff-preview-empty{ margin-top: 20px; text-align:center; }
+.ff-preview-empty p{ color: var(--text-muted); font-size: 0.9rem; max-width: 40ch; margin: 0 auto 20px; }
+@media (max-width: 640px){
+  .ff-preview-modal{ padding: 0; align-items:flex-end; }
+  .ff-preview-panel{ max-width: none; max-height: 88vh; border-radius: 10px 10px 0 0; padding: 0 20px 24px; }
+  .ff-preview-panel > .checkout-head{ padding: 18px 0 12px; }
+  .ff-preview-grid{ grid-template-columns: repeat(2, 1fr); }
+}
 
 .menu-group-title{
   font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--wine);
@@ -687,9 +764,20 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .checkout-panel{
   position: relative; background: var(--ivory); border-radius: 4px;
   max-width: 560px; width:100%; max-height: 88vh; overflow-y:auto;
-  padding: 36px; box-shadow: var(--shadow-card);
+  padding: 0 36px 36px; box-shadow: var(--shadow-card);
 }
 .checkout-head{ display:flex; align-items:flex-start; justify-content:space-between; gap: 16px; margin-bottom: 20px; }
+/* The close × lives in the head, and the panel is the thing that
+   scrolls — without this it scrolls away on a phone and there is no
+   way out until the user scrolls back to the top. Sticking the head
+   keeps one close control in reach at every scroll position. */
+.checkout-panel > .checkout-head,
+.cake-gallery-panel > .checkout-head{
+  position: sticky; top: 0; z-index: 6;
+  background: var(--ivory);
+  padding: 28px 0 16px;
+  border-bottom: 1px solid var(--gold-line);
+}
 .checkout-head h3{ font-size: 1.5rem; }
 .checkout-close{
   font-size: 1.6rem; color: var(--text-muted); width: 36px; height:36px; flex-shrink:0;
@@ -706,7 +794,10 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   font-size: 0.92rem; margin-bottom: 26px;
 }
 .checkout-total strong{ font-family: var(--font-display); font-size: 1.3rem; color: var(--ink); }
-@media (max-width: 640px){ .checkout-panel{ padding: 26px; } }
+@media (max-width: 640px){
+  .checkout-panel{ padding: 0 26px 26px; }
+  .checkout-panel > .checkout-head{ padding: 20px 0 14px; }
+}
 
 /* ============================================================
    CAKE DESIGN GALLERY — grid of "Cakes"-category photos pulled
@@ -723,7 +814,7 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .cake-gallery-panel{
   position: relative; background: var(--ivory); border-radius: 4px;
   max-width: 780px; width:100%; max-height: 88vh; overflow-y:auto;
-  padding: 36px; box-shadow: var(--shadow-card);
+  padding: 0 36px 36px; box-shadow: var(--shadow-card);
 }
 .cgm-filters{
   position: static; background: none; backdrop-filter: none; border-bottom: none;
@@ -736,8 +827,26 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .cgm-tile .media-frame{ position:absolute; inset:0; border-radius: 3px; }
 #cgmSentinel{ height: 1px; }
 @media (max-width: 640px){
-  .cake-gallery-panel{ padding: 22px; }
+  .cake-gallery-panel{ padding: 0 22px 0; }
+  .cake-gallery-panel > .checkout-head{ padding: 18px 0 12px; }
   .cgm-grid{ grid-template-columns: repeat(2, 1fr); gap: 8px; }
+}
+
+/* Thumb-reach close for the tall gallery panel on phones: the head's ×
+   is always on screen now, but at arm's length the bottom of the screen
+   is what a thumb actually reaches. Hidden on desktop, where the panel
+   is short enough that the head is never far away. */
+.modal-close-bar{ display:none; }
+@media (max-width: 640px){
+  .modal-close-bar{
+    display:block; position: sticky; bottom: 0; z-index: 6;
+    margin: 14px -22px 0; padding: 12px 22px 22px;
+    background: linear-gradient(to top, var(--ivory) 68%, rgba(251,244,233,0));
+    /* Only the button itself should catch taps — the bar's faded top
+       edge sits over the last row of tiles while scrolling. */
+    pointer-events: none;
+  }
+  .modal-close-bar .btn{ width: 100%; justify-content: center; pointer-events: auto; }
 }
 
 /* ============================================================
@@ -841,14 +950,36 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .gallery-hero h1{ color: var(--ivory); font-size: clamp(2.3rem, 5vw, 3.4rem); margin-top: 16px; }
 .gallery-hero p{ color: rgba(251,244,233,0.75); max-width: 52ch; margin: 18px auto 0; }
 
-.gal-filters{
+/* The bar's wrapper, not the bar itself, is the sticky element: a
+   sticky child only travels inside its own parent's box, so wrapping
+   it would otherwise pin it to the wrapper's height and stop it
+   sticking at all. The wrapper is also what the "Swipe →" hint is
+   positioned against, so it doesn't scroll away with the tabs. */
+.filter-bar{ position: relative; }
+.filter-sticky{
+  position: sticky; top: var(--ticker-h); z-index: 150;
   background: rgba(251,244,233,0.94);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(24,19,15,0.08);
+}
+.gal-filters{
   display:flex; gap: 10px; flex-wrap: wrap; justify-content:center;
   padding: 18px 28px;
-  position: sticky; top: var(--ticker-h); z-index: 150;
 }
+/* Shown only while the bar can actually scroll (initScrollableFilters
+   in config.js sets .is-scrollable) and until the user has swiped it
+   once (.filters-scrolled). pointer-events:none so it never swallows a
+   tap meant for the tab underneath. */
+.filter-more{
+  display:none; align-items:center; justify-content:center;
+  position:absolute; top:50%; right:6px; transform: translateY(-50%);
+  padding: 6px 12px 6px 22px;
+  font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600;
+  color: var(--wine); white-space: nowrap;
+  background: linear-gradient(90deg, rgba(251,244,233,0), rgba(251,244,233,0.97) 38%);
+  border-radius: 999px; pointer-events:none; z-index: 2;
+}
+.filter-bar.is-scrollable:not(.filters-scrolled) .filter-more{ display:flex; }
 .gal-filter{
   padding: 9px 18px; border: 1px solid var(--gold-line); border-radius: 30px;
   font-size: 0.78rem; letter-spacing: 0.03em; color: var(--text-muted); background: transparent;
@@ -953,7 +1084,26 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
 .gal-end-ctas{ display:flex; gap: 14px; justify-content:center; flex-wrap:wrap; margin-top: 30px; }
 
 @media (max-width: 560px){
-  .gal-filters{ padding: 14px 16px; justify-content:flex-start; overflow-x:auto; flex-wrap:nowrap; top: var(--ticker-h); }
+  .gal-filters{
+    padding: 14px 16px; justify-content:flex-start; flex-wrap:nowrap;
+    overflow-x:auto; scroll-snap-type: x proximity; scroll-padding-inline: 16px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .gal-filter{ scroll-snap-align: center; }
+  /* Edge fades so it's visible that the tab strip continues past the
+     screen — the classes ride along with the real scroll position. */
+  .gal-filters.can-scroll-right{
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 46px), transparent);
+  }
+  .gal-filters.can-scroll-left{
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px);
+    mask-image: linear-gradient(to right, transparent 0, #000 24px);
+  }
+  .gal-filters.can-scroll-left.can-scroll-right{
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 46px), transparent);
+    mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 46px), transparent);
+  }
   .gal-grid{ padding: 40px 16px 0; }
   .gal-break{ padding: 44px 4px 26px; gap:16px; }
   .gb-text{ white-space:normal; }

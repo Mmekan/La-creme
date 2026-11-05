@@ -4,7 +4,12 @@
    innerHTML, so a hostile order can't inject markup into this page.
 ============================================================ */
 const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Cancelled'];
-const TOKEN_KEY = 'lcAdminToken';
+// { token, exp } — the password is asked once, then not again for 15
+// minutes, across tabs and reloads. The server token itself still lasts
+// its full 12h; this only controls when we re-prompt for the password,
+// so the worst case is a 15-minute window on a shared machine.
+const TOKEN_KEY = 'lcAdminSession';
+const SESSION_MS = 15 * 60 * 1000;
 const API = (CONFIG.ordersApi || '').replace(/\/+$/, '');
 
 const $ = (id)=> document.getElementById(id);
@@ -23,9 +28,22 @@ function el(tag, props = {}, ...children){
   return node;
 }
 
+/* ---------- session ---------- */
+function readSession(){
+  try{
+    const s = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null');
+    if(s && typeof s.token === 'string' && s.token && Date.now() < Number(s.exp)) return s.token;
+  }catch(e){ /* hand-edited or from an older version — fall through */ }
+  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  return null;
+}
+function writeSession(token){
+  try{ localStorage.setItem(TOKEN_KEY, JSON.stringify({ token, exp: Date.now() + SESSION_MS })); }catch(e){}
+}
+
 /* ---------- api ---------- */
 async function api(path, options = {}){
-  const token = sessionStorage.getItem(TOKEN_KEY);
+  const token = readSession();
   const res = await fetch(API + path, {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) }
@@ -43,7 +61,7 @@ function showApp(){
   loadOrders();
 }
 function signOut(){
-  sessionStorage.removeItem(TOKEN_KEY);
+  try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
   $('appView').hidden = true;
   $('loginView').hidden = false;
   $('password').value = '';
@@ -57,7 +75,7 @@ $('loginForm').addEventListener('submit', async (e)=>{
   $('loginBtn').disabled = true;
   try{
     const { token } = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('password').value }) });
-    sessionStorage.setItem(TOKEN_KEY, token);
+    writeSession(token);
     showApp();
   }catch(err){
     $('loginErr').textContent = err.message;
@@ -354,5 +372,5 @@ async function retryUpload(item){
 }
 
 /* ---------- boot ---------- */
-if(sessionStorage.getItem(TOKEN_KEY)) showApp();
+if(readSession()) showApp();
 setInterval(()=>{ if(!$('appView').hidden && !document.hidden) refreshActive(); }, 60000);

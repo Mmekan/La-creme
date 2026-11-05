@@ -494,6 +494,7 @@ function buildFilterButtons(){
   });
 }
 buildFilterButtons();
+const syncGalFilters = initScrollableFilters(galFilters);
 
 // Only matters when the tab bar itself scrolls (narrow screens) and
 // the pre-selected filter isn't the first tab — keeps the active
@@ -528,6 +529,7 @@ function mergeManifestItems(items){
 
   recomputeCategoryCounts();
   buildFilterButtons();
+  syncGalFilters(); // rebuilt tabs may have widened the strip past the screen again
   // Re-render. This can reshuffle the grid once shortly after load if
   // the API was slow — acceptable, because the alternative (never
   // refreshing) would leave approved photos invisible until a reload.
@@ -573,7 +575,7 @@ loadManifest();
    VIDEO TESTIMONIALS
 ============================================================ */
 const videoTestimonials = [
-  { name:'Dessert Table Detail', video:mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
+  { name:'Full Event Catering', video:mediaUrl('videos/InShot_20251120_221945950.mp4'), tone:'' },
   { name:'Wedding Cake Reveal', video:mediaUrl('videos/InShot_20251120_224656122.mp4'), tone:'tone-b' },
   { name:'Wedding Day Moment', video:mediaUrl('videos/InShot_20251122_180814090-sm.mp4'), poster:mediaUrl('videos/InShot_20251122_180814090-poster.jpg'), tone:'tone-c' },
   { name:'Cake & Champagne Reveal', video:mediaUrl('videos/InShot_20251213_115333572.mp4'), tone:'tone-b' },

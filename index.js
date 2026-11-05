@@ -203,7 +203,7 @@ const ICONS = {
    your-clip.mp4')` — the play placeholder is swapped automatically.
 ============================================================ */
 const videoTestimonials = [
-  { name: 'Dessert Table Detail', video: mediaUrl('videos/InShot_20260612_184349227-sm.mp4'), poster: mediaUrl('videos/InShot_20260612_184349227-poster.jpg'), tone:'' },
+  { name: 'Full Event Catering', video: mediaUrl('videos/InShot_20260612_184349227-sm.mp4'), poster: mediaUrl('videos/InShot_20260612_184349227-poster.jpg'), tone:'' },
   { name: '12inch Cake Reveal', video: mediaUrl('videos/InShot_20251207_154703112-sm.mp4'), poster: mediaUrl('videos/InShot_20251207_154703112-poster.jpg'), tone:'tone-b' },
   { name: 'Wedding Day Moment', video: mediaUrl('videos/InShot_20251122_180814090-sm.mp4'), poster: mediaUrl('videos/InShot_20251122_180814090-poster.jpg'), tone:'tone-c' },
   { name: 'Lunchpack Preparation', video: mediaUrl('videos/InShot_20251122_201354636-sm.mp4'), poster: mediaUrl('videos/InShot_20251122_201354636-poster.jpg'), tone:'' },
@@ -285,7 +285,7 @@ document.getElementById('checkoutDate').min = minOrderDate();
    gallery, appended as the user scrolls the modal itself near its
    bottom.
 ============================================================ */
-const OCCASION_TO_CAKE_FILTER = { Wedding: 'Wedding Cakes', Anniversary: 'Anniversary' };
+const OCCASION_TO_CAKE_FILTER = { Wedding: 'Wedding Cakes', 'Bridal Shower': 'Wedding Cakes', Anniversary: 'Anniversary' };
 const CGM_BATCH_SIZE = 24;
 let cgmActiveFilter = 'All';
 let cgmItems = [];
@@ -346,6 +346,7 @@ CAKE_FILTER_CATEGORIES.forEach(cat=>{ cgmFilterCounts[cat] = cgmItemsForFilter(c
   btn.addEventListener('click', ()=>{ if(cat !== cgmActiveFilter) cgmResetGrid(cat); });
   cgmFilters.appendChild(btn);
 });
+const syncCgmFilters = initScrollableFilters(cgmFilters);
 
 const cgmScrollObserver = new IntersectionObserver((entries)=>{
   entries.forEach(entry=>{
@@ -359,6 +360,7 @@ document.getElementById('cakeGalleryOpenBtn').addEventListener('click', ()=>{
   const targetFilter = OCCASION_TO_CAKE_FILTER[cakeOccasionEl.value] || 'All';
   if(targetFilter !== cgmActiveFilter || !cgmRendered) cgmResetGrid(targetFilter);
   openModal(cakeGalleryModal);
+  syncCgmFilters(); // the panel's width is only settled once it's open
 });
 document.getElementById('cakeGalleryClose').addEventListener('click', ()=> closeModal(cakeGalleryModal));
 document.getElementById('cakeGalleryBackdrop').addEventListener('click', ()=> closeModal(cakeGalleryModal));
@@ -380,22 +382,30 @@ const birthdayTierNote = document.getElementById('birthdayTierNote');
 const cakeOccasionEl = document.getElementById('cakeOccasion');
 const MAX_CUSTOM_TIERS = 20;
 
+// Anniversary cakes start at 8" — a 6" is too small for that occasion.
+function allowedCakeInches(){
+  return cakeOccasionEl.value === 'Anniversary' ? CAKE_INCHES.filter(i=> i !== '6') : CAKE_INCHES;
+}
+
 function buildTierRow(index){
   const row = document.createElement('div');
   row.className = 'tier-row';
   row.dataset.index = index;
+  // The layers picker is hidden from customers — each size now uses its
+  // default layer count (the first entry in INCH_LAYER_OPTIONS). The
+  // select stays in the DOM so validation and the WhatsApp message keep
+  // carrying a real value.
   row.innerHTML = `
-    <span class="tier-row-label">${index} Tier/ Step</span>
+    <span class="tier-row-label">Step ${index}</span>
     <div class="field">
       <label for="tierInches-${index}">Inches</label>
       <select id="tierInches-${index}" class="tier-inches">
         <option value="">Select inches</option>
-        ${CAKE_INCHES.map(i=> `<option value="${i}">${i}"</option>`).join('')}
+        ${allowedCakeInches().map(i=> `<option value="${i}">${i}"</option>`).join('')}
       </select>
     </div>
-    <div class="field">
-      <label for="tierLayers-${index}">Layers</label>
-      <select id="tierLayers-${index}" class="tier-layers" disabled>
+    <div class="field" hidden>
+      <select id="tierLayers-${index}" class="tier-layers" tabindex="-1" aria-hidden="true">
         <option value="">Select inches first</option>
       </select>
     </div>`;
@@ -403,10 +413,10 @@ function buildTierRow(index){
   const layersSel = row.querySelector('.tier-layers');
   inchesSel.addEventListener('change', ()=>{
     const opts = INCH_LAYER_OPTIONS[inchesSel.value] || [];
-    layersSel.disabled = !opts.length;
     layersSel.innerHTML = opts.length
-      ? `<option value="">Select layers</option>` + opts.map(l=> `<option value="${l}">${l} Layers</option>`).join('')
+      ? opts.map(l=> `<option value="${l}">${l}</option>`).join('')
       : `<option value="">Select inches first</option>`;
+    layersSel.value = opts.length ? String(opts[0]) : '';
   });
   return row;
 }
@@ -466,7 +476,7 @@ const cakeFinishEl = document.getElementById('cakeFinish');
 // restrict, so switching occasions always leaves a clean slate rather
 // than a leftover selection from before.
 const TIER_RULES = {
-  Birthday: { allow: [1, 2, 3], note: 'Birthday cakes are available in 1–3 tiers/steps.' },
+  Birthday: { allow: [1, 2, 3], note: 'Birthday cakes are available in 1–3 steps.' },
   Wedding: { allow: ['custom'], note: "Wedding cakes are fully bespoke — choose Custom and we'll confirm the exact tier count with you on WhatsApp." },
 };
 
@@ -612,7 +622,7 @@ function validateCakeFields(){
     return null;
   }
   if(!tierInputs.length){
-    showToast('Please choose at least one tier/step size.');
+    showToast('Please choose at least one step size.');
     flagInvalidField(tierSelectEl);
     return null;
   }
@@ -634,12 +644,12 @@ function validateCakeFields(){
   const isCustom = tierCustomCheckbox.checked;
   const customCount = Math.floor(Number(tierCustomCount.value)) || 0;
   if(isCustom && !(customCount > 0)){
-    showToast('Please type how many tiers/steps for your custom option.');
+    showToast('Please type how many steps for your custom option.');
     flagInvalidField(tierCustomCount);
     return null;
   }
   if(isCustom && customCount > MAX_CUSTOM_TIERS){
-    showToast(`Custom orders top out at ${MAX_CUSTOM_TIERS} tiers/steps here — message us directly for anything bigger.`);
+    showToast(`Custom orders top out at ${MAX_CUSTOM_TIERS} steps here — message us directly for anything bigger.`);
     flagInvalidField(tierCustomCount);
     return null;
   }
@@ -650,14 +660,14 @@ function validateCakeFields(){
     const inchesEl = row.querySelector('.tier-inches');
     const layersEl = row.querySelector('.tier-layers');
     if(!inchesEl.value || !layersEl.value){
-      showToast('Please select inches and layers for every tier.');
-      flagInvalidField(inchesEl.value ? layersEl : inchesEl);
+      showToast('Please select inches for every step.');
+      flagInvalidField(inchesEl);
       return null;
     }
-    tierDetails.push(`Tier ${row.dataset.index}: ${inchesEl.value}" — ${layersEl.value} layers`);
+    tierDetails.push(`Step ${row.dataset.index}: ${inchesEl.value}" — ${layersEl.value} layers`);
   }
 
-  const tiersLabel = tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${customCount} Tiers/Steps)` : i.value).join(', ');
+  const tiersLabel = tierInputs.map(i=> i === tierCustomCheckbox ? `Custom (${customCount} Steps)` : i.value).join(', ');
 
   return { id: ++cakeIdCounter, occasion, tiersLabel, tierDetails, isCustom, customCount, date, flavor, finish, inscription, design };
 }
@@ -722,7 +732,7 @@ function cakeLogText(c){
   return [
     `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}, needed ${c.date}`,
     c.tierDetails.length ? `sizes: ${c.tierDetails.join('; ')}` : '',
-    c.isCustom ? `CUSTOM ORDER (${c.customCount} tiers/steps)` : '',
+    c.isCustom ? `CUSTOM ORDER (${c.customCount} steps)` : '',
     c.finish ? `finish: ${c.finish}` : '',
     c.inscription ? `inscription: ${c.inscription}` : '',
     c.design ? `design: ${c.design}` : ''
@@ -737,9 +747,9 @@ function formatCakeLines(cake, index, total, detail){
   return [
     label,
     `Occasion: ${cake.occasion}`,
-    `Tiers/Steps: ${cake.tiersLabel}`,
+    `Steps: ${cake.tiersLabel}`,
     ...(detail === 'full' ? cake.tierDetails.map(t=> `   ${t}`) : []),
-    cake.isCustom ? `CUSTOM ORDER (${cake.customCount} tiers/steps) — confirm sizing, design and price directly` : null,
+    cake.isCustom ? `CUSTOM ORDER (${cake.customCount} steps) — confirm sizing, design and price directly` : null,
     `Date: ${cake.date}`,
     `Flavor: ${cake.flavor}`,
     detail === 'full' && cake.finish ? `Finish: ${cake.finish}` : null,
@@ -884,6 +894,80 @@ ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
 
 const fingerFoodList = document.getElementById('fingerFoodList');
 
+/* ============================================================
+   FINGER FOOD PREVIEW — the round "see it" button beside each dish
+   name opens one shared photo viewer. Small Chops reuses the gallery's
+   Small Chops photos; Cake Slices reuses the first-visit popup's
+   photos. Chin Chin and Meat Pie have no photos yet, so they show the
+   "ask us on WhatsApp" fallback instead of a broken frame.
+============================================================ */
+const FF_PEEK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+
+const FF_PREVIEWS = {
+  'small-chops': { title:'Small Chops', images: GALLERY_ITEMS.filter(g=> g.category === 'Small Chops' && g.image).slice(0, 6).map(g=> g.image) },
+  'chin-chin': { title:'Chin Chin', images: [] },
+  'meat-pie': { title:'Meat Pie', images: [] },
+  'cake-slices': { title:'Cake Slices', images: (NEWS_ITEMS.find(n=> n.title === 'Cake Slices') || { images: [] }).images },
+};
+
+const ffPreviewModal = document.getElementById('ffPreviewModal');
+const ffPreviewTitle = document.getElementById('ffPreviewTitle');
+const ffPreviewGrid = document.getElementById('ffPreviewGrid');
+const ffPreviewEmpty = document.getElementById('ffPreviewEmpty');
+const ffPreviewWa = document.getElementById('ffPreviewWa');
+
+function openFfPreview(key){
+  const preview = FF_PREVIEWS[key];
+  if(!preview) return;
+  const hasImages = preview.images.length > 0;
+  ffPreviewTitle.textContent = preview.title;
+  ffPreviewGrid.innerHTML = preview.images.map(src=>
+    `<div class="media-frame"><img src="${src}" alt="${escapeHtml(preview.title)}" loading="lazy"></div>`
+  ).join('');
+  ffPreviewGrid.querySelectorAll('.media-frame').forEach(frame=> bindMediaSkeleton(frame, frame.querySelector('img')));
+  ffPreviewGrid.hidden = !hasImages;
+  ffPreviewEmpty.hidden = hasImages;
+  if(!hasImages) ffPreviewWa.href = waLink(`Hi La Crème, please send me photos of the ${preview.title} before I order.`);
+  closeFfPeekCallout();
+  openModal(ffPreviewModal);
+}
+
+function closeFfPeekCallout(){
+  document.querySelectorAll('.ff-peek-toast').forEach(el=> el.remove());
+  document.querySelectorAll('.ff-peek.is-highlighted').forEach(el=> el.classList.remove('is-highlighted'));
+}
+
+/* One-time nudge, the first time a dish is actually chosen: the dish's
+   preview button lights up the way the cart icon does, with a small
+   toast pointing at it. Tapping the toast, or 8s, clears both. */
+const FF_PEEK_HINT_KEY = 'lcFfPeekHintSeen';
+function maybeShowFfPeekCallout(itemEl){
+  let seen = false;
+  try { seen = sessionStorage.getItem(FF_PEEK_HINT_KEY) === '1'; } catch(e){}
+  if(seen) return;
+  try { sessionStorage.setItem(FF_PEEK_HINT_KEY, '1'); } catch(e){}
+  const btn = itemEl.querySelector('.ff-peek');
+  const wrap = btn && btn.parentElement;
+  if(!wrap) return;
+  closeFfPeekCallout();
+  btn.classList.add('is-highlighted');
+  const toast = document.createElement('span');
+  toast.className = 'ff-peek-toast';
+  toast.textContent = 'Tap to see photos';
+  toast.addEventListener('click', closeFfPeekCallout);
+  wrap.appendChild(toast);
+  setTimeout(()=>{ if(toast.isConnected) closeFfPeekCallout(); }, 8000);
+}
+
+document.getElementById('ffPreviewClose').addEventListener('click', ()=> closeModal(ffPreviewModal));
+document.getElementById('ffPreviewBackdrop').addEventListener('click', ()=> closeModal(ffPreviewModal));
+document.addEventListener('keydown', (e)=>{ if(e.key === 'Escape' && ffPreviewModal.classList.contains('open')) closeModal(ffPreviewModal); });
+
+fingerFoodList.addEventListener('click', (e)=>{
+  const btn = e.target.closest('.ff-peek');
+  if(btn) openFfPreview(btn.dataset.preview);
+});
+
 /* Small Chops: Plate/Tray -> Style -> Qty */
 function buildSmallChopsItem(){
   const wrap = document.createElement('div');
@@ -891,8 +975,11 @@ function buildSmallChopsItem(){
   wrap.innerHTML = `
     <div class="m-top">
       <div class="m-body">
-        <h4>Small Chops</h4>
-        <p>Puff puff, spring rolls, samosa & sausage rolls, choose plate or tray</p>
+        <div class="m-head">
+          <h4>Small Chops</h4>
+          <span class="ff-peek-wrap"><button type="button" class="ff-peek" data-preview="small-chops" aria-label="See what Small Chops look like" aria-haspopup="dialog">${FF_PEEK_ICON}</button></span>
+        </div>
+        <p>Puff puff, spring rolls &amp; samosa, choose plate or tray</p>
       </div>
     </div>
     <div class="m-extra sc-picker-row">
@@ -951,7 +1038,9 @@ function buildSmallChopsItem(){
         sc.addEventListener('click', ()=>{
           styleChipsEl.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
           sc.classList.add('selected');
-          selectVariant(variants.find(v=> v.id === sc.dataset.id));
+          const variant = variants.find(v=> v.id === sc.dataset.id);
+          selectVariant(variant);
+          if(ffState[variant.id] === 0) maybeShowFfPeekCallout(wrap);
         });
       });
       styleWrap.style.display = 'block';
@@ -982,7 +1071,10 @@ function buildChinChinItem(){
   wrap.innerHTML = `
     <div class="m-top">
       <div class="m-body">
-        <h4>Chin Chin</h4>
+        <div class="m-head">
+          <h4>Chin Chin</h4>
+          <span class="ff-peek-wrap"><button type="button" class="ff-peek" data-preview="chin-chin" aria-label="See what Chin Chin looks like" aria-haspopup="dialog">${FF_PEEK_ICON}</button></span>
+        </div>
         <p>Crunchy, lightly sweetened bites, choose your size</p>
       </div>
     </div>
@@ -1017,6 +1109,7 @@ function buildChinChinItem(){
       priceEl.textContent = `${fmtNaira(currentVariant.price)} / ${currentVariant.unit}`;
       qtyVal.textContent = ffState[currentVariant.id];
       qtyWrap.style.display = 'block';
+      if(ffState[currentVariant.id] === 0) maybeShowFfPeekCallout(wrap);
     });
   });
 
@@ -1044,7 +1137,10 @@ fingerFoodMenu.forEach(item=>{
   row.innerHTML = `
     <div class="m-top">
       <div class="m-body">
-        <h4>${item.name}</h4>
+        <div class="m-head">
+          <h4>${item.name}</h4>
+          <span class="ff-peek-wrap"><button type="button" class="ff-peek" data-preview="${item.id}" aria-label="See what ${item.name} looks like" aria-haspopup="dialog">${FF_PEEK_ICON}</button></span>
+        </div>
         <p>${item.desc}</p>
         <div class="m-price">${fmtNaira(item.price)} / ${item.unit}</div>
       </div>
@@ -1073,7 +1169,11 @@ fingerFoodMenu.forEach(item=>{
   }
 
   row.querySelector('[data-act="dec"]').addEventListener('click', ()=>{ if(ffState[item.id] > 0){ ffState[item.id]--; renderFF(); } });
-  row.querySelector('[data-act="inc"]').addEventListener('click', ()=>{ ffState[item.id]++; renderFF(); });
+  row.querySelector('[data-act="inc"]').addEventListener('click', ()=>{
+    ffState[item.id]++;
+    renderFF();
+    if(ffState[item.id] === 1) maybeShowFfPeekCallout(row);
+  });
   fingerFoodList.appendChild(row);
 });
 
@@ -1130,15 +1230,19 @@ const cateringProteins = [
   { id:'fish', name:'Fish (Titus/Croaker)', unit:'per portion', price:3200 },
 ];
 
-// rice is an array (not keyed by item id like soups/proteins) — unlike
-// soup/protein, the same rice item can be added more than once with a
-// different configuration each time (see buildRiceRow's "Add to Cart").
-const catState = { soups:{}, rice:[], proteins:{} };
+// Soups and rice are arrays of committed cart entries rather than one
+// slot per item id (only proteins are keyed that way) — the same item
+// can be added more than once with a different configuration each time
+// (see each row's "Add to Cart").
+const catState = { soups:[], rice:[], proteins:{} };
+let soupEntryCounter = 0;
 let riceEntryCounter = 0;
 
 /* Soup: pick a litre size, then which protein it should be made
    with — the protein choice doesn't change price, it just specifies
-   the order (soup pricing already assumes assorted meat/fish). */
+   the order (soup pricing already assumes assorted meat/fish). Like
+   rice, the pick is staged and only lands in the cart on Add, so the
+   same soup can go in twice with a different protein. */
 function buildSoupRow(item){
   const row = document.createElement('div');
   row.className = 'menu-item has-extra';
@@ -1148,21 +1252,9 @@ function buildSoupRow(item){
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
     </div>
     <div class="m-extra">
-      <div class="m-qty-row">
-        <div>
-          <span class="m-extra-label">Size</span>
-          <div class="liter-chips" data-role="size">
-            ${item.sizes.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}" data-price="${o.price}">${o.label}</button>`).join('')}
-          </div>
-        </div>
-        <div class="qty-with-label" data-role="qty-wrap" style="display:none;">
-          <span class="qty-label">Quantity</span>
-          <div class="qty-control">
-            <button type="button" aria-label="Decrease quantity" data-act="dec">−</button>
-            <span class="qty-val" data-role="qty-val">0</span>
-            <button type="button" aria-label="Increase quantity" data-act="inc">+</button>
-          </div>
-        </div>
+      <span class="m-extra-label">Size</span>
+      <div class="liter-chips" data-role="size">
+        ${item.sizes.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}" data-price="${o.price}">${o.label}</button>`).join('')}
       </div>
     </div>
     <div class="m-extra" data-role="protein-wrap" style="display:none;">
@@ -1170,59 +1262,57 @@ function buildSoupRow(item){
       <div class="liter-chips" data-role="protein">
         ${SOUP_PROTEINS.map(p=> `<button type="button" class="liter-chip" data-value="${p}">${p}</button>`).join('')}
       </div>
-    </div>`;
+    </div>
+    <div class="m-extra m-qty-row" data-role="qty-row" style="display:none;">
+      <div class="qty-with-label">
+        <span class="qty-label">Quantity</span>
+        <div class="qty-control">
+          <button type="button" aria-label="Decrease quantity" data-act="dec">−</button>
+          <span class="qty-val" data-role="qty-val">0</span>
+          <button type="button" aria-label="Increase quantity" data-act="inc">+</button>
+        </div>
+      </div>
+    </div>
+    <button type="button" class="cart-add-btn" data-role="add-btn" style="display:none;">Add to Cart</button>`;
 
   const sel = { label:'', price:0, protein:'', qty:1 };
-  const sizeWrap = row.querySelector('[data-role="size"]');
-  const qtyWrap = row.querySelector('[data-role="qty-wrap"]');
-  const qtyVal = row.querySelector('[data-role="qty-val"]');
+  const sizeChips = row.querySelector('[data-role="size"]');
   const proteinWrap = row.querySelector('[data-role="protein-wrap"]');
   const proteinChips = row.querySelector('[data-role="protein"]');
+  const qtyRow = row.querySelector('[data-role="qty-row"]');
+  const qtyVal = row.querySelector('[data-role="qty-val"]');
+  const addBtn = row.querySelector('[data-role="add-btn"]');
 
-  function commit(){
-    if(sel.label && sel.protein){
-      catState.soups[item.id] = { name:item.name, label:`${sel.label}, ${sel.protein}`, unitPrice: sel.price, qty: sel.qty, sel:{ label: sel.label, protein: sel.protein } };
-    } else {
-      delete catState.soups[item.id];
-    }
-    renderCatering();
+  function priceReady(){
+    return !!(sel.label && sel.protein);
   }
 
-  sizeWrap.querySelectorAll('.liter-chip').forEach(chip=>{
+  // Pure UI sync — picking chips only stages a selection; it lands in
+  // catState.soups when Add is clicked (see addBtn below).
+  function updateVisibility(){
+    proteinWrap.style.display = sel.label ? 'block' : 'none';
+    const ready = priceReady();
+    qtyRow.style.display = ready ? 'flex' : 'none';
+    addBtn.style.display = ready ? 'flex' : 'none';
+    qtyVal.textContent = ready ? sel.qty : '0'; // keeps syncCartStates() honest pre-selection
+  }
+
+  function resetSelection(){
+    sel.label = ''; sel.price = 0; sel.protein = ''; sel.qty = 1;
+    row.querySelectorAll('.liter-chip.selected').forEach(c=> c.classList.remove('selected'));
+    updateVisibility();
+  }
+
+  sizeChips.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       const already = chip.classList.contains('selected');
-      sizeWrap.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      proteinChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
-      if(already){
-        sel.label = ''; sel.price = 0; sel.protein = ''; sel.qty = 1;
-        qtyVal.textContent = '0'; // keeps syncCartStates()'s generic qty>0 check honest pre-selection
-        proteinWrap.style.display = 'none';
-        qtyWrap.style.display = 'none';
-      } else {
-        chip.classList.add('selected');
-        sel.label = chip.dataset.label;
-        sel.price = Number(chip.dataset.price);
-        sel.protein = '';
-        sel.qty = 1;
-        qtyVal.textContent = '1';
-        proteinWrap.style.display = 'block';
-        qtyWrap.style.display = 'none';
-      }
-      commit();
+      resetSelection(); // a size change starts the pick over
+      if(already) return; // tapping the chosen size deselects it
+      chip.classList.add('selected');
+      sel.label = chip.dataset.label;
+      sel.price = Number(chip.dataset.price);
+      updateVisibility();
     });
-  });
-  qtyWrap.querySelector('[data-act="dec"]').addEventListener('click', ()=>{
-    const q = Number(qtyVal.textContent) || 1;
-    if(q <= 1) return;
-    sel.qty = q - 1;
-    qtyVal.textContent = sel.qty;
-    commit();
-  });
-  qtyWrap.querySelector('[data-act="inc"]').addEventListener('click', ()=>{
-    const q = Number(qtyVal.textContent) || 1;
-    sel.qty = q + 1;
-    qtyVal.textContent = sel.qty;
-    commit();
   });
   proteinChips.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
@@ -1230,9 +1320,40 @@ function buildSoupRow(item){
       proteinChips.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       sel.protein = already ? '' : chip.dataset.value;
       if(!already) chip.classList.add('selected');
-      qtyWrap.style.display = sel.protein ? 'flex' : 'none';
-      commit();
+      updateVisibility();
     });
+  });
+  qtyRow.querySelector('[data-act="dec"]').addEventListener('click', ()=>{
+    if(sel.qty <= 1) return;
+    sel.qty -= 1;
+    qtyVal.textContent = sel.qty;
+  });
+  qtyRow.querySelector('[data-act="inc"]').addEventListener('click', ()=>{
+    sel.qty += 1;
+    qtyVal.textContent = sel.qty;
+  });
+  addBtn.addEventListener('click', ()=>{
+    if(!priceReady()) return;
+    // An identical pick already in the cart isn't a second, distinct
+    // order — fold it into that line's quantity instead. A different
+    // protein or size is a genuinely different pick and gets its own
+    // line, so e.g. two Afang with different proteins can both be
+    // ordered.
+    const existing = catState.soups.find(s=>
+      s.itemId === item.id && s.sel.label === sel.label && s.sel.protein === sel.protein
+    );
+    if(existing){
+      existing.qty += sel.qty;
+      showToast(`Already in your cart — bumped to ${existing.qty} × ${item.name}, ${existing.label}.`);
+    } else {
+      catState.soups.push({
+        key: String(++soupEntryCounter), itemId: item.id, name: item.name,
+        label: `${sel.label}, ${sel.protein}`, unitPrice: sel.price, qty: sel.qty,
+        sel: { label: sel.label, protein: sel.protein }
+      });
+    }
+    resetSelection();
+    renderCatering();
   });
 
   return row;
@@ -1279,7 +1400,7 @@ function buildRiceRow(item){
         </div>
       </div>
     </div>
-    <button type="button" class="rice-add-btn" data-role="add-btn" style="display:none;">Add to Cart</button>`;
+    <button type="button" class="cart-add-btn" data-role="add-btn" style="display:none;">Add to Cart</button>`;
 
   const sel = { type:'', style:'', sides:'', qty:1 };
   const typeChips = row.querySelector('[data-role="type"]');
@@ -1597,9 +1718,21 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     }
   }
 
+  // Soups are committed cart entries now, so re-check each one against
+  // the live menu before it goes into the message — a cart restored
+  // from storage must not carry a size/protein that's since changed.
+  for(const s of catState.soups){
+    const soup = s.sel && cateringSoups.find(i=> i.id === s.itemId);
+    if(!soup || !soup.sizes.some(o=> o.label === s.sel.label)
+       || !SOUP_PROTEINS.includes(s.sel.protein) || !(s.qty > 0)){
+      showToast(`Please re-pick ${s.name || 'one of your soups'} — that selection is no longer on the menu.`);
+      return;
+    }
+  }
+
   const ffItemLines = ffLines.map(l=> `${l.qty} × ${l.name} — ${fmtNaira(l.qty * l.unitPrice)}`);
   const cateringItemLines = [
-    ...Object.values(catState.soups).map(s=> `${s.qty} × ${s.name}, ${s.label} — ${fmtNaira(s.qty * s.unitPrice)}`),
+    ...catState.soups.map(s=> `${s.qty} × ${s.name}, ${s.label} — ${fmtNaira(s.qty * s.unitPrice)}`),
     ...catState.rice.map(r=> `${r.qty} × ${r.name}, ${r.label} — ${fmtNaira(r.qty * r.unitPrice)}`),
     ...cateringProteins.filter(p=> catState.proteins[p.id] > 0)
       .map(p=> `${catState.proteins[p.id]} × ${p.name} — ${fmtNaira(p.price * catState.proteins[p.id])}`),
@@ -1685,7 +1818,7 @@ function clearFingerFoodAndCateringCart(){
   document.querySelectorAll('#soupList [data-role="size"] .liter-chip.selected').forEach(chip=> chip.click());
   document.querySelectorAll('#riceList [data-role="type"] .liter-chip.selected').forEach(chip=> chip.click());
   cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
-  catState.soups = {};
+  catState.soups = [];
   catState.rice = [];
   renderFF();
   renderCatering();
@@ -1734,12 +1867,11 @@ const CART_SOURCES = {
     title: 'Catering Order',
     lines(){
       const out = [];
-      // Soup quantity is set via its own selector in the menu (not
-      // adjustable from the cart), and each rice entry is one committed
-      // Add-to-Cart (see buildRiceRow) — so both get a remove action
-      // here rather than a +/- stepper.
-      Object.entries(catState.soups).forEach(([key, s])=>
-        out.push({ id:`soup:${key}`, name:`${s.name}, ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
+      // Each soup/rice entry is one committed Add-to-Cart (see
+      // buildSoupRow/buildRiceRow) with its quantity already set in the
+      // menu, so they get a remove action here rather than a +/- stepper.
+      catState.soups.forEach(s=>
+        out.push({ id:`soup:${s.key}`, name:`${s.name}, ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
       catState.rice.forEach(r=>
         out.push({ id:`rice:${r.key}`, name:`${r.name}, ${r.label}`, qty:r.qty, unitPrice:r.unitPrice, stepper:false }));
       cateringProteins.forEach(p=>{
@@ -1752,7 +1884,7 @@ const CART_SOURCES = {
       const sep = id.indexOf(':');
       const kind = id.slice(0, sep), key = id.slice(sep + 1);
       if(kind === 'protein') catState.proteins[key] = Math.max(0, qty);
-      else if(kind === 'soup') delete catState.soups[key];
+      else if(kind === 'soup') catState.soups = catState.soups.filter(s=> s.key !== key);
       else if(kind === 'rice') catState.rice = catState.rice.filter(r=> r.key !== key);
       renderCatering();
     }
@@ -2144,18 +2276,20 @@ function updateCartIcon(){
 const prevCardQty = new WeakMap();
 function syncCartStates(){
   document.querySelectorAll('.menu-item').forEach(card=>{
-    if(riceList.contains(card)){
-      // Rice's own .qty-val is an in-progress stepper for a not-yet-
-      // added selection, not cart truth (see buildRiceRow's Add
-      // button) — "in cart" means at least one committed entry for
-      // this item, checked against catState.rice directly instead.
-      card.classList.toggle('in-cart', catState.rice.some(r=> r.itemId === card.dataset.itemId));
+    const committed = riceList.contains(card) ? catState.rice
+      : soupList.contains(card) ? catState.soups
+      : null;
+    if(committed){
+      // Rice/soup .qty-val is an in-progress stepper for a not-yet-
+      // added selection, not cart truth (see their Add to Cart
+      // buttons) — "in cart" means at least one committed entry for
+      // this item, checked against the cart arrays directly instead.
+      card.classList.toggle('in-cart', committed.some(e=> e.itemId === card.dataset.itemId));
       return;
     }
     const val = card.querySelector('.qty-val');
     if(!val){
-      // Soup/rice rows have no stepper — they're "in cart" once a
-      // size chip has been chosen.
+      // A row with no stepper is "in cart" once its own chip is picked.
       card.classList.toggle('in-cart', !!card.querySelector('[data-role="size"] .liter-chip.selected'));
       return;
     }
@@ -2225,12 +2359,24 @@ function restoreCartState(){
     // Catering: proteins are plain counts; soups/rice re-drive their chips.
     cateringProteins.forEach(p=>{ catState.proteins[p.id] = qtyOf(saved.cat && saved.cat.proteins && saved.cat.proteins[p.id]); });
     const clickChip = (root, sel)=>{ const c = root.querySelector(sel); if(c) c.click(); return c; };
-    Object.entries((saved.cat && saved.cat.soups) || {}).forEach(([id, s])=>{
-      const row = document.querySelector('#soupList [data-item-id="' + id + '"]');
-      if(!row || !s.sel) return;
+    // Soups replay like rice below: stage each saved entry's chips and
+    // quantity on its row, click Add, and let the row reset itself
+    // before the next entry — so repeats and different proteins land
+    // back as separate entries. A stored size/protein that no longer
+    // matches the live menu is skipped rather than pasted into a
+    // selector.
+    (Array.isArray(saved.cat && saved.cat.soups) ? saved.cat.soups : []).forEach(s=>{
+      if(!s || !s.sel || !s.itemId) return;
+      const soup = cateringSoups.find(i=> i.id === s.itemId);
+      if(!soup || !soup.sizes.some(o=> o.label === s.sel.label)) return;
+      if(!SOUP_PROTEINS.includes(s.sel.protein)) return;
+      const row = document.querySelector('#soupList [data-item-id="' + s.itemId + '"]');
+      if(!row) return;
       if(!clickChip(row, '[data-role="size"] .liter-chip[data-label="' + s.sel.label + '"]')) return;
       if(!clickChip(row, '[data-role="protein"] .liter-chip[data-value="' + s.sel.protein + '"]')) return;
-      for(let i = 1; i < qtyOf(s.qty); i++) row.querySelector('[data-act="inc"]').click();
+      for(let i = 1; i < qtyOf(s.qty); i++) row.querySelector('[data-role="qty-row"] [data-act="inc"]').click();
+      const addBtn = row.querySelector('[data-role="add-btn"]');
+      if(addBtn) addBtn.click();
     });
     // Rice is an array of committed entries now (possibly several for the
     // same item), not one slot per item id — replay each one in full:
@@ -2260,7 +2406,7 @@ function restoreCartState(){
     // older menu) is dropped rather than left to fail on every load.
     try{ localStorage.removeItem(CART_STORAGE_KEY); }catch(e){}
     ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
-    catState.soups = {}; catState.rice = [];
+    catState.soups = []; catState.rice = [];
     cateringProteins.forEach(p=>{ catState.proteins[p.id] = 0; });
     cakeCart = [];
     renderFF();
