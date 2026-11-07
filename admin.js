@@ -54,6 +54,20 @@ async function api(path, options = {}){
   return data;
 }
 
+// Downloads bytes, not JSON — api() always parses JSON, so the invoice
+// needs its own fetch. Same 401 contract: an expired session signs out
+// rather than downloading an error page.
+async function apiBlob(path){
+  const token = readSession();
+  const res = await fetch(API + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if(res.status === 401){ signOut(); throw new Error('Session expired, please sign in again.'); }
+  if(!res.ok){
+    const data = await res.json().catch(()=> ({}));
+    throw new Error(data.error || `Download failed (${res.status})`);
+  }
+  return await res.blob();
+}
+
 /* ---------- auth ---------- */
 function showApp(){
   $('loginView').hidden = true;
@@ -171,6 +185,22 @@ function renderDetail(o){
   const print = el('button', { class:'btn', type:'button', text:'Print receipt' });
   print.addEventListener('click', ()=> printReceipt(o));
 
+  // The formal, itemised document — printReceipt stays the till receipt.
+  const invoice = el('button', { class:'btn ghost', type:'button', text:'Invoice' });
+  invoice.addEventListener('click', async ()=>{
+    invoice.disabled = true;
+    try{
+      const blob = await apiBlob(`/api/orders/${encodeURIComponent(o.order_number)}/invoice`);
+      const url = URL.createObjectURL(blob);
+      const a = el('a', { href:url, download:`LaCreme-Invoice-${o.order_number}.pdf` });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(()=> URL.revokeObjectURL(url), 10000);
+    }catch(err){ alert(err.message); }
+    finally{ invoice.disabled = false; }
+  });
+
   const wa = o.phone ? el('a', { class:'btn ghost', target:'_blank', rel:'noopener', text:'WhatsApp customer',
     href:`https://wa.me/${o.phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${o.name || ''}, this is La Crème about your order ${o.order_number}.`)}` }) : null;
 
@@ -185,7 +215,7 @@ function renderDetail(o){
     ]),
     el('div', { class:'sub', text:'Items' }),
     el('div', { class:'items', text:o.items || '(none recorded)' }),
-    el('div', { class:'actions' }, status, print, ...(wa ? [wa] : []))
+    el('div', { class:'actions' }, status, print, invoice, ...(wa ? [wa] : []))
   );
 }
 

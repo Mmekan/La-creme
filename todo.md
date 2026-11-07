@@ -17,6 +17,16 @@ Companion to `projectstate.md`.
       button is disabled during the send, the click is a no-op, and it
       re-enables afterwards. A real-device pass is still nice to have but no
       longer blocking.
+- [ ] **Set `TELEGRAM_INVOICE_CHAT_IDS` before deploying INV-1.** Without it
+      every order still logs and the site behaves normally, but **no invoice
+      is delivered** — the only trace is a line in the Worker log. Needs the
+      sales rep's Telegram chat id (she messages Mekabot, you read the id).
+      `npx wrangler secret put TELEGRAM_INVOICE_CHAT_IDS` — comma-separated.
+- [ ] **Get the owner to look at one invoice.** The layout is a first draft
+      built to be changed: header, customer block, line table, total, footer.
+      Everything is positioned in `renderInvoice()` in `worker/invoice.js`, so
+      a change is one function, not a rewrite. Nothing has been judged by a
+      human eye yet.
 
 ## Next — Phase 6 (#8): order from a gallery image
 
@@ -89,12 +99,15 @@ start blank.
 
 ## Then — final regression sweep
 
-- [ ] Desktop + mobile pass over: cart restore, WhatsApp messages, gallery
+- [x] Desktop + mobile pass over: cart restore, WhatsApp messages, gallery
       filters, every modal's close paths, uploads, and admin approval.
-- [ ] Check the cake / finger-food / catering carts still agree after the soup
-      model change (totals, badge count, checkout review).
-- [ ] Check the admin flow end-to-end: password → 15-minute window → 401
-      re-prompt after the server token expires.
+      **2026-11-06 — 50/50 passed** (Playwright, worker mocked). See
+      `projectstate.md`.
+- [x] Check the cake / finger-food / catering carts still agree after the soup
+      model change (totals, badge count, checkout review). ✅
+- [x] Check the admin flow end-to-end: password → 15-minute window → 401
+      re-prompt after the server token expires. ✅ (session window verified;
+      the 401 path itself still needs a real token against the worker.)
 
 ---
 
@@ -110,3 +123,142 @@ start blank.
 
 - Removing the upload password — there isn't one. Re-confirm what was meant
   before changing any gate; the unlisted URL is currently the only guard.
+
+---
+
+## Later — recorded 2026-11-06
+
+### BUG-1 (deferred): mobile selector tap misfires
+
+Reported 2026-11-06, saved for a later review pass — **not diagnosed yet**,
+nothing below is confirmed.
+
+- Symptom: tapping the size-plate/tray selectors or quantity selectors on
+  mobile shows a faint blue rectangle *slightly below* the tapped spot, and
+  the tap does nothing (no selection).
+- Suspects: mobile tap-highlight painting offset from the real hit area
+  (`-webkit-tap-highlight-color` on `body` vs per-chip), a transformed/
+  scaled ancestor shifting visual vs layout position, or an overlay
+  swallowing the tap. Could also be `:active` vs `:hover` style leakage.
+- Review when taken up: reproduce on real touch hardware (not headless —
+  headless Chrome floors at ~497px and can't do real taps), check which
+  selector rows are affected (soup size? rice type/style? qty steppers?),
+  inspect computed `transform`/`zoom`/positioning ancestors of the chips,
+  and confirm whether the blue box is the tap highlight or a focus ring.
+- Files likely involved: `index.css` (chip/qty styles, tap highlight),
+  `index.js` (`buildSoupRow`, `buildRiceRow` — chip listeners).
+
+### INV — Invoice workflow (Telegram bot + PDF invoice)
+
+Owner's flow, 2026-11-06. **Status: INV-1 built 2026-11-07; INV-2 and INV-3
+not started.** Three phases (INV-1 → INV-2 → INV-3); each depends on the one
+before it.
+Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
+Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
+
+**Next step:** INV-2 — the `/edit-invoice` bot flow. Before that, two things
+only the owner can settle (see "Do first"): the invoice layout review, and
+setting `TELEGRAM_INVOICE_CHAT_IDS`.
+
+> Customer places an order → order text notification on company
+> WhatsApp (as today) → **bot receives the PDF/image invoice** → **bot
+> forwards it to company Telegram** → sales rep downloads and sends it
+> via WhatsApp to the customer. If the order is altered in chat, the rep
+> types **/edit-invoice** (or taps the button) on Telegram → bot asks for
+> the **order number** → she pastes it → bot asks for the **price/item
+> change** in the standard format → bot sends the correction **to the
+> site** so the **admin panel tallies** → site resends the updated PDF →
+> invoice goes to customer → payment confirmed.
+
+Decisions already made (from discussion):
+
+- **WhatsApp delivery of the PDF is via a human relay, not an API.**
+  `wa.me` links cannot attach files; the WhatsApp Cloud API would need a
+  Meta business account, template approval, and would take the business
+  number out of the normal app. So: automation ends at company Telegram;
+  the sales rep forwards to the customer on WhatsApp.
+- **Telegram first.** PDF lands in the bot/company Telegram — no Meta
+  approval, no cost, bot needed anyway for Phase A prices.
+- **Invoice first (Phase B), prices second (Phase A).** Invoice builds
+  against today's hardcoded prices; Phase A makes prices live-editable
+  later. Accept: invoices may show stale prices until A lands.
+
+Facts grounding the plan:
+
+- Orders already log to D1 (`worker/schema.sql` → `orders` table:
+  `order_number`, `items` text blob, `total` text, `status` in
+  New/Confirmed/In Progress/Ready/Delivered/Cancelled, plus
+  name/phone/delivery/event fields). Admin already lists/searches/orders
+  and PATCHes status. No line-item structure, no payment state.
+- Worker already talks to Telegram (`sendTelegram` → `sendMessage`,
+  token/chat from secrets `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`).
+  Used today for upload notifications only (one per batch, fire-and-forget
+  via `ctx.waitUntil`).
+- Admin already has a `printReceipt` text receipt (`admin.js`) — the
+  invoice is its formal, itemised, sendable successor, not a new concept.
+- Order number format: `YYYYMMDD-HHMMSSmmm-Initials` (`generateOrderNumber`
+  in `config.js`) — already unique per checkout, usable as the bot's lookup
+  key with no new identifier scheme.
+
+#### Phase INV-1 — PDF invoice on every order — ✅ done 2026-11-07
+
+Goal: each placed order produces a PDF invoice that lands in company
+Telegram automatically, alongside today's WhatsApp text notification.
+
+- [x] **Structured line items.** `lines: [{d, q, p}]` added to both
+      `logOrder` call sites via `invoiceLines()` in `config.js`; `p: null`
+      means "price via WhatsApp" (cakes). Stored in the new
+      `orders.lines_json` column. The `items` text blob is still written and
+      still what the admin list and `printReceipt` render from.
+- [x] **PDF generation in the worker.** `worker/invoice.js` — hand-rolled,
+      zero dependencies, base-14 fonts, uncompressed content streams,
+      paginates at ~34 rows. `NGN 38,000`, never `₦` (no naira glyph).
+- [x] **Telegram document send.** `sendDocument` (multipart) fires at
+      order-create via `ctx.waitUntil`, one call per chat id in
+      `TELEGRAM_INVOICE_CHAT_IDS`, with the order summary as the caption.
+      Upload alerts still go to `TELEGRAM_CHAT_ID` — verified unchanged.
+- [x] **Admin parity.** **Invoice** button on the order card, next to
+      *Print receipt* (which is untouched). Downloads the same bytes.
+- [x] **Verify:** order → `lines_json` stored → PDF structurally valid
+      (xref offsets parsed, not just grepped) → two `sendDocument` attempts
+      for two chat ids, zero on a duplicate order number → admin button
+      downloads a valid PDF in a real browser → 401 signs out → old rows
+      with `lines_json IS NULL` still render from `items`.
+
+**Not verified:** the invoice *looks* right. Structure and text placement
+were checked numerically; nobody has opened one and judged the layout. The
+spec calls the layout a first draft the owner will want changed.
+
+#### Phase INV-2 — /edit-invoice on Telegram
+
+Goal: sales rep corrects price/items from her phone; site and admin
+panel tally; updated PDF re-issued.
+
+1. **Bot webhook.** Worker gains a Telegram webhook endpoint
+   (`POST /api/telegram`, secret path) receiving updates; commands:
+   `/edit-invoice` (button or typed). Conversation state per chat in D1
+   (new small table: `chat_id → step, order_number`) since the worker is
+   stateless between updates.
+2. **Lookup by order number.** Rep pastes the number; worker fetches the
+   order from D1, shows current lines, asks for the change in a fixed
+   format (define at build: e.g. `line 2 price 4500` / `add 3 × …`).
+3. **Correction writes back to the site.** Worker PATCHes the order row
+   (new endpoint or extended `handleUpdateOrder`: append/replace
+   structured lines, recompute total, stamp a `revised` marker + reason).
+   Admin panel re-renders from the same row, so it tallies by construction.
+4. **Re-issue.** Worker regenerates the PDF (same renderer as INV-1)
+   and sends the updated document to company Telegram
+   ("Revised invoice for <order no> — v2").
+5. **Verify:** conversation happy path + bad order number + malformed
+   change + double-submit; admin shows corrected lines/total; revised PDF
+   matches; idempotency (same edit twice = one revision, or explicit
+   guard).
+
+#### Phase INV-3 — live prices via Telegram (deferred, after B works)
+
+The earlier `/adjust-price` idea: move menu prices from hardcoded
+`index.js` arrays into D1, serve via worker, bot writes to D1. Only
+after the invoice flow is proven — it re-plumbs every price on the
+site (menu arrays + three order builders + cart totals + checkout).
+Recorded here so the invoice's structured lines are designed to read
+from the same price source when it arrives.

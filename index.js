@@ -858,6 +858,13 @@ function finalizeCakeOrder(){
     address: deliveryAddress,
     dateNeeded: cakeCart.map(c=> c.date).join(' | '),
     items: cakeCart.map(cakeLogText).join('\n'),
+    // One invoice line per cake; every cake is bespoke, so price is null
+    // and the invoice prints "Price via WhatsApp" instead of ₦0.
+    lines: invoiceLines(cakeCart.map(cake=>({
+      d: `${cake.occasion} cake, ${cake.tiersLabel}, ${cake.flavor}`,
+      q: 1,
+      p: null
+    }))),
     total: '',
     notes: ''
   });
@@ -1837,6 +1844,13 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     guests: hasCat ? guests : '',
     serviceType: hasCat ? checkoutServiceType : '',
     items: [...ffItemLines, ...cateringItemLines, ...cakes.map(cakeLogText)].join('\n'),
+    // priceLabel lines are quoted on WhatsApp, not here (see
+    // CART_SOURCES.cake); unitPrice 0 on those must never invoice as ₦0.
+    lines: invoiceLines([
+      ...ffLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : l.unitPrice })),
+      ...catLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : l.unitPrice })),
+      ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null }))
+    ]),
     total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
     notes
   });

@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-05 (Phase 6 built — gallery Order button, arrivals, event booking)
-**HEAD:** `5f08ff6` · Phase 6 uncommitted · Phases 1–5 landed in `2cdf261`
+**Updated:** 2026-11-07 (INV-1 built and verified locally; not deployed)
+**HEAD:** `8cc0704` · Phases 1–6 committed · INV-1 uncommitted · nothing pushed (no remote)
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -22,7 +22,10 @@ in that order. Phase plan text lives in the past session
 | 3 | #5, #9, #10, #11, #12, #13 — content/config corrections | ✅ done |
 | 4 | #14 — soups use the rice cart mechanism | ✅ done |
 | **5** | **#7 — upload "Clear selection" + admin password asks once per 15 min** | **✅ done** |
-| **6** | **#8 — order directly from a gallery image** | **✅ built, uncommitted** |
+| **6** | **#8 — order directly from a gallery image** | **✅ done (`8cc0704`)** |
+| **INV-1** | **PDF invoice on every order → Mekabot → company Telegram** | **✅ built 2026-11-07, not deployed** |
+| **INV-2** | **`/edit-invoice` — remote correction via Mekabot** | **📋 planned** |
+| **INV-3** | **`/adjust-price` — live prices via Telegram** | **📋 deferred** |
 
 ---
 
@@ -180,6 +183,102 @@ was it starting empty.
 
 ---
 
+## What INV-1 changed (PDF invoice on every order)
+
+Files: `worker/invoice.js` (new), `worker/schema-invoice.sql` (new),
+`worker/index.js`, `config.js`, `index.js`, `admin.js`, `worker/README.md`.
+
+**Client — structured lines.** `invoiceLines()` in `config.js` maps cart lines
+to `{d, q, p}` (description, quantity, unit price in naira, or `null` for
+"price via WhatsApp"). Both `logOrder()` call sites pass a `lines` array: the
+cake-only checkout sends one unpriced line per cake, the combined checkout
+sends finger foods + catering + cakes. `p` is `null` whenever a line carries a
+`priceLabel`, so a ₦0 placeholder can never invoice as ₦0. Capped at 100 lines
+client-side to keep the order body inside the API's 30 KB limit.
+
+**Storage.** `orders.lines_json` (TEXT) and `orders.revised` (INTEGER, default
+0). `items` is still written and still what the admin list and `printReceipt`
+render from. `schema-invoice.sql` is `ALTER TABLE`, so re-running it errors
+with `duplicate column name` — that error is the expected outcome.
+
+**Validation.** `validateLines()` drops anything it cannot trust (non-object,
+empty description, non-integer or out-of-range quantity, negative price) rather
+than rejecting the order. It runs on write *and* on read, so a hand-edited row
+cannot inject into the PDF. `serializeLines()` caps the stored JSON at 12,000
+UTF-8 bytes by dropping from the tail.
+
+**The PDF.** `renderInvoice(order)` in `worker/invoice.js` — hand-rolled, zero
+dependencies, base-14 Helvetica with `WinAnsiEncoding`, uncompressed content
+streams, A4, paginates at ~34 rows with a repeated table head and `Page n of m`.
+Everything visible is built from two primitives (`text`, `rule`), so a layout
+change is one function. Object numbers are reserved lazily and the xref is
+built from real byte offsets. Money prints as `NGN 38,000` — base-14 fonts have
+no naira glyph. Cakes print `Price via WhatsApp` and are excluded from the
+total; an all-unpriced order shows `Price via WhatsApp` as the total rather
+than `NGN 0`. `REVISED v{n}` stamps when `revised > 0` (first correction = v2).
+
+**Delivery.** `sendDocument()` posts multipart to Telegram; `sendInvoiceToCompany()`
+fans out to every id in `TELEGRAM_INVOICE_CHAT_IDS` (comma-separated, deduped,
+capped at 20) with the order summary as the caption. Fired from
+`handleCreateOrder` via `ctx.waitUntil`, and **only when the insert actually
+created a row** (`meta.changes`) — `logOrder`'s sendBeacon/fetch fallback can
+post the same order twice, and a duplicate must not invoice twice. Upload
+alerts still use `TELEGRAM_CHAT_ID`; there is no fallback between the two.
+
+**Admin.** `apiBlob()` (a binary sibling of `api()`, same 401 → sign-out
+contract) plus an **Invoice** button on the order card that downloads
+`LaCreme-Invoice-<no>.pdf`. `printReceipt` is untouched.
+
+**Endpoint.** `GET /api/orders/:no/invoice`, admin token only, `no-store`,
+`Content-Disposition: attachment`. Rows with `lines_json IS NULL` fall back to
+the `items` blob as unpriced lines, so historical orders still produce a
+document.
+
+---
+
+## Invoice workflow — INV-1 built 2026-11-07, INV-2/3 not started
+
+Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
+Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
+
+Three phases (INV-1, INV-2, INV-3 in the table above). INV-1 is built and
+verified against `wrangler dev`; **nothing is deployed** and no secret has been
+set. **Next:** INV-2 (`/edit-invoice`).
+
+**The flow, in the owner's words:** customer places an order → order text
+notification on company WhatsApp (unchanged) → Mekabot receives the PDF invoice
+from the site → Mekabot sends it to company Telegram → the sales rep downloads
+and forwards it to the customer on WhatsApp. If the order changes in chat, the
+rep uses buttons or `/edit-invoice` on Telegram → Mekabot asks for the order
+number → she pastes it → Mekabot asks for the price/item change → the site
+updates so the admin panel tallies → the site re-sends the updated PDF →
+invoice goes to the customer → payment confirmed (manual).
+
+**Key decisions:**
+
+- **Existing `la-creme-orders` worker.** No new service.
+- **Hand-rolled PDF renderer, zero dependencies.** Workers can't take native
+  PDF libs. Prints `NGN 38,000`, not `₦` — base PDF fonts have no naira glyph.
+- **Mekabot is the one bot.** Site → Mekabot → company Telegram; company
+  Telegram → Mekabot (buttons or text) → worker → back.
+- **Two destinations, one bot:**
+  - Upload alerts → `TELEGRAM_CHAT_ID` (existing, unchanged).
+  - Invoices + bot replies → `TELEGRAM_INVOICE_CHAT_IDS` (new,
+    comma-separated, extensible — adding a rep is `wrangler secret put`, no
+    code change, no redeploy).
+- **`bot_state` keyed by `chat_id`**, so multiple reps correcting different
+  orders never collide.
+- **Bot-only `revise` endpoint** (webhook secret), separate from the admin
+  token — the rep never needs the admin password.
+- **Invoice layout is a first draft.** The renderer is built as small
+  positioned primitives so the owner's layout changes are one function.
+
+**Data:** `orders.lines_json` + `orders.revised` (two new columns), and a new
+`bot_state` table. The existing `items` text blob and `printReceipt` are
+untouched.
+
+---
+
 ## Verification
 
 ### Phase 4 (headless Chrome probe, deleted afterwards)
@@ -233,6 +332,65 @@ composes a message with the carried `Delivery, 12 Iyala Street, Uyo` line, the
 Not exercised: real touch hardware, a true 390px viewport (headless Chrome on
 Windows bottoms out around 497px), and an actual WhatsApp send.
 
+### Regression sweep — 2026-11-06 (50/50 passed)
+
+Playwright against a local static server (`python -m http.server 8080`), with the
+orders worker **mocked** so nothing touched production. Script was a throwaway in
+the temp dir, not committed.
+
+- **Carts agree** — FF + soup + rice + protein + cake all add; badge (6) and
+  total (₦38,000) match the line items; all three sections render in the dropdown.
+- **Restore** — badge, total and every line survive a reload; `lcCartV1` holds
+  soups/rice/cake as arrays.
+- **WhatsApp message** — captured the real `wa.me` payload: `*Finger Foods*`,
+  `*Catering*`, `*Cakes*` blocks, order number, event details, delivery, total.
+- **Checkout** — review lines and total match the cart exactly.
+- **Modal close paths** — cake gallery (X / Escape / backdrop), lightbox
+  (X / Escape), cart dropdown (Escape) all close.
+- **Gallery** — 10 filter tabs, every one yields cards; Order button routes
+  correctly (`?order=cake&occasion=Birthday#cakes`).
+- **Upload** — Clear appears only when staged, empties thumbnails, hides itself,
+  preserves category.
+- **Admin** — login stores a 15-min session; expiry re-asks and removes the entry.
+- **No JS errors** on any page.
+
+Not exercised: a real WhatsApp send, real touch hardware, a true 390px viewport,
+and the worker's real endpoints (mocked).
+
+### INV-1 — 2026-11-07 (real worker under `wrangler dev`, local D1)
+
+Nothing touched production. Telegram was stubbed with a fake bot token, so the
+calls fired and failed harmlessly; the log proved the fan-out.
+
+- **Schema** — `lines_json` + `revised` present; re-running `schema-invoice.sql`
+  errors `duplicate column name` as documented.
+- **Helpers** — 11 assertions on `validateLines` / `parseStoredLines` /
+  `parseInvoiceChatIds` (null, non-array, empty description, fractional qty,
+  negative price, `p: null`, 150→100 cap, bad JSON fallback, dedupe) — PASS.
+- **PDF structure** — a throwaway parser read the xref table and confirmed every
+  offset lands on its `<n> 0 obj`, `Size` matches the xref count, header and
+  `%%EOF` present. Five cases: plain, cake-only, mixed priced/unpriced, 100
+  lines (3 pages), revised. All PASS.
+- **Endpoint** — order → `lines_json` stored → `GET /api/orders/:no/invoice`
+  returns `application/pdf` with the right filename; no token → 401; unknown
+  order → 404; hand-edited `lines_json` → 200 with the bad line dropped; row
+  with `lines_json IS NULL` → renders from `items` as unpriced.
+- **Body budget** — a 200-line / 25,612-byte order is accepted (`{"ok":true}`),
+  stored as 100 lines / 6,693 bytes. No 413.
+- **Telegram** — two chat ids → exactly two `sendDocument` attempts; the same
+  order number posted again → zero (the `meta.changes` guard); unset
+  `TELEGRAM_INVOICE_CHAT_IDS` → `invoice: … is not set`, order still `ok`; an
+  upload still logs a `sendMessage` attempt, not a document.
+- **Admin (real browser, Playwright)** — signed in, selected an order, clicked
+  **Invoice**: downloaded `LaCreme-Invoice-20261106-101500123-AB.pdf`, 1,804
+  bytes, structurally valid, correct content. Bogus token → signed out to the
+  login view. **Print receipt** still populates the receipt element.
+- `node --check` clean on `config.js`, `index.js`, `admin.js`,
+  `worker/index.js`, `worker/invoice.js`.
+
+Not exercised: a real Telegram delivery (stub token), a real deploy, and any
+human judgement of the invoice layout.
+
 ---
 
 ## Repo state
@@ -241,8 +399,12 @@ Windows bottoms out around 497px), and an actual WhatsApp send.
   They share one commit because the hunks interleave inside the same files,
   so a per-phase split would need hand-built partial patches.
 - `5f08ff6` — these two tracking docs.
-- **Uncommitted:** Phase 6 across `gallery.html`, `gallery.js`, `index.html`,
-  `index.js`, `index.css`. Nothing has been pushed.
+- `8cc0704` — Phase 6 across `gallery.html`, `gallery.js`, `index.html`,
+  `index.js`, `index.css`. Nothing has been pushed (no remote configured).
+- INV-1 — `worker/invoice.js`, `worker/schema-invoice.sql`,
+  `worker/index.js`, `config.js`, `index.js`, `admin.js`, `worker/README.md`,
+  plus the spec, the plan and these two tracking docs. **Uncommitted at the
+  time of writing.**
 
 ---
 
@@ -257,3 +419,13 @@ Windows bottoms out around 497px), and an actual WhatsApp send.
   probe tested the session-window logic only, to avoid poking production.
 - Real touch hardware and a true 390px viewport were not exercised — headless
   Chrome on Windows has a ~497px minimum layout width.
+- **INV-1 is not deployed and no secret is set.** `TELEGRAM_INVOICE_CHAT_IDS`
+  must exist before a deploy or invoices are silently not delivered (the
+  Worker log is the only trace). `schema-invoice.sql` must be run against the
+  remote D1 as part of that deploy.
+- **The invoice layout has not been seen by a human.** Structure, pagination
+  and text placement were checked numerically; whether it *looks* right is
+  open, and the spec expects the owner to want changes.
+- The PDF renderer's text widths are an approximation (three character
+  classes), used only for right-alignment and truncation. Exact AFM metrics
+  were not worth 200 numbers; a very wide glyph could sit a point or two off.

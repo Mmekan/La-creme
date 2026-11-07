@@ -18,10 +18,21 @@ Copy the `database_id` it prints into `wrangler.toml`, then:
 ```
 npx wrangler d1 execute la-creme-orders --remote --file=schema.sql
 npx wrangler d1 execute la-creme-orders --remote --file=schema-media.sql
+npx wrangler d1 execute la-creme-orders --remote --file=schema-invoice.sql
 npx wrangler secret put ADMIN_PASSWORD     # the password you'll log in with
 npx wrangler secret put SESSION_SECRET     # any long random string
+npx wrangler secret put TELEGRAM_BOT_TOKEN # Mekabot
+npx wrangler secret put TELEGRAM_CHAT_ID   # upload alerts
+npx wrangler secret put TELEGRAM_INVOICE_CHAT_IDS  # invoices, comma-separated chat ids
 npx wrangler deploy
 ```
+
+`schema-invoice.sql` is `ALTER TABLE`, not `CREATE ... IF NOT EXISTS` — running it
+twice prints `duplicate column name`. That error means the columns are already
+there and is safe to ignore.
+
+`TELEGRAM_INVOICE_CHAT_IDS` is what makes invoices arrive. Leave it unset and
+every order still logs, but no invoice is delivered (the Worker log says so).
 
 `deploy` prints the Worker URL, e.g. `https://la-creme-orders.<you>.workers.dev`.
 Put it in `config.js`:

@@ -137,6 +137,25 @@ function logOrder(order){
   }catch(e){ /* logging must never break checkout */ }
 }
 
+/* Shapes already-built cart lines into the invoice's line array:
+   { d: description, q: quantity, p: unit price in naira, or null }
+   p === null means "price on request" — the invoice prints
+   "Price via WhatsApp" and leaves it out of the total, matching how
+   the cart already shows priceLabel. Capped to the Worker's
+   MAX_INVOICE_LINES (100) so a pathological cart can't push the
+   order body past the API's 30 KB limit; the Worker re-validates
+   everything it receives and drops what it can't trust. */
+function invoiceLines(lines){
+  return lines
+    .filter(l=> l && l.d)
+    .slice(0, 100)
+    .map(l=>({
+      d: String(l.d).slice(0, 160),
+      q: Math.max(1, Math.floor(Number(l.q) || 1)),
+      p: l.p == null ? null : Math.max(0, Number(l.p) || 0)
+    }));
+}
+
 /* ============================================================
    MEDIA (R2) — photos/videos are hosted on Cloudflare R2 rather
    than committed to this repo. Update R2_BASE_URL once the

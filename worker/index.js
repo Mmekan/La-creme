@@ -9,6 +9,8 @@
    Secrets (wrangler secret put): ADMIN_PASSWORD, SESSION_SECRET
 ============================================================ */
 
+import { parseInvoiceChatIds, serializeLines, parseStoredLines, renderInvoice } from './invoice.js';
+
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 30 * 1024;
 const MAX_FAILED_LOGINS = 5;
@@ -132,6 +134,41 @@ async function sendTelegram(env, text) {
   }
 }
 
+// Fire-and-forget, like sendTelegram: an invoice that fails to send must
+// never fail the order. The caption carries the order summary, so the rep
+// sees what it is without opening the file — one Telegram call per
+// recipient instead of two.
+async function sendDocument(env, chatId, bytes, filename, caption) {
+  if (!env.TELEGRAM_BOT_TOKEN || !chatId) return;
+  try {
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    if (caption) form.append('caption', caption);
+    form.append('document', new Blob([bytes], { type: 'application/pdf' }), filename);
+    // No Content-Type header: the runtime sets the multipart boundary.
+    const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
+      method: 'POST', body: form,
+    });
+    if (!res.ok) console.error('telegram document:', res.status, await res.text());
+  } catch (err) {
+    console.error('telegram document:', err && err.name ? err.name : 'error');
+  }
+}
+
+// Spec §7.1a: invoices go to TELEGRAM_INVOICE_CHAT_IDS only — never to the
+// upload-alert chat. No fallback: if the secret is unset the invoice is
+// simply not delivered, and the log says why.
+function sendInvoiceToCompany(env, order, caption) {
+  const ids = parseInvoiceChatIds(env.TELEGRAM_INVOICE_CHAT_IDS);
+  if (!ids.length) {
+    console.error('invoice: TELEGRAM_INVOICE_CHAT_IDS is not set');
+    return Promise.resolve();
+  }
+  const bytes = renderInvoice(order);
+  const filename = `LaCreme-Invoice-${order.order_number}.pdf`;
+  return Promise.all(ids.map(id => sendDocument(env, id, bytes, filename, caption)));
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
@@ -200,25 +237,61 @@ async function handleLogin(request, env) {
   return json({ token: await makeToken(env), expiresInMs: SESSION_TTL_MS });
 }
 
-async function handleCreateOrder(request, env) {
+async function handleCreateOrder(request, env, ctx) {
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   let o;
   try { o = JSON.parse(raw); } catch (e) { return json({ error: 'Bad request' }, 400); }
   if (!o || !ORDER_NO_RE.test(String(o.orderNumber || ''))) return json({ error: 'Bad order number' }, 400);
 
-  await env.DB.prepare(
+  // Structured lines for the invoice. The items text blob above is still
+  // written and still what the admin list and printReceipt render from;
+  // this is the machine-readable copy the PDF needs (spec §4.1).
+  const linesJson = serializeLines(o.lines);
+
+  const info = await env.DB.prepare(
     `INSERT OR IGNORE INTO orders
       (order_number, received_at, order_type, name, phone, delivery, address, date_needed,
-       event_type, guests, service_type, items, total, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       event_type, guests, service_type, items, total, notes, lines_json)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     o.orderNumber, new Date().toISOString(),
     clip(o.orderType, 40), clip(o.name, 120), clip(o.phone, 40), clip(o.delivery, 20),
     clip(o.address, 300), clip(o.dateNeeded, 200), clip(o.eventType, 60), clip(o.guests, 20),
-    clip(o.serviceType, 20), clip(o.items, 12000), clip(o.total, 30), clip(o.notes, 1500)
+    clip(o.serviceType, 20), clip(o.items, 12000), clip(o.total, 30), clip(o.notes, 1500),
+    linesJson
   ).run();
+
+  // changes === 0 means the order number already existed: logOrder's
+  // sendBeacon/fetch fallback re-sent it. Do not invoice twice.
+  if (info.meta && info.meta.changes) {
+    ctx.waitUntil(sendInvoiceToCompany(
+      env,
+      { ...o, lines_json: linesJson, revised: 0 },
+      `🧾 Invoice ${o.orderNumber}\n${clip(o.name, 120)} · ${clip(o.total, 30) || 'price on request'}`
+    ));
+  }
   return json({ ok: true });
+}
+
+// Admin-only. Renders from lines_json, falling back to the items blob for
+// rows that predate the column, so every order in the list can produce a
+// document (spec §4.1). Re-validated on read, so a hand-edited row cannot
+// inject into the PDF (spec §9).
+async function handleGetInvoice(env, orderNumber) {
+  const order = await env.DB.prepare('SELECT * FROM orders WHERE order_number = ?')
+    .bind(orderNumber).first();
+  if (!order) return json({ error: 'Not found' }, 404);
+
+  const bytes = renderInvoice({ ...order, lines_json: JSON.stringify(parseStoredLines(order)) });
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="LaCreme-Invoice-${order.order_number}.pdf"`,
+      'Cache-Control': 'no-store',
+      ...cors,
+    },
+  });
 }
 
 async function handleListOrders(url, env) {
@@ -539,7 +612,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     try {
-      if (url.pathname === '/api/orders' && request.method === 'POST') return await handleCreateOrder(request, env);
+      if (url.pathname === '/api/orders' && request.method === 'POST') return await handleCreateOrder(request, env, ctx);
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
       if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env, ctx);
       if (url.pathname === '/api/gallery' && request.method === 'GET') return await handleGallery(env);
@@ -547,6 +620,9 @@ export default {
       if (url.pathname.startsWith('/api/')) {
         if (!(await isAuthed(request, env))) return json({ error: 'Unauthorized' }, 401);
         if (url.pathname === '/api/orders' && request.method === 'GET') return await handleListOrders(url, env);
+        // Match /invoice before the bare /:no matcher, same reason as /retry below.
+        const mi = url.pathname.match(/^\/api\/orders\/([\w-]+)\/invoice$/);
+        if (mi && request.method === 'GET') return await handleGetInvoice(env, mi[1]);
         const m = url.pathname.match(/^\/api\/orders\/([\w-]+)$/);
         if (m && request.method === 'PATCH') return await handleUpdateOrder(request, env, m[1]);
         if (url.pathname === '/api/uploads' && request.method === 'GET') return await handleListUploads(env);
