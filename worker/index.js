@@ -122,11 +122,18 @@ async function bumpBatch(env, batch, storedDelta, failedDelta, bytes) {
 // Telegram but Cloudflare still keeps the Worker alive until it lands.
 async function sendTelegram(env, text) {
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  await sendChatMessage(env, env.TELEGRAM_CHAT_ID, text);
+}
+
+// Same fire-and-forget contract as sendTelegram, but addressed to one chat:
+// the invoice list, the owner list and a bot reply all name their target.
+async function sendChatMessage(env, chatId, text) {
+  if (!env.TELEGRAM_BOT_TOKEN || !chatId) return;
   try {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text }),
+      body: JSON.stringify({ chat_id: chatId, text }),
     });
     if (!res.ok) console.error('telegram:', res.status, await res.text());
   } catch (err) {
@@ -177,6 +184,98 @@ function sendInvoiceToCompany(env, order, caption) {
   const bytes = renderInvoice(order);
   const filename = `LaCreme-Invoice-${order.order_number}.pdf`;
   return Promise.all(ids.map(id => sendDocument(env, id, bytes, filename, caption)));
+}
+
+/* ---------- Telegram webhook (R2.3, spec §8) ---------- */
+
+// Telegram re-delivers an update until it receives a 2xx, so the reply has
+// to be immediate and the work has to happen after it: ctx.waitUntil keeps
+// the invocation alive without holding the response open. The update_id is
+// what makes a re-delivery harmless — it is claimed before any work starts,
+// so a duplicate can never produce a second revision.
+const TG_DEDUPE_PREFIX = 'tg_update:';
+const TG_DEDUPE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Dedupe lives in `settings` rather than its own table: it is one row per
+// update and D1 has no row expiry, so the arrival time doubles as the TTL
+// record. Telegram's retry window is minutes, so a day is generous. A sweep
+// failure is logged and ignored — it must never cost us an update.
+async function claimUpdate(env, updateId) {
+  const key = TG_DEDUPE_PREFIX + String(updateId);
+  const res = await env.DB.prepare(
+    'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)'
+  ).bind(key, new Date().toISOString()).run();
+  const fresh = !!(res.meta && res.meta.changes);
+  if (fresh) {
+    try {
+      await env.DB.prepare(
+        "DELETE FROM settings WHERE key LIKE 'tg_update:%' AND value < ?"
+      ).bind(new Date(Date.now() - TG_DEDUPE_TTL_MS).toISOString()).run();
+    } catch (err) {
+      console.error('bot: dedupe sweep:', err && err.name ? err.name : 'error');
+    }
+  }
+  return fresh;
+}
+
+// A 404 with no detail, for a wrong path and a wrong secret alike: the two
+// must be indistinguishable, or the path becomes an oracle for guessing the
+// secret (spec §8).
+const webhookMiss = () => new Response('Not found', { status: 404 });
+
+async function handleTelegramWebhook(request, env, ctx, provided) {
+  // No secret configured means no webhook. Accepting the path anyway would
+  // leave an unauthenticated write endpoint on the Worker.
+  if (!env.TELEGRAM_WEBHOOK_SECRET) {
+    console.error('bot: TELEGRAM_WEBHOOK_SECRET is not set');
+    return webhookMiss();
+  }
+  if (!(await safeEqual(env.TELEGRAM_WEBHOOK_SECRET, provided, env.TELEGRAM_WEBHOOK_SECRET))) {
+    return webhookMiss();
+  }
+
+  // Read the body here, while the request is still live, then let the work
+  // run detached: a slow D1 round-trip must not delay the ack.
+  let raw;
+  try { raw = await request.text(); } catch (err) { raw = ''; }
+  ctx.waitUntil(processTelegramUpdate(env, raw));
+  return new Response('OK', { status: 200 });
+}
+
+async function processTelegramUpdate(env, raw) {
+  let update;
+  try { update = JSON.parse(raw); } catch (err) { return; }  // not ours to interpret
+  if (!update || update.update_id == null) return;
+
+  try {
+    if (!(await claimUpdate(env, update.update_id))) {
+      console.log(`bot: duplicate update ${update.update_id} ignored`);
+      return;
+    }
+    const msg = update.message || update.edited_message;
+    if (!msg || !msg.chat || msg.chat.id == null) return;   // service messages and callbacks
+
+    const chatId = String(msg.chat.id);
+    // Authorise by chat id, not by who sent it: only the invoice and owner
+    // lists may see order data, and anyone else gets one line with none.
+    if (!invoiceRecipients(env).includes(chatId)) {
+      console.error(`bot: unauthorised chat ${chatId}`);
+      await sendChatMessage(env, chatId, 'This bot is not authorised to discuss orders here.');
+      return;
+    }
+    await handleBotMessage(env, chatId, String(msg.text || ''));
+  } catch (err) {
+    console.error('bot:', err && err.name ? err.name : 'error');
+  }
+}
+
+// Commands (/edit-invoice, /approve, /update-price, /cancel) land in R2.4.
+// Until then the transport is deliberately silent: an unauthorised chat is
+// refused, and an authorised one gets no reply rather than a menu of
+// commands that do not exist yet. Not replying is what a bot with no
+// matching command does anyway.
+async function handleBotMessage(env, chatId, text) {
+  console.log(`bot: message from ${chatId}, ${text ? 'text present' : 'no text'}`);
 }
 
 const cors = {
@@ -665,6 +764,15 @@ export default {
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
       if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env, ctx);
       if (url.pathname === '/api/gallery' && request.method === 'GET') return await handleGallery(env);
+
+      // Telegram's webhook authenticates with the secret in its path, not a
+      // session token, so it is matched before the /api/ auth gate below.
+      // Every other shape under /api/tg/ is a 404, including a GET.
+      if (url.pathname === '/api/tg' || url.pathname.startsWith('/api/tg/')) {
+        const mt = url.pathname.match(/^\/api\/tg\/([^/]+)$/);
+        if (!mt || request.method !== 'POST') return webhookMiss();
+        return await handleTelegramWebhook(request, env, ctx, mt[1]);
+      }
 
       if (url.pathname.startsWith('/api/')) {
         if (!(await isAuthed(request, env))) return json({ error: 'Unauthorized' }, 401);

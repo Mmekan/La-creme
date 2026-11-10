@@ -322,12 +322,12 @@ CREATE TABLE IF NOT EXISTS invoice_versions (
 
 ### Task R2.3: Webhook
 
-- [ ] **Step 1:** Add `POST /api/tg/<secret>`. Compare against
+- [x] **Step 1:** Add `POST /api/tg/<secret>`. Compare against
   `TELEGRAM_WEBHOOK_SECRET`; unknown path → 404 with no body detail.
-- [ ] **Step 2:** Answer Telegram immediately; do the work in `ctx.waitUntil`.
-- [ ] **Step 3:** Dedupe on `update_id` (a small `bot_updates` table or a
+- [x] **Step 2:** Answer Telegram immediately; do the work in `ctx.waitUntil`.
+- [x] **Step 3:** Dedupe on `update_id` (a small `bot_updates` table or a
   `settings` key window). A repeat is acknowledged and ignored.
-- [ ] **Step 4:** Authorise by chat id: `TELEGRAM_INVOICE_CHAT_IDS` or
+- [x] **Step 4:** Authorise by chat id: `TELEGRAM_INVOICE_CHAT_IDS` or
   `TELEGRAM_OWNER_CHAT_IDS`. Anything else gets one line, no order data.
 
 ### Task R2.4: `/edit-invoice` and `/approve`
