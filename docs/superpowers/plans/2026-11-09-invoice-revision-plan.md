@@ -286,7 +286,7 @@ it. This is the step INV-1 skipped — do not mark R1 done without it.
 
 ### Task R2.1: Schema
 
-- [ ] **Step 1: Write `worker/schema-pricing.sql`.**
+- [x] **Step 1: Write `worker/schema-pricing.sql`.**
 
 ```sql
 ALTER TABLE orders ADD COLUMN price_status TEXT NOT NULL DEFAULT 'priced';
@@ -304,8 +304,8 @@ CREATE TABLE IF NOT EXISTS invoice_versions (
 );
 ```
 
-- [ ] **Step 2: Apply locally.** `npx wrangler d1 execute <db> --local --file=worker/schema-pricing.sql`
-- [ ] **Step 3: Confirm shape** with `PRAGMA table_info(orders)`.
+- [x] **Step 2: Apply locally.** `npx wrangler d1 execute <db> --local --file=worker/schema-pricing.sql`
+- [x] **Step 3: Confirm shape** with `PRAGMA table_info(orders)`.
 
 ### Task R2.2: Pending detection on create
 
