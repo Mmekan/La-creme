@@ -413,9 +413,17 @@ async function handleCreateOrder(request, env, ctx) {
       priceStatus === 'pending' ? '⏳ PENDING PRICE REVIEW — set a price before sending.' : null,
     ].filter(Boolean).join('\n');
 
+    // The renderer reads row-shaped fields (order_number, received_at), but
+    // the request body uses the site's camelCase orderNumber and has no
+    // timestamp — so both are supplied here. Without them the delivered PDF
+    // prints no order number or issue date, and ships as "undefined.pdf".
     ctx.waitUntil(sendInvoiceToCompany(
       env,
-      { ...o, lines_json: linesJson, revised: 0, price_status: priceStatus, spec_key: specKey },
+      {
+        ...o,
+        order_number: o.orderNumber, received_at: nowIso,
+        lines_json: linesJson, revised: 0, price_status: priceStatus, spec_key: specKey,
+      },
       caption
     ));
   }
