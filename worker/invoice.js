@@ -111,13 +111,17 @@ export function summariseLines(lines) {
 // omit their line rather than printing an empty label, so the invoice is
 // shippable before the owner supplies them and gets richer as they land —
 // no code change either way.
+// Placeholders on purpose: they make a freshly-deployed invoice complete
+// enough to look at instead of half-blank. REPLACE every value below with
+// the real business details before any invoice goes to a paying customer —
+// especially account_number, since a customer will pay whatever it says.
 export const DEFAULT_SETTINGS = {
-  company_name: 'LA CRÈME',
-  company_phone: '',
-  company_address: '',
-  bank_name: '',
-  account_name: '',
-  account_number: '',
+  company_name: "La'Creme Confectionery",
+  company_phone: '+234 800 000 0000',
+  company_address: '12 Placeholder Road, Uyo, Akwa Ibom',
+  bank_name: 'Demo Bank',
+  account_name: "La'Creme Confectionery",
+  account_number: '0123456789',
 };
 
 /* ============================================================
@@ -282,7 +286,7 @@ export function renderInvoice(order) {
   const revisions = Number(o.revised) || 0;
   const version = revisions + 1;
   const isPending = o.price_status === 'pending';
-  const companyName = String(s.company_name || '').trim() || 'LA CRÈME';
+  const companyName = String(s.company_name || '').trim() || "La'Creme Confectionery";
 
   const pages = [];
   let ops = null;
@@ -327,8 +331,14 @@ export function renderInvoice(order) {
       const lp = drawLogo(MARGIN, y - 40, 40);
       const cx = MARGIN + lp + 16;
 
-      text(cx, y - 13, companyName, FONT_B, 17, RED);
-      let cy = y - 27;
+      right(COL_AMT_R, y - 13, 'INVOICE', FONT_B, 15, RED);
+      right(COL_AMT_R, y - 27, `No. ${o.order_number || ''}`, FONT_R, 9, BLACK);
+      right(COL_AMT_R, y - 39, `Issued ${fmtDate(o.received_at)}`, FONT_R, 9, BLACK);
+
+      // The business name sits on the order-number line and shares the
+      // logo's left column, so the two sides of the header read as one band.
+      text(cx, y - 27, companyName, FONT_B, 17, RED);
+      let cy = y - 41;
       const contactW = COL_AMT_R - cx - 150;
       if (s.company_phone) {
         text(cx, cy, s.company_phone, FONT_R, 9, BLACK); cy -= 11;
@@ -338,10 +348,6 @@ export function renderInvoice(order) {
           text(cx, cy, ln, FONT_R, 9, BLACK); cy -= 11;
         }
       }
-
-      right(COL_AMT_R, y - 13, 'INVOICE', FONT_B, 15, RED);
-      right(COL_AMT_R, y - 27, `No. ${o.order_number || ''}`, FONT_R, 9, BLACK);
-      right(COL_AMT_R, y - 39, `Issued ${fmtDate(o.received_at)}`, FONT_R, 9, BLACK);
 
       let ry = y - 53;
       // Spec §2.8: prominent, beside the invoice number, not a footnote.

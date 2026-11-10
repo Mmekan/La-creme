@@ -16,7 +16,11 @@ const PORT = process.env.DEMO_PORT || '8792';
 // On Windows the MSYS /tmp is not Node's /tmp, so pass the real path:
 //   DEMO_LOG="$(cygpath -w /tmp/wdev6.log)" node tools/demo-bot.mjs
 const LOG = process.env.DEMO_LOG || '/tmp/wdev6.log';
-const API = `http://127.0.0.1:${PORT}/api/tg/s3cret`;
+// Telegram authenticates the webhook with the secret in the path. Local dev
+// reads whatever .dev.vars holds, so take it from the environment rather
+// than pinning the placeholder this file used to assume.
+const SECRET = process.env.DEMO_SECRET || 's3cret';
+const API = `http://127.0.0.1:${PORT}/api/tg/${SECRET}`;
 const OWNER = '333';        // admin A: chat 333
 const OPERATOR = '444';     // admin B: chat 444
 const ORDER_CAKE = '20261110-120000111-DM';

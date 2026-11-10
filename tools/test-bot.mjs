@@ -22,7 +22,8 @@ eq('command text is not a command', B.parseCommand('hello'), null);
 
 // --- price entry --------------------------------------------------------
 eq('price plain', B.parsePriceEntry('2 = 4500'), { index: 2, price: 4500 });
-eq('price with naira and comma', B.parsePriceEntry('2=₦4,500'), { index: 2, price: 4500 });
+eq('price with NGN and comma', B.parsePriceEntry('2=NGN 4,500'), { index: 2, price: 4500 });
+eq('price with legacy naira glyph', B.parsePriceEntry('2=₦4,500'), { index: 2, price: 4500 });
 eq('price clear', B.parsePriceEntry('2 = -'), { index: 2, price: null });
 eq('bare number is not guessed at', !!B.parsePriceEntry('4500').error, true);
 eq('line zero rejected', !!B.parsePriceEntry('0 = 5').error, true);
@@ -31,18 +32,18 @@ eq('non-numeric rejected', !!B.parsePriceEntry('2 = abc').error, true);
 eq('decimals round', B.parsePriceEntry('2 = 4500.4'), { index: 2, price: 4500 });
 
 // --- formatting ---------------------------------------------------------
-eq('money', B.money(1234567), '₦1,234,567');
+eq('money', B.money(1234567), 'NGN 1,234,567');
 eq('order number normalises', B.parseOrderNumber(' 20261109-131600456-tb '), '20261109-131600456-TB');
 eq('order number rejects junk', B.parseOrderNumber('hi'), null);
 eq('line list', B.formatLines([{ d: 'Cake', q: 1, p: null }, { d: 'Puff Puff', q: 2, p: 1500 }]),
-  '1. Cake — unpriced\n2. Puff Puff — ₦3,000 (₦1,500 × 2)');
+  '1. Cake - unpriced\n2. Puff Puff - NGN 3,000 (NGN 1,500 x 2)');
 
 const card = B.formatPriceCard({
   orderNo: 'X-1', index: 0, line: { d: 'Cake', q: 1, p: null },
-  oldP: null, newP: 4500, newTotal: '₦7,500', unpriced: 0, catalogue: true,
+  oldP: null, newP: 4500, newTotal: 'NGN 7,500', unpriced: 0, catalogue: true,
 });
 eq('card shows current', card.includes('Current: unpriced'), true);
-eq('card shows proposed', card.includes('Proposed: ₦4,500'), true);
+eq('card shows proposed', card.includes('Proposed: NGN 4,500'), true);
 eq('card says nothing saved yet', card.includes('Nothing has been saved yet.'), true);
 
 // --- callbacks ----------------------------------------------------------

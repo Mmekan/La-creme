@@ -11,7 +11,7 @@
 ============================================================ */
 
 // A price above this is a typo, not a cake. Rejecting it is friendlier
-// than writing ₦45,000,000 into an invoice and the catalogue.
+// than writing NGN 45,000,000 into an invoice and the catalogue.
 export const MAX_PRICE = 100000000;
 
 // Telegram truncates callback_data at 64 bytes, so buttons carry a scope
@@ -23,9 +23,12 @@ export function normKey(s) {
   return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+// "NGN 38,000" — plain ASCII, matching the PDF (base-14 fonts have no
+// naira glyph). Keeping the bot and the invoice on the same spelling also
+// means nothing user-facing depends on how a character gets encoded.
 export function money(n) {
   const v = Math.round(Number(n) || 0);
-  return '₦' + String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return 'NGN ' + String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 // "/edit-invoice@Mekabot 20261109-131600456-TB" -> { command, args }.
@@ -39,14 +42,14 @@ export function parseCommand(text) {
   return { command, args: rest.join(' ').trim() };
 }
 
-// "2 = 4500", "2=₦4,500" and "2 = -" (back to unpriced). A bare number is
+// "2 = 4500", "2=NGN 4,500" and "2 = -" (back to unpriced). A bare number is
 // rejected rather than guessed at: with two numbers in play, guessing which
 // is the line and which is the price is how the wrong line gets priced.
 export function parsePriceEntry(text) {
   const s = String(text || '').trim();
   const m = s.match(/^(\d{1,3})\s*=\s*(.+)$/);
   if (!m) {
-    return { error: 'Send it as 2 = 4500 — line number, equals, price. Use 2 = - to mark it unpriced.' };
+    return { error: 'Send it as 2 = 4500 - line number, equals, price. Use 2 = - to mark it unpriced.' };
   }
   const index = Number(m[1]);
   if (!Number.isInteger(index) || index < 1) {
@@ -55,13 +58,15 @@ export function parsePriceEntry(text) {
   const raw = m[2].trim();
   if (raw === '-') return { index, price: null };
 
-  const digits = raw.replace(/[\s,₦]/g, '');
+  // Accept "4500", "NGN 4,500" and the legacy "₦4,500" alike: strip the
+  // currency token and separators, then insist on digits.
+  const digits = raw.replace(/^ngn/i, '').replace(/[\s,₦]/g, '');
   if (!/^\d+(\.\d+)?$/.test(digits)) {
     return { error: 'That price is not a number. Send 2 = 4500, or 2 = - to leave it unpriced.' };
   }
   const price = Math.round(Number(digits));
-  if (price < 1) return { error: 'A price has to be at least ₦1. Use 2 = - to leave it unpriced.' };
-  if (price > MAX_PRICE) return { error: `That price looks too large — the ceiling is ${money(MAX_PRICE)}.` };
+  if (price < 1) return { error: 'A price has to be at least NGN 1. Use 2 = - to leave it unpriced.' };
+  if (price > MAX_PRICE) return { error: `That price looks too large - the ceiling is ${money(MAX_PRICE)}.` };
   return { index, price };
 }
 
@@ -78,8 +83,8 @@ export function parseOrderNumber(text) {
 export function formatLines(lines) {
   if (!lines.length) return '(no line items)';
   return lines.map((l, i) => {
-    const amount = l.p === null ? 'unpriced' : `${money(l.q * l.p)}${l.q > 1 ? ` (${money(l.p)} × ${l.q})` : ''}`;
-    return `${i + 1}. ${l.d} — ${amount}`;
+    const amount = l.p === null ? 'unpriced' : `${money(l.q * l.p)}${l.q > 1 ? ` (${money(l.p)} x ${l.q})` : ''}`;
+    return `${i + 1}. ${l.d} - ${amount}`;
   }).join('\n');
 }
 
@@ -95,7 +100,7 @@ export function formatPriceCard({ orderNo, index, line, oldP, newP, newTotal, un
     `CONFIRM PRICE CHANGE`,
     ``,
     `Order ${orderNo}`,
-    `Line ${index + 1}: ${line.d}${line.q > 1 ? ` ×${line.q}` : ''}`,
+    `Line ${index + 1}: ${line.d}${line.q > 1 ? ` x${line.q}` : ''}`,
     ``,
     `Current: ${current}`,
     `Proposed: ${proposed}`,
@@ -121,8 +126,8 @@ export function formatApproveCard({ orderNo, total, version, unpriced }) {
     return [
       ...head,
       ``,
-      `CANNOT APPROVE YET — ${unpriced.length} line${unpriced.length > 1 ? 's are' : ' is'} still unpriced:`,
-      ...unpriced.map(n => `• line ${n}`),
+      `CANNOT APPROVE YET - ${unpriced.length} line${unpriced.length > 1 ? 's are' : ' is'} still unpriced:`,
+      ...unpriced.map(n => `- line ${n}`),
       ``,
       'Set those prices first with /edit-invoice.',
     ].join('\n');

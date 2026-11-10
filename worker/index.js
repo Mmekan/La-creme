@@ -383,9 +383,9 @@ function auditStatement(env, entry) {
 
 const HELP_TEXT = [
   'Commands:',
-  '/edit-invoice — set a price on an order',
-  '/approve — mark a priced invoice final',
-  '/cancel — abandon what you were doing',
+  '/edit-invoice - set a price on an order',
+  '/approve - mark a priced invoice final',
+  '/cancel - abandon what you were doing',
 ].join('\n');
 
 async function loadOrder(env, orderNumber) {
@@ -406,7 +406,7 @@ async function showOrderForEdit(env, chatId, userId, orderNumber) {
     : '';
   await setBotState(env, chatId, userId, 'edit', order.order_number, null);
   return sendChatMessage(env, chatId, [
-    `Order ${order.order_number} — ${order.name || 'no name'}`,
+    `Order ${order.order_number} - ${order.name || 'no name'}`,
     `${order.price_status}${unpriced ? `, ${unpriced} unpriced` : ''}`,
     '',
     formatLines(lines),
@@ -595,7 +595,7 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   const index = payload.index;
   if (index < 0 || index >= lines.length || lines[index].p !== payload.oldP) {
     await clearBotState(env, chatId, userId);
-    return sendChatMessage(env, chatId, 'That order changed while you were confirming. Nothing was saved — send /edit-invoice to start again.');
+    return sendChatMessage(env, chatId, 'That order changed while you were confirming. Nothing was saved - send /edit-invoice to start again.');
   }
 
   let written = payload.newP;
@@ -606,12 +606,12 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   // has no business changing what future orders cost anyway.
   if (writeScope === 'save' && written === null) {
     writeScope = 'once';
-    scopeNote = '\nCatalogue left unchanged — a cleared price is not a standing price.';
+    scopeNote = '\nCatalogue left unchanged - a cleared price is not a standing price.';
   }
   const catalogueKey = writeScope === 'save' ? payload.catalogueKey : null;
   if (writeScope === 'save' && !catalogueKey) {
     writeScope = 'once';
-    scopeNote = '\nCatalogue left unchanged — this line has no catalogue key.';
+    scopeNote = '\nCatalogue left unchanged - this line has no catalogue key.';
   }
 
   const next = lines.map((l, i) => (i === index ? { ...l, p: written } : l));
@@ -659,7 +659,7 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   } catch (err) {
     await clearBotState(env, chatId, userId);
     console.error('bot price write:', err && err.name ? err.name : 'error');
-    return sendChatMessage(env, chatId, 'Could not save the price — the invoice changed or the database refused it. Nothing was saved.');
+    return sendChatMessage(env, chatId, 'Could not save the price - the invoice changed or the database refused it. Nothing was saved.');
   }
 
   await clearBotState(env, chatId, userId);
@@ -667,9 +667,9 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   // The revised document goes out to the same chats a new order does.
   const fresh = { ...order, lines_json: linesJson, revised: newRevised, price_status: newStatus };
   await sendInvoiceToCompany(env, fresh, [
-    `🧾 Invoice ${order.order_number} — revised (v${version})`,
+    `Invoice ${order.order_number} - revised (v${version})`,
     `Line ${index + 1}: ${line.d}`,
-    `${payload.oldP === null ? 'unpriced' : money(payload.oldP)} → ${written === null ? 'unpriced' : money(written)}`,
+    `${payload.oldP === null ? 'unpriced' : money(payload.oldP)} -> ${written === null ? 'unpriced' : money(written)}`,
     `Total ${summary.allPriced ? money(summary.total) : money(summary.total) + ' + unpriced lines'}`,
     `By ${userId}`,
   ].join('\n'));
@@ -678,7 +678,7 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   return sendChatMessage(env, chatId, [
     `Saved. Order ${order.order_number} is now v${version}, ${newStatus}.`,
     catalogueKey ? `Catalogue also updated for ${catalogueKey}.` : '',
-    remaining ? `${remaining} line${remaining > 1 ? 's' : ''} still unpriced — /approve will refuse until they are set.` : 'Every line is priced — /approve will finalise it.',
+    remaining ? `${remaining} line${remaining > 1 ? 's' : ''} still unpriced - /approve will refuse until they are set.` : 'Every line is priced - /approve will finalise it.',
     payload.wasApproved ? 'It was approved before this edit, so it needs approving again.' : '',
     'The revised PDF has been sent.',
     scopeNote.trim(),
@@ -707,7 +707,7 @@ async function applyApprove(env, chatId, userId, orderNumber, payload) {
   }
   if (Number(order.revised) !== payload.revised) {
     await clearBotState(env, chatId, userId);
-    return sendChatMessage(env, chatId, 'That invoice was revised while you were confirming. Nothing was approved — start again.');
+    return sendChatMessage(env, chatId, 'That invoice was revised while you were confirming. Nothing was approved - start again.');
   }
 
   try {
@@ -723,17 +723,17 @@ async function applyApprove(env, chatId, userId, orderNumber, payload) {
     ]);
     if (!results || !results[0] || !results[0].meta.changes) {
       await clearBotState(env, chatId, userId);
-      return sendChatMessage(env, chatId, 'Nothing was approved — the order had already changed.');
+      return sendChatMessage(env, chatId, 'Nothing was approved - the order had already changed.');
     }
   } catch (err) {
     await clearBotState(env, chatId, userId);
     console.error('bot approve:', err && err.name ? err.name : 'error');
-    return sendChatMessage(env, chatId, 'Could not approve — nothing was changed.');
+    return sendChatMessage(env, chatId, 'Could not approve - nothing was changed.');
   }
 
   await clearBotState(env, chatId, userId);
   await sendInvoiceToCompany(env, { ...order, price_status: 'approved' }, [
-    `🧾 Invoice ${order.order_number} — APPROVED (v${payload.version})`,
+    `Invoice ${order.order_number} - APPROVED (v${payload.version})`,
     `Total ${money(summary.total)}`,
     `Approved by ${userId}`,
   ].join('\n'));
@@ -869,10 +869,10 @@ async function handleCreateOrder(request, env, ctx) {
     }
 
     const caption = [
-      `🧾 Invoice ${o.orderNumber}`,
-      `${clip(o.name, 120)} · ${clip(o.total, 30) || 'price on request'}`,
+      `Invoice ${o.orderNumber}`,
+      `${clip(o.name, 120)} - ${clip(o.total, 30) || 'price on request'}`,
       // The operator's cue that this one is not ready to forward.
-      priceStatus === 'pending' ? '⏳ PENDING PRICE REVIEW — set a price before sending.' : null,
+      priceStatus === 'pending' ? 'PENDING PRICE REVIEW - set a price before sending.' : null,
     ].filter(Boolean).join('\n');
 
     // The renderer reads row-shaped fields (order_number, received_at), but

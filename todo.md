@@ -1,6 +1,6 @@
 # TODO — La Crème
 
-**Updated:** 2026-11-05 (after Phase 5)
+**Updated:** 2026-11-10 (after R2.4 + invoice letterhead/ASCII pass)
 Companion to `projectstate.md`.
 
 ---
@@ -26,7 +26,15 @@ Companion to `projectstate.md`.
       built to be changed: header, customer block, line table, total, footer.
       Everything is positioned in `renderInvoice()` in `worker/invoice.js`, so
       a change is one function, not a rewrite. Nothing has been judged by a
-      human eye yet.
+      human eye yet. As of 2026-11-10 the letterhead is `La'Creme
+      Confectionery` on the order-number line — still measured, not eyeballed.
+- [ ] **Replace the placeholder bank details before any invoice goes out.**
+      `DEFAULT_SETTINGS` in `worker/invoice.js` currently prints
+      `Demo Bank` / `0123456789` on every invoice (the D1 `settings` table is
+      never read). Either edit the constants or wire `settings` through.
+- [ ] **Commit the 2026-11-10 pass.** `worker/invoice.js`, `worker/bot.js`,
+      `worker/index.js`, `tools/demo-bot.mjs`, `tools/test-bot.mjs`. Leave
+      `sample-*.pdf`, `verify-r1.mjs`, `.demo-dev.log` out.
 
 ## Next — Phase 6 (#8): order from a gallery image
 
@@ -113,6 +121,15 @@ start blank.
 
 ## Done (recent)
 
+- [x] **2026-11-10 — NGN everywhere, ASCII-only bot/invoice text.** `money()`
+      prints `NGN 38,000`; em dashes/arrows/`×`/bullets/emoji removed from
+      user-facing strings. 28/28 bot tests pass.
+- [x] **2026-11-10 — invoice letterhead.** `La'Creme Confectionery` on the
+      order-number line, left-aligned with the logo; every `DEFAULT_SETTINGS`
+      field filled so the payment block renders.
+- [x] **2026-11-10 — demo harness.** `tools/demo-bot.mjs` now reads
+      `DEMO_SECRET`; it was hardcoding `s3cret` and every update 404'd.
+- [x] **R2.4 — `/edit-invoice` + `/approve`** (`654f347`).
 - [x] Phase 4 — soups use the rice cart mechanism (separate lines per protein).
 - [x] Phase 6 — gallery Order button, menu arrivals, event-catering button.
 - [x] Checkout carries the cake order's delivery instead of re-asking blank.
@@ -150,15 +167,18 @@ nothing below is confirmed.
 
 ### INV — Invoice workflow (Telegram bot + PDF invoice)
 
-Owner's flow, 2026-11-06. **Status: INV-1 built 2026-11-07; INV-2 and INV-3
-not started.** Three phases (INV-1 → INV-2 → INV-3); each depends on the one
-before it.
+Owner's flow, 2026-11-06. **Status: INV-1 built 2026-11-07. The plan then
+became R1–R3; R1 and R2.1–R2.4 are done (`654f347`). R2.5, R2.6 and R3 are
+next.** Each phase depends on the one before it.
 Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
 Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
 
-**Next step:** INV-2 — the `/edit-invoice` bot flow. Before that, two things
-only the owner can settle (see "Do first"): the invoice layout review, and
-setting `TELEGRAM_INVOICE_CHAT_IDS`.
+**Next step:** finish **R2.5** (admin `price_status` badge — `admin.js` has no
+order badge yet) and **R2.6** (verify R2: conversation happy path, re-delivered
+`update_id`, stale button, two admins in one chat, the 15-minute window — the
+demo in `tools/demo-bot.mjs` drives exactly these). Then **R3** — live
+catalogue prices. Two things only the owner can settle (see "Do first"): the
+invoice layout review, and replacing the placeholder bank details.
 
 > Customer places an order → order text notification on company
 > WhatsApp (as today) → **bot receives the PDF/image invoice** → **bot

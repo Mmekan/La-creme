@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-07 (INV-1 built and verified locally; not deployed)
-**HEAD:** `8cc0704` · Phases 1–6 committed · INV-1 uncommitted · nothing pushed (no remote)
+**Updated:** 2026-11-10 (R2.4 done; invoice letterhead + ASCII/NGN pass; still not deployed)
+**HEAD:** `654f347` (R2.4) · Phases 1–6 + R1–R2.4 committed · today's letterhead/ASCII pass uncommitted · nothing pushed (no remote)
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -23,9 +23,15 @@ in that order. Phase plan text lives in the past session
 | 4 | #14 — soups use the rice cart mechanism | ✅ done |
 | **5** | **#7 — upload "Clear selection" + admin password asks once per 15 min** | **✅ done** |
 | **6** | **#8 — order directly from a gallery image** | **✅ done (`8cc0704`)** |
-| **INV-1** | **PDF invoice on every order → Mekabot → company Telegram** | **✅ built 2026-11-07, not deployed** |
-| **INV-2** | **`/edit-invoice` — remote correction via Mekabot** | **📋 planned** |
-| **INV-3** | **`/adjust-price` — live prices via Telegram** | **📋 deferred** |
+| **INV-1 / R1** | **PDF invoice on every order → Mekabot → company Telegram; renderer rebuilt to the owner's spec** | **✅ built, not deployed** |
+| **R2.1–R2.3** | `price_status` + `invoice_versions` schema · pending detection on create · Telegram webhook | ✅ done |
+| **R2.4** | `/edit-invoice` + `/approve` — buttons, optimistic guard, re-issue | ✅ done (`654f347`) |
+| **R2.5** | Admin `price_status` badge | 📋 next |
+| **R2.6** | Verify R2 (happy path, dedupe, stale button, two admins) | 📋 next |
+| **R3** | Live catalogue prices — `product_prices`, `GET /api/prices`, `/update-price` | 📋 planned |
+
+The INV-2/INV-3 naming below is superseded by R1–R3 in the plan file
+[docs/superpowers/plans/2026-11-09-invoice-revision-plan.md](docs/superpowers/plans/2026-11-09-invoice-revision-plan.md).
 
 ---
 
@@ -236,14 +242,16 @@ document.
 
 ---
 
-## Invoice workflow — INV-1 built 2026-11-07, INV-2/3 not started
+## Invoice workflow — INV-1 built 2026-11-07; R1–R2.4 done, R2.5/R2.6/R3 next
 
 Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
 Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
 
-Three phases (INV-1, INV-2, INV-3 in the table above). INV-1 is built and
-verified against `wrangler dev`; **nothing is deployed** and no secret has been
-set. **Next:** INV-2 (`/edit-invoice`).
+Built and verified against `wrangler dev`; **nothing is deployed**. The plan
+evolved from INV-1/2/3 into R1–R3 (`2026-11-09-invoice-revision-plan.md`):
+R1 (renderer) and R2.1–R2.4 (pricing state, webhook, `/edit-invoice`,
+`/approve`) are done. **Next:** R2.5 (admin badge) and R2.6 (verify R2), then
+R3 (live catalogue prices).
 
 **The flow, in the owner's words:** customer places an order → order text
 notification on company WhatsApp (unchanged) → Mekabot receives the PDF invoice
@@ -276,6 +284,40 @@ invoice goes to the customer → payment confirmed (manual).
 **Data:** `orders.lines_json` + `orders.revised` (two new columns), and a new
 `bot_state` table. The existing `items` text blob and `printReceipt` are
 untouched.
+
+---
+
+## Invoice letterhead + ASCII/NGN pass — 2026-11-10 (uncommitted)
+
+Prompted by the owner asking why the bot didn't "just use NGN" and to stop
+putting emoji/em dashes/arrows in invoice output.
+
+- **One currency spelling.** `money()` in `worker/bot.js` now returns
+  `NGN 38,000`, matching `invoice.js`, which already printed `NGN ` (base-14
+  fonts have no naira glyph). The bot and the PDF used to disagree.
+- **ASCII-only user-facing text.** In `worker/bot.js` and the bot/invoice
+  strings in `worker/index.js`: em dash `—`→`-`, arrow `→`→`->`, `×`→`x`,
+  bullet `•`→`-`, and the 🧾/⏳ emoji removed from every invoice caption.
+  Code comments were left as-is. *Not* swept: the upload-pipeline alerts
+  (`⚠️`/`🔔`) and two upload API error strings — different feature.
+- **Letterhead.** `DEFAULT_SETTINGS.company_name` is now
+  `La'Creme Confectionery`; the name renders on the order-number baseline
+  (`y-27`), left-aligned in the logo's column (`x≈120`), with the phone/
+  address stack starting at `y-41`. Verified numerically: name ends x=305,
+  order number starts x=422 — no collision.
+- **Defaults filled** for every `DEFAULT_SETTINGS` field including
+  `bank_name`/`account_name`/`account_number`, so the PAYMENT DETAILS block
+  renders instead of staying blank.
+- **Demo harness fixed.** `tools/demo-bot.mjs` hardcoded `/api/tg/s3cret`;
+  the real `TELEGRAM_WEBHOOK_SECRET` differs, so every update 404'd and the
+  demo printed nothing. It now reads `DEMO_SECRET` from the environment.
+  Confirmed real secret → 200, wrong secret → 404.
+- **Tests:** `node tools/test-bot.mjs` → 28/28 pass (updated for NGN).
+
+⚠️ **`DEFAULT_SETTINGS` is what actually prints on every invoice** —
+`renderInvoice()` never reads the D1 `settings` table, it always falls back to
+these. The bank/account values are placeholders (`Demo Bank` / `0123456789`)
+and **must be replaced before any invoice reaches a paying customer.**
 
 ---
 
@@ -403,8 +445,13 @@ human judgement of the invoice layout.
   `index.js`, `index.css`. Nothing has been pushed (no remote configured).
 - INV-1 — `worker/invoice.js`, `worker/schema-invoice.sql`,
   `worker/index.js`, `config.js`, `index.js`, `admin.js`, `worker/README.md`,
-  plus the spec, the plan and these two tracking docs. **Uncommitted at the
-  time of writing.**
+  plus the spec, the plan and these two tracking docs.
+- `aec192d` (R1), `a3786ee` (R2.1), `93c13a9` (R2.2), `025b3cf` (R2.3),
+  `3b854d3` (invoice fix), `654f347` (R2.4) — the invoice-revision phases.
+- **Uncommitted (2026-11-10):** the letterhead/ASCII pass in
+  `worker/invoice.js`, `worker/bot.js`, `worker/index.js`,
+  `tools/demo-bot.mjs`, `tools/test-bot.mjs`. Untracked scratch output that
+  should not be committed: `sample-*.pdf`, `verify-r1.mjs`, `.demo-dev.log`.
 
 ---
 
@@ -423,9 +470,13 @@ human judgement of the invoice layout.
   must exist before a deploy or invoices are silently not delivered (the
   Worker log is the only trace). `schema-invoice.sql` must be run against the
   remote D1 as part of that deploy.
-- **The invoice layout has not been seen by a human.** Structure, pagination
-  and text placement were checked numerically; whether it *looks* right is
-  open, and the spec expects the owner to want changes.
+- **The invoice layout still has not been judged by a human.** Structure,
+  pagination and text placement were checked numerically; the new letterhead
+  (name on the order-number line) has only been measured, not looked at on
+  screen. The spec expects the owner to want changes.
+- **`DEFAULT_SETTINGS` holds placeholder bank details** (`Demo Bank` /
+  `0123456789`) that print on every invoice. Replace before real use, or wire
+  the D1 `settings` table through (it is currently never read).
 - The PDF renderer's text widths are an approximation (three character
   classes), used only for right-alignment and truncation. Exact AFM metrics
   were not worth 200 numbers; a very wide glyph could sit a point or two off.

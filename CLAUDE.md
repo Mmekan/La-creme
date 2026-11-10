@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-La Crème — a static, no-build website for a bespoke cake / finger-food / catering business. There is no backend, no database, no bundler, and no package.json. Two hand-written HTML pages load plain `<script defer>` tags; there is no module system, so files share state via global `const`/`function` declarations in the same scope.
+La Crème — a bespoke cake / finger-food / catering business. The **front end** is a static, no-build site: two hand-written HTML pages load plain `<script defer>` tags, there is no module system (files share state via global `const`/`function` in the same scope), and the site itself has no build step and no `package.json`.
 
-Every "order" (cake, finger foods, catering) is compiled client-side into a formatted text message and handed off to WhatsApp via `wa.me` links — nothing is ever submitted to a server or stored anywhere.
+There **is** now a backend: a Cloudflare Worker (`worker/`) with D1 and R2 bindings. Orders are still compiled client-side into a WhatsApp text message via `wa.me`, **and** they are `POST`ed to the Worker (`/api/orders`), which stores the order in D1 and generates/emails a PDF invoice via the Telegram bot. Uploads go to R2. So: orders *are* stored now — don't assume the site is purely client-side.
+
+The one package.json-free exception is tooling: `tools/*.mjs` are plain Node scripts run directly (`node tools/test-bot.mjs`); `wrangler` is invoked through `npx`.
 
 ## Running / testing
 
@@ -54,3 +56,46 @@ Masonry-style grid with responsive column count (`columnsForWidth`, `layoutBlock
 - Never hardcode the WhatsApp number, R2 base URL, or naira formatting inline — use `CONFIG.whatsappNumber`/`waLink()`/`openWhatsApp()`, `mediaUrl()`, and `fmtNaira()` respectively so both pages stay in sync.
 - Any dynamic string interpolated into `innerHTML` (as opposed to a string literal you wrote) should go through `escapeHtml()` first.
 - New modals/overlays should use `openModal()`/`closeModal()` for focus handling rather than reimplementing focus trapping.
+
+### Worker / bot conventions
+
+- **Bot and invoice money must always be `NGN`, never `₦`.** The PDF (base-14
+  WinAnsi) has no naira glyph; `cleanText()` in `worker/invoice.js` already
+  rewrites `₦`→`NGN`, and `money()` in `worker/bot.js` prints `NGN`. Keep the
+  only remaining `₦` — the legacy glyph in `parsePriceEntry()`'s strip regex —
+  so operators' old muscle memory still works.
+- **User-facing worker strings are plain ASCII** (parsing rule added next
+  paragraph covers the full current set). Keep it that way.
+- **The invoice letterhead/business details live in `DEFAULT_SETTINGS`** in
+  `worker/invoice.js`. `renderInvoice()` does *not* read the D1 `settings`
+  table — change the constant, or wire `settings` through, then regenerate the
+  samples.
+- Plans and specs for ongoing invoice work live in `docs/superpowers/plans/`
+  and `docs/superpowers/specs/`; `projectstate.md` + `todo.md` are the live
+  memory — update all three after a task, not just the code.
+
+## Worker parity check (do this before touching worker/invoice.js or worker/bot.js)
+
+Search **both** files for anything outside ASCII (`grep -n -P "[^\x00-\x7F]"`) and leave only: code comments, the `₦` inside `parsePriceEntry`'s strip regex, and (for now) the upload-pipeline alerts/em-dashes in `handleCreateOrder`'s vicinity. Anything else user-facing gets the ASCII treatment:
+
+| char(s) | replacement |
+|---|---|
+| `₦` | `NGN ` (with trailing space) |
+| `—`, `–` | `-` |
+| `→` | `->` |
+| `×` | `x` |
+| `•` | `-` |
+| `…` | `...` |
+| emoji (🧾, ⏳, …) | remove; invoice captions carry none |
+
+Then update the expectations in `tools/test-bot.mjs` and run it (`node tools/test-bot.mjs` → 28/28).
+
+## Running the local bot demo
+
+1. Start the worker locally: `npx wrangler dev --local --port 8792` (from `worker/`).
+2. Run with the **real** secret — never the hardcoded fallback:
+   `DEMO_SECRET="$(grep '^TELEGRAM_WEBHOOK_SECRET=' worker/.dev.vars | cut -d= -f2-)" DEMO_PORT=8792 DEMO_LOG="$(pwd)/.demo-dev.log" node tools/demo-bot.mjs`
+   (`tools/demo-bot.mjs` reads `DEMO_SECRET`; without it every update 404s and the demo prints nothing.)
+3. Beware: the demo hits live Telegram if `.dev.vars` has a real
+   `TELEGRAM_BOT_TOKEN`. For a no-send run, unset the token; success is silent in the log, errors are not.
+4. Orders use `INSERT OR IGNORE` — re-running the demo with the same order numbers is a no-op (use fresh numbers to re-invoice).
