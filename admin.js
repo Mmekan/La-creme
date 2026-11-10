@@ -148,9 +148,20 @@ function renderList(){
   const list = $('list');
   list.replaceChildren();
   if(!orders.length){ list.append(el('div', { class:'empty', text:'No orders match.' })); return; }
+  // price_status arrives from the same row (SELECT *). It names the bot
+  // flow state, so only the two actionable values get a badge: priced is
+  // the default state of an order and carries no signal on its own.
+  const priceBadge = (st)=> st === 'pending'
+    ? el('span', { class:'pill PricingPending', text:'PRICING' })
+    : st === 'approved'
+      ? el('span', { class:'pill PricingApproved', text:'APPROVED' })
+      : null;
   orders.forEach(o=>{
+    const badge = priceBadge(o.price_status);
     const row = el('div', { class: 'row' + (o.order_number === selectedNo ? ' active' : ''), tabindex: '0' },
-      el('div', {}, el('div', { class:'no', text:o.order_number }), el('div', { class:'who', text:`${o.name || '(no name)'} · ${o.order_type || ''}` })),
+      el('div', {}, el('div', { class:'no', text:o.order_number }),
+        el('div', { class:'who', text:`${o.name || '(no name)'} · ${o.order_type || ''}` }),
+        ...(badge ? [badge] : [])),
       el('div', { class:'meta' }, el('div', { class:'total', text:o.total || '' }), el('div', { text:fmtDate(o.received_at) }), el('span', { class:`pill ${o.status.replace(/\s/g, '')}`, text:o.status }))
     );
     const open = ()=>{ selectedNo = o.order_number; renderList(); renderDetail(o); };
@@ -204,9 +215,17 @@ function renderDetail(o){
   const wa = o.phone ? el('a', { class:'btn ghost', target:'_blank', rel:'noopener', text:'WhatsApp customer',
     href:`https://wa.me/${o.phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${o.name || ''}, this is La Crème about your order ${o.order_number}.`)}` }) : null;
 
+  // Same badge as the list row: the detail is where price flow is acted
+  // on (Invoice / WhatsApp), so its state must be visible here too.
+  const detailBadge = o.price_status === 'pending'
+    ? el('span', { class:'pill PricingPending', text:'PRICING — set a price on Telegram' })
+    : o.price_status === 'approved'
+      ? el('span', { class:'pill PricingApproved', text:'APPROVED' })
+      : null;
   box.append(
     el('h2', { text:o.order_number }),
     el('div', { class:'sub', text:`Received ${fmtDate(o.received_at)}` }),
+    ...(detailBadge ? [detailBadge] : []),
     kvRows([
       ['Type', o.order_type], ['Customer', o.name], ['Phone', o.phone],
       ['Delivery', o.delivery], ['Address', o.address], ['Date needed', o.date_needed],

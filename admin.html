@@ -83,6 +83,11 @@
   .pill.Rejected{ background:#f1f1f1; color:#999; }
   .pill.Failed{ background:#fde8ea; color:var(--wine); }
 
+  /* invoice price flow: muted variants of the upload amber/green so the two
+     vocabularies read as cousins, not twins. `priced` gets no badge. */
+  .pill.PricingPending{ background:#fff3d6; color:#8a5a00; }
+  .pill.PricingApproved{ background:#e2f4e6; color:#1d6b32; }
+
   /* batch detail: photo cards */
   .up-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(148px,1fr)); gap:14px; }
   .up-card{ border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff; display:flex; flex-direction:column; }
