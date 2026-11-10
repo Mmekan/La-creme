@@ -92,6 +92,21 @@ export function parseStoredLines(order) {
   return out;
 }
 
+// The one definition of what an invoice is worth. Unpriced lines
+// (p === null) are quoted on WhatsApp and excluded, which is exactly what
+// the PDF's row loop does — so the total stored in invoice_versions can
+// never disagree with the number printed on the document. `unpriced`
+// is what decides 'pending' vs 'priced' at insert time (spec §7).
+export function summariseLines(lines) {
+  let total = 0, unpriced = 0;
+  for (const l of Array.isArray(lines) ? lines : []) {
+    if (!l) continue;
+    if (l.p === null) unpriced++;
+    else total += l.q * l.p;
+  }
+  return { total, unpriced, allPriced: unpriced === 0 };
+}
+
 // Business details that live in D1 `settings` (spec §5.2). Blank values
 // omit their line rather than printing an empty label, so the invoice is
 // shippable before the owner supplies them and gets richer as they land —
@@ -379,7 +394,10 @@ export function renderInvoice(order) {
 
   // Keep clear of the footer/conclusion band.
   const BOTTOM = MARGIN + 46;
-  let total = 0, anyUnpriced = false;
+  // Summed up-front rather than row by row, so the figure here is computed
+  // by the same helper the Worker stores in invoice_versions.
+  const { total, unpriced } = summariseLines(lines);
+  const anyUnpriced = unpriced > 0;
 
   if (!lines.length) {
     text(COL_DESC, y, '(no line items recorded)', FONT_R, 9, BLACK);
@@ -394,7 +412,6 @@ export function renderInvoice(order) {
     if (y - rowH < BOTTOM) { newPage(); header(false); }
 
     const amount = l.p === null ? null : l.q * l.p;
-    if (amount === null) anyUnpriced = true; else total += amount;
 
     const top = y;
     text(COL_NO, top, String(i + 1), FONT_R, 9, BLACK);

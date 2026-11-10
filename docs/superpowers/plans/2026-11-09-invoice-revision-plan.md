@@ -309,14 +309,14 @@ CREATE TABLE IF NOT EXISTS invoice_versions (
 
 ### Task R2.2: Pending detection on create
 
-- [ ] **Step 1:** In `handleCreateOrder`, set `price_status` to `'pending'` when
+- [x] **Step 1:** In `handleCreateOrder`, set `price_status` to `'pending'` when
   any validated line has `p === null`, else `'priced'`.
-- [ ] **Step 2:** Write `spec_key` for cake orders (see R3.2 for the key format;
+- [x] **Step 2:** Write `spec_key` for cake orders (see R3.2 for the key format;
   in R2 just store it — matching arrives in R3).
-- [ ] **Step 3:** Insert version 1 into `invoice_versions` (snapshot + total).
-- [ ] **Step 4:** Patch the Telegram caption to say `PENDING PRICE REVIEW` when
+- [x] **Step 3:** Insert version 1 into `invoice_versions` (snapshot + total).
+- [x] **Step 4:** Patch the Telegram caption to say `PENDING PRICE REVIEW` when
   pending, so the operator knows immediately.
-- [ ] **Step 5:** `sendInvoiceToCompany` fans out to the **union** of
+- [x] **Step 5:** `sendInvoiceToCompany` fans out to the **union** of
   `TELEGRAM_INVOICE_CHAT_IDS` and `TELEGRAM_OWNER_CHAT_IDS` (deduped), so the
   owner gets the same notifications as the company without being listed twice.
 

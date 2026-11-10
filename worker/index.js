@@ -9,7 +9,7 @@
    Secrets (wrangler secret put): ADMIN_PASSWORD, SESSION_SECRET
 ============================================================ */
 
-import { parseInvoiceChatIds, serializeLines, parseStoredLines, renderInvoice } from './invoice.js';
+import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, renderInvoice } from './invoice.js';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 30 * 1024;
@@ -155,13 +155,23 @@ async function sendDocument(env, chatId, bytes, filename, caption) {
   }
 }
 
-// Spec §7.1a: invoices go to TELEGRAM_INVOICE_CHAT_IDS only — never to the
-// upload-alert chat. No fallback: if the secret is unset the invoice is
-// simply not delivered, and the log says why.
+// Spec §7.1a: invoices go to TELEGRAM_INVOICE_CHAT_IDS — never to the
+// upload-alert chat. The owner's own chats are added too, since the owner
+// reviews pending prices; the two lists are usually overlapping (the owner
+// IS the operator), hence the dedupe: one PDF per chat, not one per list.
+// No fallback: if both secrets are unset the invoice is simply not
+// delivered, and the log says why.
+function invoiceRecipients(env) {
+  return [...new Set([
+    ...parseInvoiceChatIds(env.TELEGRAM_INVOICE_CHAT_IDS),
+    ...parseInvoiceChatIds(env.TELEGRAM_OWNER_CHAT_IDS),
+  ])].slice(0, 20);
+}
+
 function sendInvoiceToCompany(env, order, caption) {
-  const ids = parseInvoiceChatIds(env.TELEGRAM_INVOICE_CHAT_IDS);
+  const ids = invoiceRecipients(env);
   if (!ids.length) {
-    console.error('invoice: TELEGRAM_INVOICE_CHAT_IDS is not set');
+    console.error('invoice: neither TELEGRAM_INVOICE_CHAT_IDS nor TELEGRAM_OWNER_CHAT_IDS is set');
     return Promise.resolve();
   }
   const bytes = renderInvoice(order);
@@ -249,26 +259,65 @@ async function handleCreateOrder(request, env, ctx) {
   // this is the machine-readable copy the PDF needs (spec §4.1).
   const linesJson = serializeLines(o.lines);
 
+  // Read the lines back out of the serialised copy rather than re-validating
+  // the request: whatever serializeLines dropped to fit the byte ceiling is
+  // then missing from the total too, so the stored figure always describes
+  // the stored lines (spec §4.1).
+  const lines = JSON.parse(linesJson);
+  const { total, allPriced } = summariseLines(lines);
+  // Spec §7: one unpriced line and the whole invoice waits for a human.
+  // An order with no lines at all counts as priced — there is nothing to
+  // quote, and holding every empty order for review would be noise.
+  const priceStatus = allPriced ? 'priced' : 'pending';
+
+  // Cake match key (spec §5.1): an opaque lookup key the site computes from
+  // the cake's tiers/flavour/finish (R3.2), not something to derive twice
+  // here. Until the site sends one this stays NULL, which just means every
+  // cake is treated as unmatched.
+  const specKey = o.specKey ? clip(o.specKey, 200) || null : null;
+
+  const nowIso = new Date().toISOString();
   const info = await env.DB.prepare(
     `INSERT OR IGNORE INTO orders
       (order_number, received_at, order_type, name, phone, delivery, address, date_needed,
-       event_type, guests, service_type, items, total, notes, lines_json)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       event_type, guests, service_type, items, total, notes, lines_json, price_status, spec_key)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    o.orderNumber, new Date().toISOString(),
+    o.orderNumber, nowIso,
     clip(o.orderType, 40), clip(o.name, 120), clip(o.phone, 40), clip(o.delivery, 20),
     clip(o.address, 300), clip(o.dateNeeded, 200), clip(o.eventType, 60), clip(o.guests, 20),
     clip(o.serviceType, 20), clip(o.items, 12000), clip(o.total, 30), clip(o.notes, 1500),
-    linesJson
+    linesJson, priceStatus, specKey
   ).run();
 
   // changes === 0 means the order number already existed: logOrder's
   // sendBeacon/fetch fallback re-sent it. Do not invoice twice.
   if (info.meta && info.meta.changes) {
+    // Version 1 is the cart's own document, pending prices and all — the
+    // baseline every later revision is compared against (spec §5.4).
+    // A failed snapshot must not fail an order that is already logged:
+    // lines_json on the row is the live truth, this is the history.
+    try {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO invoice_versions
+           (order_number, version, created_at, lines_json, total, reason, actor)
+         VALUES (?, 1, ?, ?, ?, 'original', 'site')`
+      ).bind(o.orderNumber, nowIso, linesJson, total).run();
+    } catch (err) {
+      console.error('invoice version:', err && err.name ? err.name : 'error');
+    }
+
+    const caption = [
+      `🧾 Invoice ${o.orderNumber}`,
+      `${clip(o.name, 120)} · ${clip(o.total, 30) || 'price on request'}`,
+      // The operator's cue that this one is not ready to forward.
+      priceStatus === 'pending' ? '⏳ PENDING PRICE REVIEW — set a price before sending.' : null,
+    ].filter(Boolean).join('\n');
+
     ctx.waitUntil(sendInvoiceToCompany(
       env,
-      { ...o, lines_json: linesJson, revised: 0 },
-      `🧾 Invoice ${o.orderNumber}\n${clip(o.name, 120)} · ${clip(o.total, 30) || 'price on request'}`
+      { ...o, lines_json: linesJson, revised: 0, price_status: priceStatus, spec_key: specKey },
+      caption
     ));
   }
   return json({ ok: true });
