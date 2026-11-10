@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-10 (R2.4 done; invoice letterhead + ASCII/NGN pass; still not deployed)
-**HEAD:** `654f347` (R2.4) · Phases 1–6 + R1–R2.4 committed · today's letterhead/ASCII pass uncommitted · nothing pushed (no remote)
+**Updated:** 2026-11-10 (R2.5 done; R2 verified by full sweep; R3 next; still not deployed)
+**HEAD:** `1be2df2` (R2.5) · Phases 1–6 + R1–R2.5 committed · nothing pushed (no remote)
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -26,8 +26,8 @@ in that order. Phase plan text lives in the past session
 | **INV-1 / R1** | **PDF invoice on every order → Mekabot → company Telegram; renderer rebuilt to the owner's spec** | **✅ built, not deployed** |
 | **R2.1–R2.3** | `price_status` + `invoice_versions` schema · pending detection on create · Telegram webhook | ✅ done |
 | **R2.4** | `/edit-invoice` + `/approve` — buttons, optimistic guard, re-issue | ✅ done (`654f347`) |
-| **R2.5** | Admin `price_status` badge | 📋 next |
-| **R2.6** | Verify R2 (happy path, dedupe, stale button, two admins) | 📋 next |
+| **R2.5** | Admin `price_status` badge | ✅ done (`1be2df2`) |
+| **R2.6** | Verify R2 — full page + API + bot sweep | ✅ exercised 2026-11-10 |
 | **R3** | Live catalogue prices — `product_prices`, `GET /api/prices`, `/update-price` | 📋 planned |
 
 The INV-2/INV-3 naming below is superseded by R1–R3 in the plan file

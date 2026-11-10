@@ -355,14 +355,16 @@ confirmation card, and the write happens on a button press; every write is a
 single D1 batch of order + `invoice_versions` + `audit_log` (+ `product_prices`
 for Save price), so nothing can land without its audit row.
 
-### Task R2.5: Admin badge
+### Task R2.5: Admin badge — ✅ done 2026-11-10 (`1be2df2`)
 
-- [ ] **Step 1:** Show `price_status` on the order card (`PENDING` / `APPROVED`).
-- [ ] **Step 2:** Leave the **Invoice** button and `apiBlob()` untouched.
+- [x] **Step 1:** Show `price_status` on the order card (`PRICING` / `APPROVED`;
+      `priced` is the silent default). Same badge in the detail panel.
+- [x] **Step 2:** Leave the **Invoice** button and `apiBlob()` untouched.
+- Verified in headless Chromium against local D1 with one order in each state.
 
-### Task R2.6: Verify R2
+### Task R2.6: Verify R2 — ✅ exercised 2026-11-10 (see `.superpowers/ponytail-report-2026-11-10.md`)
 
-- [ ] Pending order → webhook → `/edit-invoice` → `2 = 4500` → total changes →
+- [x] Pending order → webhook → `/edit-invoice` → `2 = 4500` → total changes →
   new version row → PDF resends with `REVISED: V2`.
 - [ ] **Save price** writes `product_prices`; **This order only** does not —
   confirmed by querying the table after each.

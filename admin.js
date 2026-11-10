@@ -218,7 +218,7 @@ function renderDetail(o){
   // Same badge as the list row: the detail is where price flow is acted
   // on (Invoice / WhatsApp), so its state must be visible here too.
   const detailBadge = o.price_status === 'pending'
-    ? el('span', { class:'pill PricingPending', text:'PRICING — set a price on Telegram' })
+    ? el('span', { class:'pill PricingPending', text:'PRICING - set a price on Telegram' })
     : o.price_status === 'approved'
       ? el('span', { class:'pill PricingApproved', text:'APPROVED' })
       : null;

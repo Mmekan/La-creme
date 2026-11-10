@@ -121,6 +121,11 @@ start blank.
 
 ## Done (recent)
 
+- [x] **2026-11-10 — R2.5 admin price badge** (`1be2df2`): PRICING/APPROVED on
+      the order card and detail panel; priced stays silent.
+- [x] **2026-11-10 — R2.6 verification sweep.** Pages 27/27, Worker+bot 23/24
+      (the 1 is a wrong expectation, not a defect). Full report:
+      `.superpowers/ponytail-report-2026-11-10.md`.
 - [x] **2026-11-10 — NGN everywhere, ASCII-only bot/invoice text.** `money()`
       prints `NGN 38,000`; em dashes/arrows/`×`/bullets/emoji removed from
       user-facing strings. 28/28 bot tests pass.
@@ -173,12 +178,12 @@ next.** Each phase depends on the one before it.
 Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
 Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
 
-**Next step:** finish **R2.5** (admin `price_status` badge — `admin.js` has no
-order badge yet) and **R2.6** (verify R2: conversation happy path, re-delivered
-`update_id`, stale button, two admins in one chat, the 15-minute window — the
-demo in `tools/demo-bot.mjs` drives exactly these). Then **R3** — live
-catalogue prices. Two things only the owner can settle (see "Do first"): the
-invoice layout review, and replacing the placeholder bank details.
+**Next step:** **R3** — live catalogue prices (`/update-price` is the bot
+command that lands with it; it is a stub today). R2.5 and the R2.6 sweep are
+done. Before writing R3, note the auth-gate ordering landmine in the ponytail
+report: `GET /api/prices` must be registered **above** the `/api/` auth gate
+or it 401s for everyone. Two things only the owner can settle (see "Do first"):
+the invoice layout review, and replacing the placeholder bank details.
 
 > Customer places an order → order text notification on company
 > WhatsApp (as today) → **bot receives the PDF/image invoice** → **bot
