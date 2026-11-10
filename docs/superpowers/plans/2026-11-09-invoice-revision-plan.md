@@ -332,22 +332,28 @@ CREATE TABLE IF NOT EXISTS invoice_versions (
 
 ### Task R2.4: `/edit-invoice` and `/approve`
 
-- [ ] **Step 1:** `bot_state` table (`chat_id` PK, `step`, `order_no`,
+- [x] **Step 1:** `bot_state` table (`chat_id` PK, `step`, `order_no`,
   `updated_at`) — 15-minute timeout.
-- [ ] **Step 2:** `/edit-invoice` → ask for order number → show numbered lines →
+- [x] **Step 2:** `/edit-invoice` → ask for order number → show numbered lines →
   parse `2 = 4500` / `2 = -` (set back to unpriced) → write the line, recompute
   total, bump `revised`, snapshot a new version, re-render, resend.
-- [ ] **Step 3:** Offer the two write modes from spec §4.1, with **Save price**
+- [x] **Step 3:** Offer the two write modes from spec §4.1, with **Save price**
   as the default inline button and **This order only** as the alternative.
   Save price also upserts `product_prices` so the next identical order
   auto-prices; This order only leaves the catalogue untouched.
-- [ ] **Step 4:** Reject a price write on an `approved` order unless it also
+- [x] **Step 4:** Reject a price write on an `approved` order unless it also
   bumps the version — an approved invoice must never change silently.
-- [ ] **Step 5:** `/approve` → refuse unless `price_status === 'priced'` → set
+- [x] **Step 5:** `/approve` → refuse unless `price_status === 'priced'` → set
   `'approved'` → send the final PDF.
-- [ ] **Step 6:** `/cancel` clears `bot_state`.
-- [ ] **Step 7:** Every failure replies explicitly (unknown order, malformed,
+- [x] **Step 6:** `/cancel` clears `bot_state`.
+- [x] **Step 7:** Every failure replies explicitly (unknown order, malformed,
   out of range, timeout).
+
+Implemented as: state keyed `(chat_id, user_id)` rather than chat alone, so two
+admins in one chat keep separate conversations; a typed price only shows a
+confirmation card, and the write happens on a button press; every write is a
+single D1 batch of order + `invoice_versions` + `audit_log` (+ `product_prices`
+for Save price), so nothing can land without its audit row.
 
 ### Task R2.5: Admin badge
 
