@@ -1,18 +1,21 @@
 /* ============================================================
    LA CRÈME — INVOICE MODULE (pure: no env, no I/O)
 
-   Spec: docs/superpowers/specs/2026-11-06-invoice-workflow-design.md
-   Plan: docs/superpowers/plans/2026-11-06-invoice-inv1.md
+   Spec: docs/superpowers/specs/2026-11-09-invoice-revision-design.md
+   Plan: docs/superpowers/plans/2026-11-09-invoice-revision-plan.md
 
-   Four exports:
+   Exports:
      parseInvoiceChatIds(secret) -> string[]   who receives invoices
      validateLines(raw)          -> array       sanitised line items
      parseStoredLines(order)     -> array       what to print for a row
      renderInvoice(order)        -> Uint8Array  the PDF
+     DEFAULT_SETTINGS            -> object       blank business details
 
    Everything here is deterministic and testable in isolation; the
    Worker wiring lives in index.js.
 ============================================================ */
+
+import { LOGO } from './logo-data.js';
 
 // Spec §4.1: cap the array and the serialised size, same ceiling as
 // the items text blob.
@@ -89,28 +92,41 @@ export function parseStoredLines(order) {
   return out;
 }
 
+// Business details that live in D1 `settings` (spec §5.2). Blank values
+// omit their line rather than printing an empty label, so the invoice is
+// shippable before the owner supplies them and gets richer as they land —
+// no code change either way.
+export const DEFAULT_SETTINGS = {
+  company_name: 'LA CRÈME',
+  company_phone: '',
+  company_address: '',
+  bank_name: '',
+  account_name: '',
+  account_number: '',
+};
+
 /* ============================================================
    THE PDF
 
-   Hand-rolled, zero dependencies (spec §2): Workers cannot take a
-   native PDF library, and a header + line table + total does not need
-   one. Everything visible is built from two primitives — text() and
-   rule() — so the owner's layout changes are a change to this one
-   function, not a rewrite (spec §5.2).
+   Hand-rolled, zero dependencies. A header, a wrapped line table, a
+   total and a payment block do not need a PDF library, and Workers
+   cannot take a native one (spec §2).
 
    Deliberate choices:
-   - Content streams are NOT compressed. A few KB either way, and it
+   - Content streams are NOT compressed — a few KB either way, and it
      keeps the output greppable when verifying.
-   - Base-14 fonts only, WinAnsiEncoding. 'È' is 0xC8 and renders;
-     anything above 255 has no glyph and becomes '?'. The naira sign
-     never reaches here — money() prints "NGN ".
+   - Base-14 fonts only, WinAnsiEncoding. Any character outside Latin-1
+     is transliterated before it reaches the page (spec §6.6), so no '?'
+     substitutions appear in real order text.
+   - The logo is a baseline JPEG embedded verbatim as /DCTDecode. No
+     decoding, no image library — but also no alpha, so it is only ever
+     drawn on white.
    - Object numbers are reserved lazily and the xref is built from the
      final byte offsets, so adding an object can never desync the table.
 ============================================================ */
 
 const PAGE_W = 595, PAGE_H = 842;          // A4, points
 const MARGIN = 48;
-const ROW_H = 18;
 const FONT_R = 'F1', FONT_B = 'F2';        // Helvetica / Helvetica-Bold
 
 // Column edges. The three money columns are right-aligned to these.
@@ -119,6 +135,16 @@ const COL_DESC = MARGIN + 24;
 const COL_QTY_R = 400;
 const COL_UNIT_R = 480;
 const COL_AMT_R = PAGE_W - MARGIN;
+const DESC_W = COL_QTY_R - COL_DESC - 20;
+
+const LINE_H = 12;                          // spacing inside a wrapped cell
+const MIN_ROW_H = 15;
+
+// Spec §2.2 — red dominant, gold accent, body text black.
+const RED = '0.784 0.063 0.180';            // #C8102E
+const GOLD = '0.780 0.631 0.333';           // #C7A155
+const BLACK = '0 0 0';
+const WHITE = '1 1 1';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -137,18 +163,47 @@ function fmtDate(iso) {
   return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-// A PDF literal string: escape \ ( ) and clamp to Latin-1. Anything
-// outside printable ASCII / Latin-1 has no glyph in a base-14 font.
+// Spec §2.3: 07 Nov 2026 everywhere. date_needed is free text, so only
+// something that actually looks like a date is reformatted — "Next
+// Saturday" is printed exactly as the customer typed it. Multiple dates
+// arrive joined by ' | ' (cakeCart joins them that way).
+function fmtDateText(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text
+    .split('|')
+    .map(part => {
+      const p = part.trim();
+      if (!p) return '';
+      if (/^\d{4}-\d{2}-\d{2}/.test(p)) return fmtDate(p);
+      return p;
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+// Spec §6.6: everything must render. These characters have no glyph in a
+// base-14 font, so they are transliterated rather than turned into '?'.
+function translit(str) {
+  return String(str)
+    .replace(/[—–]/g, '-')
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/₦/g, 'NGN ')
+    .replace(/…/g, '...')
+    .replace(/ /g, ' ');
+}
+
+// A PDF literal string: escape \ ( ) and clamp to Latin-1.
 function pdfString(s) {
-  return '(' + String(s)
+  return '(' + translit(s)
     .replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
     .replace(/[^\x20-\x7e\xa0-\xff]/g, '?') + ')';
 }
 
-// Approximate Helvetica advance widths, used only to right-align and to
-// truncate. Exact AFM metrics would be 200 numbers for a few points of
-// alignment; these three classes are within a hair for the strings we
-// actually print (digits, "NGN 1,000", descriptions).
+// Approximate Helvetica advance widths, used only to wrap, right-align
+// and position. Exact AFM metrics would be 200 numbers for a point or
+// two of accuracy on the strings we actually print.
 const NARROW = "iljtfrI.,:;'!|()[] ";
 const WIDE = 'mwMW';
 function textWidth(str, size) {
@@ -163,13 +218,27 @@ function textWidth(str, size) {
   return w * size;
 }
 
-// Trims a description to a column width. '..' rather than '…' because
-// the ellipsis is outside the printable range pdfString keeps.
-function fit(str, size, maxW) {
-  let s = String(str);
-  if (textWidth(s, size) <= maxW) return s;
-  while (s.length > 1 && textWidth(s + '..', size) > maxW) s = s.slice(0, -1);
-  return s + '..';
+// Spec §2.4: never truncate. Greedy word wrap; a single word wider than
+// the column is hard-split so it can never overrun the next column.
+function wrap(text, size, maxW) {
+  const words = String(text == null ? '' : text).replace(/\s+/g, ' ').trim().split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    if (!word) continue;
+    const candidate = line ? line + ' ' + word : word;
+    if (textWidth(candidate, size) <= maxW) { line = candidate; continue; }
+    if (line) { lines.push(line); line = ''; }
+    if (textWidth(word, size) <= maxW) { line = word; continue; }
+    let chunk = '';
+    for (const ch of word) {
+      if (chunk && textWidth(chunk + ch, size) > maxW) { lines.push(chunk); chunk = ch; }
+      else chunk += ch;
+    }
+    line = chunk;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
 }
 
 // One byte per char, matching the declared WinAnsiEncoding. The xref
@@ -178,53 +247,129 @@ function latin1(str) {
   return Uint8Array.from(String(str), ch => ch.charCodeAt(0) & 0xff);
 }
 
+// Base64 -> bytes, for the embedded JPEG. Decoded once per isolate.
+let _logoBytes = null;
+function logoBytes() {
+  if (_logoBytes) return _logoBytes;
+  const bin = atob(LOGO.jpeg);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  _logoBytes = out;
+  return out;
+}
+
 export function renderInvoice(order) {
   const o = order || {};
+  const s = { ...DEFAULT_SETTINGS, ...(o.settings || {}) };
   const lines = parseStoredLines(o);
+
+  // `revised` counts revisions: 0 = original (v1), 1 = first revision (v2).
+  const revisions = Number(o.revised) || 0;
+  const version = revisions + 1;
+  const isPending = o.price_status === 'pending';
+  const companyName = String(s.company_name || '').trim() || 'LA CRÈME';
 
   const pages = [];
   let ops = null;
   let y = 0;
 
   const newPage = () => { ops = []; pages.push(ops); y = PAGE_H - MARGIN; };
-  const put = (s) => ops.push(s);
-  const text = (x, yy, str, font, size) =>
+  const put = (str) => ops.push(str);
+
+  const text = (x, yy, str, font, size, colour) => {
+    if (colour) put(`${colour} rg`);
     put(`BT /${font} ${size} Tf ${x.toFixed(2)} ${yy.toFixed(2)} Td ${pdfString(str)} Tj ET`);
-  const right = (xr, yy, str, font, size) => text(xr - textWidth(str, size), yy, str, font, size);
-  const rule = (yy) => put(`0.6 w ${MARGIN} ${yy.toFixed(2)} m ${COL_AMT_R} ${yy.toFixed(2)} l S`);
+  };
+  const right = (xr, yy, str, font, size, colour) =>
+    text(xr - textWidth(str, size), yy, str, font, size, colour);
+
+  const hrule = (yy, x1, x2, colour, width = 0.6) =>
+    put(`${colour} RG ${width} w ${x1} ${yy.toFixed(2)} m ${x2} ${yy.toFixed(2)} l S`);
+
+  const fillRect = (x, yy, w, h, colour) =>
+    put(`${colour} rg ${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+
+  // Draws the logo with its bottom-left corner at (x, yy).
+  const drawLogo = (x, yy, h) => {
+    const w = h * (LOGO.width / LOGO.height);
+    put(`q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${yy.toFixed(2)} cm /Im1 Do Q`);
+    return w;
+  };
 
   const tableHead = () => {
-    text(COL_NO, y, '#', FONT_B, 8);
-    text(COL_DESC, y, 'DESCRIPTION', FONT_B, 8);
-    right(COL_QTY_R, y, 'QTY', FONT_B, 8);
-    right(COL_UNIT_R, y, 'UNIT', FONT_B, 8);
-    right(COL_AMT_R, y, 'AMOUNT', FONT_B, 8);
-    y -= 6; rule(y); y -= 14;
+    fillRect(MARGIN, y - 4, COL_AMT_R - MARGIN, 15, RED);
+    const ty = y + 0.5;
+    text(COL_NO, ty, '#', FONT_B, 8, WHITE);
+    text(COL_DESC, ty, 'DESCRIPTION', FONT_B, 8, WHITE);
+    right(COL_QTY_R, ty, 'QTY', FONT_B, 8, WHITE);
+    right(COL_UNIT_R, ty, 'UNIT', FONT_B, 8, WHITE);
+    right(COL_AMT_R, ty, 'AMOUNT', FONT_B, 8, WHITE);
+    y -= 19;
   };
 
   const header = (first) => {
     if (first) {
-      text(MARGIN, y, 'LA CRÈME', FONT_B, 22);
-      text(MARGIN, y - 14, 'Bespoke cakes, finger foods & catering', FONT_R, 9);
-      right(COL_AMT_R, y, 'INVOICE', FONT_B, 14);
-      right(COL_AMT_R, y - 16, `No. ${o.order_number || ''}`, FONT_R, 9);
-      right(COL_AMT_R, y - 28, `Issued ${fmtDate(o.received_at)}`, FONT_R, 9);
-      // First correction is v2 (spec §5.1).
-      if (Number(o.revised) > 0) {
-        right(COL_AMT_R, y - 40, `REVISED v${Number(o.revised) + 1}`, FONT_B, 9);
-      }
-      y -= 56; rule(y); y -= 18;
+      const lp = drawLogo(MARGIN, y - 40, 40);
+      const cx = MARGIN + lp + 16;
 
-      text(MARGIN, y, String(o.name || 'Customer'), FONT_B, 10); y -= 14;
-      if (o.phone) { text(MARGIN, y, `Phone: ${o.phone}`, FONT_R, 9); y -= 12; }
-      const del = [o.delivery, o.address].filter(Boolean).join(': ');
-      if (del) { text(MARGIN, y, fit(del, 9, COL_AMT_R - MARGIN), FONT_R, 9); y -= 12; }
-      if (o.date_needed) { text(MARGIN, y, `Needed: ${o.date_needed}`, FONT_R, 9); y -= 12; }
-      y -= 6; rule(y); y -= 18;
+      text(cx, y - 13, companyName, FONT_B, 17, RED);
+      let cy = y - 27;
+      const contactW = COL_AMT_R - cx - 150;
+      if (s.company_phone) {
+        text(cx, cy, s.company_phone, FONT_R, 9, BLACK); cy -= 11;
+      }
+      if (s.company_address) {
+        for (const ln of wrap(s.company_address, 9, contactW)) {
+          text(cx, cy, ln, FONT_R, 9, BLACK); cy -= 11;
+        }
+      }
+
+      right(COL_AMT_R, y - 13, 'INVOICE', FONT_B, 15, RED);
+      right(COL_AMT_R, y - 27, `No. ${o.order_number || ''}`, FONT_R, 9, BLACK);
+      right(COL_AMT_R, y - 39, `Issued ${fmtDate(o.received_at)}`, FONT_R, 9, BLACK);
+
+      let ry = y - 53;
+      // Spec §2.8: prominent, beside the invoice number, not a footnote.
+      if (revisions > 0) {
+        const label = `REVISED: V${version}`;
+        const tw = textWidth(label, 8);
+        fillRect(COL_AMT_R - tw - 12, ry - 3, tw + 12, 14, RED);
+        text(COL_AMT_R - tw - 6, ry + 1, label, FONT_B, 8, WHITE);
+        ry -= 18;
+      }
+
+      y = Math.min(cy, ry) - 8;
+      hrule(y, MARGIN, COL_AMT_R, RED, 1.2);
+      y -= 16;
+
+      if (isPending) {
+        fillRect(MARGIN, y - 13, COL_AMT_R - MARGIN, 16, RED);
+        text(MARGIN + 8, y - 9, 'PENDING PRICE REVIEW - NOT FOR CUSTOMER', FONT_B, 8.5, WHITE);
+        y -= 26;
+      }
+
+      text(MARGIN, y, String(o.name || 'Customer'), FONT_B, 10, BLACK);
+      y -= 13;
+      if (o.phone) { text(MARGIN, y, `Phone: ${o.phone}`, FONT_R, 9, BLACK); y -= 11; }
+      const delivery = [o.delivery, o.address].filter(Boolean).join(': ');
+      if (delivery) {
+        for (const ln of wrap(delivery, 9, COL_AMT_R - MARGIN)) {
+          text(MARGIN, y, ln, FONT_R, 9, BLACK); y -= 11;
+        }
+      }
+      const needed = fmtDateText(o.date_needed);
+      if (needed) { text(MARGIN, y, `Needed: ${needed}`, FONT_R, 9, BLACK); y -= 11; }
+
+      y -= 6;
+      hrule(y, MARGIN, COL_AMT_R, GOLD, 0.8);
+      y -= 16;
     } else {
-      text(MARGIN, y, 'LA CRÈME', FONT_B, 12);
-      right(COL_AMT_R, y, `Invoice ${o.order_number || ''} (continued)`, FONT_R, 9);
-      y -= 10; rule(y); y -= 18;
+      const lp = drawLogo(MARGIN, y - 20, 20);
+      text(MARGIN + lp + 10, y - 7, companyName, FONT_B, 11, RED);
+      right(COL_AMT_R, y - 7, `Invoice ${o.order_number || ''} (continued)`, FONT_R, 9, BLACK);
+      y -= 24;
+      hrule(y, MARGIN, COL_AMT_R, RED, 1);
+      y -= 16;
     }
     tableHead();
   };
@@ -232,42 +377,82 @@ export function renderInvoice(order) {
   newPage();
   header(true);
 
-  const BOTTOM = MARGIN + 46;   // keep clear of the footer
+  // Keep clear of the footer/conclusion band.
+  const BOTTOM = MARGIN + 46;
   let total = 0, anyUnpriced = false;
 
   if (!lines.length) {
-    text(COL_DESC, y, '(no line items recorded)', FONT_R, 9);
-    y -= ROW_H;
+    text(COL_DESC, y, '(no line items recorded)', FONT_R, 9, BLACK);
+    y -= MIN_ROW_H;
   }
 
   lines.forEach((l, i) => {
-    if (y < BOTTOM) { newPage(); header(false); }
-    const amt = l.p === null ? null : l.q * l.p;
-    if (amt === null) anyUnpriced = true; else total += amt;
-    text(COL_NO, y, String(i + 1), FONT_R, 9);
-    text(COL_DESC, y, fit(l.d, 9, COL_QTY_R - COL_DESC - 60), FONT_R, 9);
-    right(COL_QTY_R, y, String(l.q), FONT_R, 9);
-    right(COL_UNIT_R, y, l.p === null ? '-' : money(l.p), FONT_R, 9);
-    right(COL_AMT_R, y, amt === null ? 'Price via WhatsApp' : money(amt), FONT_R, 9);
-    y -= ROW_H;
+    const descLines = wrap(l.d, 9, DESC_W);
+    const rowH = Math.max(MIN_ROW_H, descLines.length * LINE_H + 3);
+
+    // A wrapped row moves whole to the next page — never split across one.
+    if (y - rowH < BOTTOM) { newPage(); header(false); }
+
+    const amount = l.p === null ? null : l.q * l.p;
+    if (amount === null) anyUnpriced = true; else total += amount;
+
+    const top = y;
+    text(COL_NO, top, String(i + 1), FONT_R, 9, BLACK);
+    descLines.forEach((ln, k) => text(COL_DESC, top - k * LINE_H, ln, FONT_R, 9, BLACK));
+    right(COL_QTY_R, top, String(l.q), FONT_R, 9, BLACK);
+    right(COL_UNIT_R, top, l.p === null ? '-' : money(l.p), FONT_R, 9, BLACK);
+    right(COL_AMT_R, top, amount === null ? 'Price via WhatsApp' : money(amount), FONT_R, 9, BLACK);
+
+    y = top - rowH;
   });
 
-  if (y < BOTTOM + 30) { newPage(); header(false); }
-  y -= 4; rule(y); y -= 16;
-  right(COL_UNIT_R, y, 'TOTAL', FONT_B, 10);
+  // Total, payment block and conclusion need room together.
+  if (y < BOTTOM + 130) { newPage(); header(false); }
+
+  y -= 6;
+  hrule(y, MARGIN, COL_AMT_R, GOLD, 0.8);
+  y -= 17;
+
+  right(COL_UNIT_R, y, 'TOTAL', FONT_B, 10, BLACK);
   // Nothing priced at all (a cake-only order) must not read as "NGN 0" —
   // that looks like a free cake. Say what the cart says instead.
   const nothingPriced = anyUnpriced && total === 0;
-  right(COL_AMT_R, y, nothingPriced ? 'Price via WhatsApp' : money(total), FONT_B, 10);
+  right(COL_AMT_R, y, nothingPriced ? 'Price via WhatsApp' : money(total), FONT_B, 11, RED);
   if (anyUnpriced && !nothingPriced) {
     y -= 12;
-    right(COL_AMT_R, y, '(excluding items priced on WhatsApp)', FONT_R, 8);
+    right(COL_AMT_R, y, '(excluding items priced on WhatsApp)', FONT_R, 8, BLACK);
+  }
+  y -= 22;
+
+  // Spec §2.6: total first, then payment details left with the logo right.
+  const hasPayment = !!(s.bank_name || s.account_name || s.account_number);
+  if (hasPayment) {
+    hrule(y, MARGIN, COL_AMT_R, GOLD, 0.5);
+    y -= 15;
+
+    const logoH = 38;
+    const logoW = logoH * (LOGO.width / LOGO.height);
+    const blockTop = y + 4;
+    drawLogo(COL_AMT_R - logoW, Math.max(blockTop - logoH, MARGIN + 30), logoH);
+
+    text(MARGIN, y, 'PAYMENT DETAILS', FONT_B, 8, RED); y -= 13;
+    if (s.bank_name) { text(MARGIN, y, `Bank: ${s.bank_name}`, FONT_R, 9, BLACK); y -= 11; }
+    if (s.account_name) { text(MARGIN, y, `Account name: ${s.account_name}`, FONT_R, 9, BLACK); y -= 11; }
+    if (s.account_number) { text(MARGIN, y, `Account number: ${s.account_number}`, FONT_R, 9, BLACK); y -= 11; }
   }
 
-  // Footer goes on every page, after the page count is known.
+  // Spec §2.6: conclusion at the bottom, centred, capitals. Last page only —
+  // on a continuation page it would read as a mid-document goodbye.
+  const last = pages[pages.length - 1];
+  const conclusion = 'THANK YOU FOR CHOOSING LA\'CREME!';
+  last.push(
+    `${RED} rg BT /${FONT_B} 9 Tf ` +
+    `${((PAGE_W - textWidth(conclusion, 9)) / 2).toFixed(2)} ${(MARGIN + 16).toFixed(2)} Td ` +
+    `${pdfString(conclusion)} Tj ET`
+  );
+
+  // Page numbers on every sheet, once the count is known.
   pages.forEach((p, i) => {
-    const msg = 'Thank you for choosing La Crème';
-    p.push(`BT /${FONT_R} 8 Tf ${((PAGE_W - textWidth(msg, 8)) / 2).toFixed(2)} ${MARGIN} Td ${pdfString(msg)} Tj ET`);
     if (pages.length > 1) {
       const pn = `Page ${i + 1} of ${pages.length}`;
       p.push(`BT /${FONT_R} 8 Tf ${(COL_AMT_R - textWidth(pn, 8)).toFixed(2)} ${MARGIN} Td ${pdfString(pn)} Tj ET`);
@@ -284,6 +469,7 @@ export function renderInvoice(order) {
   const pageIds = pages.map(() => reserve());
   const fontRId = reserve();
   const fontBId = reserve();
+  const imageId = reserve();
   const contentIds = pages.map(() => reserve());
 
   setObj(catalogId, `<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
@@ -292,30 +478,55 @@ export function renderInvoice(order) {
   setObj(fontRId, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
   setObj(fontBId, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
 
+  // The one binary object in the file. Kept as bytes so the assembler
+  // never runs it through latin1() and corrupts the JPEG.
+  {
+    const jpeg = logoBytes();
+    const head = latin1(
+      `<< /Type /XObject /Subtype /Image /Width ${LOGO.width} /Height ${LOGO.height} ` +
+      `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`
+    );
+    const tail = latin1('\nendstream');
+    const body = new Uint8Array(head.length + jpeg.length + tail.length);
+    body.set(head, 0);
+    body.set(jpeg, head.length);
+    body.set(tail, head.length + jpeg.length);
+    setObj(imageId, body);
+  }
+
   pages.forEach((p, i) => {
     const content = p.join('\n');
     setObj(contentIds[i], `<< /Length ${latin1(content).length} >>\nstream\n${content}\nendstream`);
     setObj(pageIds[i],
       `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] ` +
-      `/Resources << /Font << /F1 ${fontRId} 0 R /F2 ${fontBId} 0 R >> >> ` +
+      `/Resources << /Font << /F1 ${fontRId} 0 R /F2 ${fontBId} 0 R >> ` +
+      `/XObject << /Im1 ${imageId} 0 R >> >> ` +
       `/Contents ${contentIds[i]} 0 R >>`);
   });
 
   const chunks = [];
   let offset = 0;
-  const push = (str) => { const b = latin1(str); chunks.push(b); offset += b.length; };
+  const pushStr = (str) => { const b = latin1(str); chunks.push(b); offset += b.length; };
 
-  push('%PDF-1.4\n');
+  pushStr('%PDF-1.4\n');
   const offsets = [];
   for (let i = 0; i < objs.length; i++) {
     offsets[i] = offset;
-    push(`${i + 1} 0 obj\n${objs[i]}\nendobj\n`);
+    pushStr(`${i + 1} 0 obj\n`);
+    const body = objs[i];
+    if (typeof body === 'string') {
+      pushStr(body);
+    } else {
+      chunks.push(body);
+      offset += body.length;
+    }
+    pushStr('\nendobj\n');
   }
   const xrefStart = offset;
-  push(`xref\n0 ${objs.length + 1}\n`);
-  push('0000000000 65535 f \n');
-  for (const off of offsets) push(String(off).padStart(10, '0') + ' 00000 n \n');
-  push(`trailer\n<< /Size ${objs.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`);
+  pushStr(`xref\n0 ${objs.length + 1}\n`);
+  pushStr('0000000000 65535 f \n');
+  for (const off of offsets) pushStr(String(off).padStart(10, '0') + ' 00000 n \n');
+  pushStr(`trailer\n<< /Size ${objs.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`);
 
   const out = new Uint8Array(offset);
   let at = 0;
