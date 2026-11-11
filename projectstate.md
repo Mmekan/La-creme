@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-10 (R2.5 done; R2 verified by full sweep; R3 next; still not deployed)
-**HEAD:** `1be2df2` (R2.5) · Phases 1–6 + R1–R2.5 committed · nothing pushed (no remote)
+**Updated:** 2026-11-11 (R2 done and swept; build plan agreed; still not deployed)
+**HEAD:** `fd19c7c` (R2.6) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **not pushed** (origin exists, carries only `main`)
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -442,16 +442,20 @@ human judgement of the invoice layout.
   so a per-phase split would need hand-built partial patches.
 - `5f08ff6` — these two tracking docs.
 - `8cc0704` — Phase 6 across `gallery.html`, `gallery.js`, `index.html`,
-  `index.js`, `index.css`. Nothing has been pushed (no remote configured).
+  `index.js`, `index.css`. **Not pushed:** `origin` is
+  `github.com/Mmekan/La-creme` and carries only `main`; the whole of this
+  branch is local.
 - INV-1 — `worker/invoice.js`, `worker/schema-invoice.sql`,
   `worker/index.js`, `config.js`, `index.js`, `admin.js`, `worker/README.md`,
   plus the spec, the plan and these two tracking docs.
 - `aec192d` (R1), `a3786ee` (R2.1), `93c13a9` (R2.2), `025b3cf` (R2.3),
   `3b854d3` (invoice fix), `654f347` (R2.4) — the invoice-revision phases.
-- **Uncommitted (2026-11-10):** the letterhead/ASCII pass in
-  `worker/invoice.js`, `worker/bot.js`, `worker/index.js`,
-  `tools/demo-bot.mjs`, `tools/test-bot.mjs`. Untracked scratch output that
-  should not be committed: `sample-*.pdf`, `verify-r1.mjs`, `.demo-dev.log`.
+- `2c19ce8` — the letterhead/ASCII pass in `worker/invoice.js`,
+  `worker/bot.js`, `worker/index.js`, `tools/demo-bot.mjs`,
+  `tools/test-bot.mjs`, plus `CLAUDE.md` and these two tracking docs.
+- `1be2df2` (R2.5 badge), `fd19c7c` (R2.6 sweep). Working tree is clean
+  apart from local scratch, now gitignored (`sample-*.pdf`,
+  `verify-r1.mjs`, `.demo-dev.log`).
 
 ---
 

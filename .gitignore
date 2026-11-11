@@ -20,3 +20,8 @@ _image-review.html
 # Cloudflare Worker local dev state / secrets
 .wrangler/
 .dev.vars
+
+# Throwaway invoice renderer output + verification probe (R1)
+sample-*.pdf
+verify-r1.mjs
+.demo-dev.log

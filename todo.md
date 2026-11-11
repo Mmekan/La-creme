@@ -1,7 +1,79 @@
 # TODO — La Crème
 
-**Updated:** 2026-11-10 (after R2.4 + invoice letterhead/ASCII pass)
+**Updated:** 2026-11-10 (build plan agreed; no builds yet)
 Companion to `projectstate.md`.
+
+---
+
+## Build plan — agreed 2026-11-10 (standing reference, no builds yet)
+
+**What we are achieving, in plain words:** a customer gets a priced
+response fast; the rep prices and re-issues invoices from her phone;
+every order knows where it landed in the day's queue; adding a second
+phone number later is a settings change, not a build. What we are NOT
+doing: no automatic WhatsApp sending from the site — `wa.me` links
+prepare the message, a human presses send.
+
+**Agreed facts (owner, 2026-11-10):**
+
+- Company line: `08066835713` → international `2348066835713`.
+  Current site number stays: `CONFIG.whatsappNumber = '2348066556677'`.
+  Provision: both the Telegram whitelist and the WhatsApp numbers move
+  into the D1 `settings` table, so adding a third number is a settings
+  edit, not a deploy.
+- Custom cakes: the moment an order lands on custom, it is quoted
+  separately — never a catalogue key, never a site price, `/approve`
+  keeps refusing until a human prices that specific order. Explicit
+  "Custom design — quoted separately" choice in the cake form (not
+  inferred from free text); stored as `is_custom` on the order.
+- Telegram: `@Lacremeuyobot` is admin. Two tiers — admin tier (bot +
+  company-line chat) can run `/update-price` and catalogue commands;
+  whitelist tier (rep, future staff, chatting with the bot) can edit
+  per-order invoice prices and print invoices. A group chat must NOT
+  inherit admin rights by membership.
+- Daily counter: each order for the day gets "First order of the day",
+  "Thirteenth order today", "Nineteenth order today", etc. in the
+  Telegram caption + WhatsApp message (NOT in the PDF — wrong register
+  for a formal document). Day boundary: midnight WAT. Open: count all
+  orders, or exclude cancelled ones.
+- Cake pricing model: spec-key pricing (price per configuration in
+  `product_prices`), not a named-cake menu. An unpriced spec falls
+  through to "price via WhatsApp", same as today. Catalogue edits never
+  rewrite existing orders (each keeps its `lines_json` snapshot).
+  `/api/prices` cache is `max-age=60`, so site prices lag catalogue
+  edits by up to a minute.
+
+**Phases (in order):**
+
+- **0 — Freeze the truth.** Fix `projectstate.md` drift ("no remote" x2,
+  HEAD `1be2df2` vs actual `fd19c7c`), check landed boxes in `todo.md`,
+  push `invoice-revision`, `.gitignore` stray PDFs.
+- **1 — Invoice safety (B-1, B-2).** `loadSettings()` reads D1 `settings`,
+  merges over `DEFAULT_SETTINGS`; placeholder bank fields stamp the PDF
+  "PAYMENT DETAILS NOT CONFIGURED". Zero-recipient fallback: caption-only
+  send to `TELEGRAM_CHAT_ID`.
+- **2 — Numbers, recipients, counter (new info above).** Explicit custom
+  flag + `is_custom`; two-tier Telegram auth; dual-WhatsApp UX (primary
+  `wa.me` + one-tap business-line follow-up); indexed daily `COUNT` on
+  `received_at` with WAT boundary.
+- **3 — Deploy + prove (B-6).** Migrations on real D1, secrets, worker +
+  site live, one genuine order end-to-end.
+- **4 — BUG-1 mobile taps.** Instrumented page on her real device;
+  fix what the rectangles say.
+- **5 — G-2 "Latest" header.** One more `interstitials` break at the
+  uploaded-vs-hardcoded boundary. Decide: cutoff (newest N vs window),
+  filter behaviour; never render empty.
+- **6 — Owner questions, one conversation.** Invoice eyeball review,
+  password meaning, Order button on filter bar, counter wording,
+  "Latest" vs "Most recent".
+- **7 — R3 catalogue prices (last).** Anonymous-200 test for
+  `GET /api/prices` FIRST, then register above the `/api/` auth gate
+  (`worker/index.js:1247`). R3.2 spec key is load-bearing: wire
+  `spec_key` through `finalizeCakeOrder`.
+- **8 — G-1 captions (after deployed D1 + B-7).** Column → API →
+  manifest → one-per-batch field on upload page → per-image override at
+  admin approval. B-7 (`escapeHtml` at `gallery.js:307,320`) BEFORE
+  any public caption path ships.
 
 ---
 
@@ -32,9 +104,10 @@ Companion to `projectstate.md`.
       `DEFAULT_SETTINGS` in `worker/invoice.js` currently prints
       `Demo Bank` / `0123456789` on every invoice (the D1 `settings` table is
       never read). Either edit the constants or wire `settings` through.
-- [ ] **Commit the 2026-11-10 pass.** `worker/invoice.js`, `worker/bot.js`,
-      `worker/index.js`, `tools/demo-bot.mjs`, `tools/test-bot.mjs`. Leave
-      `sample-*.pdf`, `verify-r1.mjs`, `.demo-dev.log` out.
+- [x] **Commit the 2026-11-10 pass.** Landed as `2c19ce8` (letterhead, NGN
+      everywhere, ASCII-only bot text, demo harness). R2.6 sweep followed as
+      `fd19c7c`. Scratch output (`sample-*.pdf`, `verify-r1.mjs`,
+      `.demo-dev.log`) is now gitignored rather than left lying about.
 
 ## Next — Phase 6 (#8): order from a gallery image
 
@@ -287,3 +360,71 @@ after the invoice flow is proven — it re-plumbs every price on the
 site (menu arrays + three order builders + cart totals + checkout).
 Recorded here so the invoice's structured lines are designed to read
 from the same price source when it arrives.
+
+---
+
+## Gallery — captions + a "Latest" section (recorded 2026-11-10)
+
+Two owner requests, both on the **gallery page**. Neither is a regression —
+they are new work. They are numbered alongside BUG-1 so the phase plan keeps
+one list.
+
+### B-7 (blocker for G-1): caption interpolation is unescaped
+
+`gallery.js:307` and `gallery.js:320` build tile HTML with `innerHTML` and
+interpolate `${item.caption}` raw — including into an `alt="${item.caption}"`
+attribute. Today every caption comes from `gallery-data.js`, authored by us,
+so it is safe.
+
+The moment captions can come from an upload (G-1), they come from the
+**public, unauthenticated** `POST /api/upload`. A caption containing
+`" onerror="...` breaks out of that attribute. Fix it before G-1, not after:
+escape at both sites with the existing `escapeHtml()` (`config.js`) and cap
+the length server-side. The lightbox caption already uses `textContent`
+(`gallery.js:668`) and is not affected.
+
+### G-1 — captions for uploaded photos
+
+Owner's words: *"let there be a space to add a caption to the image, but the
+challenge is that if the images are multiple, captioning might be a hiccup."*
+
+The pipeline is already caption-shaped: `handleGallery()` returns
+`caption: ''` on every manifest item (`worker/index.js:1063`), and the gallery
+already renders `caption` for hardcoded photos. What is missing is a way to
+**set** it.
+
+- [ ] Schema: `ALTER TABLE upload_items ADD COLUMN caption TEXT`
+      (`schema-media.sql`). Re-running it errors `duplicate column name` —
+      that is the expected outcome, same as `schema-invoice.sql`.
+- [ ] `POST /api/upload`: accept `caption`, cap it (~120 chars), store it.
+- [ ] `handleGallery()`: `SELECT i.caption` and return it.
+- [ ] Batch caption on the upload page — **one field for the whole batch**,
+      not one per photo. The schema already forces one category per batch,
+      so a batch is already semantically narrow; 23 text boxes on a phone is
+      exactly the hiccup the owner is describing.
+- [ ] Per-image override at approval in admin, where she already reviews each
+      photo and where the text is authenticated rather than public.
+- [ ] `escapeHtml()` at the two render sites (B-7) **before** this ships.
+- [ ] Note: `/api/gallery` is cached `max-age=60`, so a caption edit can take
+      a minute to appear. Expected, not a bug.
+
+### G-2 — "Latest from La Crème" section header
+
+Owner's words: *"Let the recently uploaded images have a section header
+called Most recent or Latest or something that tells them it's the latest
+from lacreme."*
+
+Cheap, because both pieces exist. `mergeManifestItems()` already unshifts
+uploads to the **front**, newest-first (`gallery.js:509` onward — the "R13"
+comment), and the gallery already has an interstitial system for section
+breaks: `interstitials` at `gallery.js:211`, entries of the form
+`{ beforeId, type:'break', cat, num, text }`. This is one more break,
+inserted at the boundary between uploaded items and the first hardcoded one.
+
+- [ ] Insert a break before the first hardcoded item's id, only when at
+      least one upload is present.
+- [ ] Decide the cutoff for "recent" — newest N (e.g. 12), or a date window.
+      Without a cutoff the header buries deeper every week.
+- [ ] Decide behaviour under a filter (e.g. "Wedding Cakes"): show the header
+      there too, or only under "All".
+- [ ] Never render the header with nothing under it.
