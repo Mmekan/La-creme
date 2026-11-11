@@ -103,9 +103,15 @@ a blocked bot, a wrong chat id, or Telegram rate-limiting produces **no
 invoice and no warning** — the order still looks successful. This is the
 failure most likely to appear *after* a green test run.
 
-- [ ] Track per-recipient failure and alert somewhere a human reads (the
+- [x] Track per-recipient failure and alert somewhere a human reads (the
       upload-alert chat is already configured and is not the invoice chat).
-- [ ] Keep the zero-recipient fallback from B-2 — same guard, different cause.
+      **Done 2026-11-11.** `sendDocument` now returns `{ok}` / `{skipped,reason}`
+      instead of swallowing; `sendInvoiceToCompany` alerts `TELEGRAM_CHAT_ID`
+      when nothing was delivered, when no recipient is configured, or when the
+      PDF render itself throws. A `skipped` result (no token) stays silent, so
+      local dev does not cry wolf. Partial delivery is logged, not alarmed.
+- [x] Keep the zero-recipient fallback from B-2 — same guard, different cause.
+      Folded into the alert above rather than sending the caption alone.
 
 ### P-3 (Medium-High) — four placeholder fields, not two
 

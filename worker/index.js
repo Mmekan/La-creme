@@ -178,14 +178,20 @@ async function answerCallback(env, callbackId) {
 // never fail the order. The caption carries the order summary, so the rep
 // sees what it is without opening the file — one Telegram call per
 // recipient instead of two.
+//
+// Returns what actually happened instead of swallowing it. A blocked bot, a
+// wrong chat id or a rate limit used to look exactly like success: the order
+// went through, no PDF existed, and nothing said so (P-2). `skipped` means
+// nothing could have been sent (no token / no chat id) and is deliberately
+// distinct from `failed`, because local dev must not raise alarms.
 async function sendDocument(env, chatId, bytes, filename, caption) {
-  if (!chatId) return;
+  if (!chatId) return { ok: false, skipped: true, reason: 'no chat id' };
   if (!env.TELEGRAM_BOT_TOKEN) {
     // Same reasoning as sendChatMessage: local runs have no token, and a
     // silently dropped document makes a demo read as though nothing was
     // sent. Say what would have gone out, and how big it was.
     console.log(`telegram(skip) ${chatId}: [document] ${filename} (${bytes.length} bytes)`);
-    return;
+    return { ok: false, skipped: true, reason: 'no bot token' };
   }
   try {
     const form = new FormData();
@@ -196,9 +202,15 @@ async function sendDocument(env, chatId, bytes, filename, caption) {
     const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendDocument`, {
       method: 'POST', body: form,
     });
-    if (!res.ok) console.error('telegram document:', res.status, await res.text());
+    if (!res.ok) {
+      console.error('telegram document:', res.status, await res.text());
+      return { ok: false, status: res.status, reason: `Telegram refused it (HTTP ${res.status})` };
+    }
+    return { ok: true };
   } catch (err) {
-    console.error('telegram document:', err && err.name ? err.name : 'error');
+    const reason = err && err.name ? err.name : 'error';
+    console.error('telegram document:', reason);
+    return { ok: false, reason };
   }
 }
 
@@ -206,8 +218,6 @@ async function sendDocument(env, chatId, bytes, filename, caption) {
 // upload-alert chat. The owner's own chats are added too, since the owner
 // reviews pending prices; the two lists are usually overlapping (the owner
 // IS the operator), hence the dedupe: one PDF per chat, not one per list.
-// No fallback: if both secrets are unset the invoice is simply not
-// delivered, and the log says why.
 function invoiceRecipients(env) {
   return [...new Set([
     ...parseInvoiceChatIds(env.TELEGRAM_INVOICE_CHAT_IDS),
@@ -215,15 +225,64 @@ function invoiceRecipients(env) {
   ])].slice(0, 20);
 }
 
+// The invoice reached nobody. Post the summary to the upload-alert chat so
+// the order is not invisible — that chat has a human on the end of it and is
+// configured separately from the invoice list on purpose, so it is exactly
+// the right place to report that the invoice list is broken. Best effort:
+// if this fails too, the log is the only trace left.
+async function alertInvoiceUndelivered(env, order, caption, reason) {
+  const chatId = env.TELEGRAM_CHAT_ID;
+  const orderNo = (order && order.order_number) || 'unknown order';
+  if (!chatId) {
+    console.error(`invoice: ${orderNo} undelivered (${reason}) and TELEGRAM_CHAT_ID is unset`);
+    return;
+  }
+  const text = [
+    `INVOICE NOT DELIVERED - ${orderNo}`,
+    `Reason: ${reason}.`,
+    caption ? `\n${caption}` : null,
+    '\nThe order itself is logged and safe. Forward it by hand, or fix the recipient list.',
+  ].filter(Boolean).join('\n');
+  await sendChatMessage(env, chatId, text);
+}
+
 function sendInvoiceToCompany(env, order, caption) {
   const ids = invoiceRecipients(env);
   if (!ids.length) {
-    console.error('invoice: neither TELEGRAM_INVOICE_CHAT_IDS nor TELEGRAM_OWNER_CHAT_IDS is set');
-    return Promise.resolve();
+    // Was a silent return: the order succeeded and no invoice existed
+    // anywhere. Now the operator is told (P-2 / B-2).
+    return alertInvoiceUndelivered(
+      env, order, caption,
+      'neither TELEGRAM_INVOICE_CHAT_IDS nor TELEGRAM_OWNER_CHAT_IDS is set'
+    );
   }
-  const bytes = renderInvoice(order);
+
+  let bytes;
+  try {
+    bytes = renderInvoice(order);
+  } catch (err) {
+    // Same class of failure: the order is fine, the document is not.
+    return alertInvoiceUndelivered(env, order, caption, `PDF render failed (${err && err.name ? err.name : 'error'})`);
+  }
+
   const filename = `LaCreme-Invoice-${order.order_number}.pdf`;
-  return Promise.all(ids.map(id => sendDocument(env, id, bytes, filename, caption)));
+  return Promise.all(ids.map(id => sendDocument(env, id, bytes, filename, caption)))
+    .then(results => {
+      const delivered = results.filter(r => r.ok).length;
+      if (delivered === ids.length) return;
+      if (delivered) {
+        // Partial delivery is a quieter version of the same problem: some
+        // reps got the invoice and some did not. Log it, do not alarm.
+        console.error(`invoice: ${order.order_number} delivered to ${delivered}/${ids.length}`);
+        return;
+      }
+      // Nothing got through. If every attempt was skipped there is no token
+      // in this environment at all and the skip log already said what would
+      // have gone out — alarming here would cry wolf on every local order.
+      if (results.every(r => r.skipped)) return;
+      const first = results.find(r => !r.ok && !r.skipped);
+      return alertInvoiceUndelivered(env, order, caption, first ? first.reason : 'all sends failed');
+    });
 }
 
 /* ---------- Telegram webhook (R2.3, spec §8) ---------- */
