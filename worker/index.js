@@ -884,7 +884,7 @@ async function handleCreateOrder(request, env, ctx) {
   // then missing from the total too, so the stored figure always describes
   // the stored lines (spec §4.1).
   const lines = JSON.parse(linesJson);
-  const { total, allPriced } = summariseLines(lines);
+  const { total, unpriced, allPriced } = summariseLines(lines);
   // Spec §7: one unpriced line and the whole invoice waits for a human.
   // An order with no lines at all counts as priced — there is nothing to
   // quote, and holding every empty order for review would be noise.
@@ -897,17 +897,44 @@ async function handleCreateOrder(request, env, ctx) {
   const specKey = o.specKey ? clip(o.specKey, 200) || null : null;
 
   const nowIso = new Date().toISOString();
+
+  // Clip once, then use the same values for the row and for the document.
+  // The invoice used to be rendered from the raw request body while D1 kept
+  // clipped values, so the PDF and the admin panel could disagree about the
+  // same order (P-1). It also never received date_needed at all: the body
+  // says `dateNeeded`, the renderer reads `date_needed`, so the "date
+  // needed" line has been blank on every invoice.
+  const stored = {
+    order_number: o.orderNumber,
+    received_at: nowIso,
+    order_type: clip(o.orderType, 40),
+    name: clip(o.name, 120),
+    phone: clip(o.phone, 40),
+    delivery: clip(o.delivery, 20),
+    address: clip(o.address, 300),
+    date_needed: clip(o.dateNeeded, 200),
+    event_type: clip(o.eventType, 60),
+    guests: clip(o.guests, 20),
+    service_type: clip(o.serviceType, 20),
+    items: clip(o.items, 12000),
+    total: clip(o.total, 30),      // the client's own string; display only
+    notes: clip(o.notes, 1500),
+    lines_json: linesJson,
+    revised: 0,                    // the cart's own document is v1
+    price_status: priceStatus,
+    spec_key: specKey,
+  };
+
   const info = await env.DB.prepare(
     `INSERT OR IGNORE INTO orders
       (order_number, received_at, order_type, name, phone, delivery, address, date_needed,
        event_type, guests, service_type, items, total, notes, lines_json, price_status, spec_key)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
-    o.orderNumber, nowIso,
-    clip(o.orderType, 40), clip(o.name, 120), clip(o.phone, 40), clip(o.delivery, 20),
-    clip(o.address, 300), clip(o.dateNeeded, 200), clip(o.eventType, 60), clip(o.guests, 20),
-    clip(o.serviceType, 20), clip(o.items, 12000), clip(o.total, 30), clip(o.notes, 1500),
-    linesJson, priceStatus, specKey
+    stored.order_number, stored.received_at, stored.order_type, stored.name,
+    stored.phone, stored.delivery, stored.address, stored.date_needed,
+    stored.event_type, stored.guests, stored.service_type, stored.items,
+    stored.total, stored.notes, stored.lines_json, stored.price_status, stored.spec_key
   ).run();
 
   // changes === 0 means the order number already existed: logOrder's
@@ -922,31 +949,31 @@ async function handleCreateOrder(request, env, ctx) {
         `INSERT OR IGNORE INTO invoice_versions
            (order_number, version, created_at, lines_json, total, reason, actor)
          VALUES (?, 1, ?, ?, ?, 'original', 'site')`
-      ).bind(o.orderNumber, nowIso, linesJson, total).run();
+      ).bind(stored.order_number, nowIso, linesJson, total).run();
     } catch (err) {
       console.error('invoice version:', err && err.name ? err.name : 'error');
     }
 
+    // Quote the figure the invoice will actually print, computed from the
+    // stored lines — not the client's own total string, which could disagree
+    // with them (P-4).
+    const totalText = !lines.length
+      ? 'no items'
+      : unpriced === lines.length
+        ? 'price on request'
+        : allPriced ? money(total) : `${money(total)} + unpriced lines`;
+
     const caption = [
-      `Invoice ${o.orderNumber}`,
-      `${clip(o.name, 120)} - ${clip(o.total, 30) || 'price on request'}`,
+      `Invoice ${stored.order_number}`,
+      `${stored.name || 'Customer'} - ${totalText}`,
       // The operator's cue that this one is not ready to forward.
       priceStatus === 'pending' ? 'PENDING PRICE REVIEW - set a price before sending.' : null,
     ].filter(Boolean).join('\n');
 
-    // The renderer reads row-shaped fields (order_number, received_at), but
-    // the request body uses the site's camelCase orderNumber and has no
-    // timestamp — so both are supplied here. Without them the delivered PDF
-    // prints no order number or issue date, and ships as "undefined.pdf".
-    ctx.waitUntil(sendInvoiceToCompany(
-      env,
-      {
-        ...o,
-        order_number: o.orderNumber, received_at: nowIso,
-        lines_json: linesJson, revised: 0, price_status: priceStatus, spec_key: specKey,
-      },
-      caption
-    ));
+    // Rendered from `stored`, the same values the row was written with, so
+    // the delivered PDF and the admin panel describe one order rather than
+    // two versions of it (P-1).
+    ctx.waitUntil(sendInvoiceToCompany(env, stored, caption));
   }
   return json({ ok: true });
 }

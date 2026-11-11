@@ -92,8 +92,13 @@ the PDF a customer receives and the row the admin panel shows can disagree
 about the name, phone and address. The endpoint is public and accepts up to
 30 KB, so the body that renders the document is not the body that was kept.
 
-- [ ] Render from the row just written (or from values clipped once and
+- [x] Render from the row just written (or from values clipped once and
       used for both the insert and the render). Never spread the raw body.
+      **Done 2026-11-11.** `handleCreateOrder` builds a `stored` object once
+      and uses it for both the INSERT and `sendInvoiceToCompany`. This also
+      fixed a live defect it exposed: the renderer reads `date_needed` while
+      the request body says `dateNeeded`, so **"date needed" was blank on
+      every invoice ever produced**.
 
 ### P-2 (High) — a failed send is silent per recipient
 
@@ -128,11 +133,34 @@ Ibom`), both printed in the letterhead — where a customer looks first.
 server-computed `total` is stored and never displayed. Caption and attached
 PDF can state different figures.
 
-- [ ] Caption the server-computed figure once the row is the source (P-1).
+- [x] Caption the server-computed figure once the row is the source (P-1).
+      **Done 2026-11-11.** Caption now derives from the stored lines:
+      `money(total)`, or `+ unpriced lines`, or `price on request`, or
+      `no items`. The client's `total` string is still stored in the row's
+      `total` column for the admin list, but no longer quoted.
 
 ### P-5 (Medium) — B-7 has a third site
 
 Recorded in the B-7 section above: `index.js:332`, the cake gallery modal.
+
+### Verification gap — `node --check` cannot validate the worker files
+
+Found 2026-11-11 the hard way: Node 24.19 exits **0** on a `.js` file that
+contains `import`/`export` even when the file has a blatant syntax error
+(a stray `));` passed). Module detection makes `--check` skip such files.
+Confirmed against a two-line minimal case.
+
+So the R2.6 report's "`node --check` clean on all 15 JS files" is **not
+evidence** for the four ESM worker modules — `worker/index.js`,
+`worker/invoice.js`, `worker/bot.js`, `worker/logo-data.js`. Use a real
+import instead:
+
+```
+node -e "import('./worker/index.js').then(()=>console.log('ok'))"
+```
+
+The page scripts (`config`, `index`, `gallery`, `admin`, `upload`) contain no
+module syntax and still check correctly, as do the `tools/*.mjs` files.
 
 ### Checked and clean (do not re-litigate)
 
