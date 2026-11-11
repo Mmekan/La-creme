@@ -1,7 +1,7 @@
 # Project State — La Crème
 
 **Updated:** 2026-11-11 (R2 done and swept; build plan agreed; still not deployed)
-**HEAD:** `fd19c7c` (R2.6) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **not pushed** (origin exists, carries only `main`)
+**HEAD:** `a3dd8ad` (Phase 0) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **pushed** to `origin` (2026-11-11); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -442,9 +442,9 @@ human judgement of the invoice layout.
   so a per-phase split would need hand-built partial patches.
 - `5f08ff6` — these two tracking docs.
 - `8cc0704` — Phase 6 across `gallery.html`, `gallery.js`, `index.html`,
-  `index.js`, `index.css`. **Not pushed:** `origin` is
-  `github.com/Mmekan/La-creme` and carries only `main`; the whole of this
-  branch is local.
+  `index.js`, `index.css`. **Pushed 2026-11-11:** the whole branch went to
+  `origin` as `invoice-revision`, tracking `origin/invoice-revision`.
+  `main` was not touched and remains behind.
 - INV-1 — `worker/invoice.js`, `worker/schema-invoice.sql`,
   `worker/index.js`, `config.js`, `index.js`, `admin.js`, `worker/README.md`,
   plus the spec, the plan and these two tracking docs.
