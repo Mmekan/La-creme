@@ -48,10 +48,11 @@ prepare the message, a human presses send.
 - **0 — Freeze the truth.** Fix `projectstate.md` drift ("no remote" x2,
   HEAD `1be2df2` vs actual `fd19c7c`), check landed boxes in `todo.md`,
   push `invoice-revision`, `.gitignore` stray PDFs.
-- **1 — Invoice safety (B-1, B-2).** `loadSettings()` reads D1 `settings`,
-  merges over `DEFAULT_SETTINGS`; placeholder bank fields stamp the PDF
-  "PAYMENT DETAILS NOT CONFIGURED". Zero-recipient fallback: caption-only
-  send to `TELEGRAM_CHAT_ID`.
+- **1 — Invoice safety (B-1, B-2, P-1…P-5).** Expanded by the
+  2026-11-11 ponytail sweep — see the Phase 1 findings section below.
+  In one pass: render the invoice from the stored row, `loadSettings()`
+  reads D1 `settings`, all four placeholder fields guarded, and a failed
+  Telegram send made audible.
 - **2 — Numbers, recipients, counter (new info above).** Explicit custom
   flag + `is_custom`; two-tier Telegram auth; dual-WhatsApp UX (primary
   `wa.me` + one-tap business-line follow-up); indexed daily `COUNT` on
@@ -72,8 +73,77 @@ prepare the message, a human presses send.
   `spec_key` through `finalizeCakeOrder`.
 - **8 — G-1 captions (after deployed D1 + B-7).** Column → API →
   manifest → one-per-batch field on upload page → per-image override at
-  admin approval. B-7 (`escapeHtml` at `gallery.js:307,320`) BEFORE
-  any public caption path ships.
+  admin approval. B-7 (`escapeHtml` at `gallery.js:307,320` and
+  `index.js:332`) BEFORE any public caption path ships.
+
+---
+
+## Phase 1 findings — ponytail sweep 2026-11-11 (P-1…P-5)
+
+Found by the pre-Phase-1 review. All five fold into Phase 1 rather than
+becoming their own phase — they are the same code, and fixing them
+separately would mean touching `handleCreateOrder` twice.
+
+### P-1 (High) — the invoice renders from the request, not the stored row
+
+`worker/index.js:875` hands the renderer `{...o}` — the raw request body.
+D1 stores clipped values (`clip(o.name, 120)`, `clip(o.address, 300)`), so
+the PDF a customer receives and the row the admin panel shows can disagree
+about the name, phone and address. The endpoint is public and accepts up to
+30 KB, so the body that renders the document is not the body that was kept.
+
+- [ ] Render from the row just written (or from values clipped once and
+      used for both the insert and the render). Never spread the raw body.
+
+### P-2 (High) — a failed send is silent per recipient
+
+`sendDocument` (`worker/index.js:181-203`) catches every error and only
+`console.error`s; `sendInvoiceToCompany` wraps a `Promise.all` of those. So
+a blocked bot, a wrong chat id, or Telegram rate-limiting produces **no
+invoice and no warning** — the order still looks successful. This is the
+failure most likely to appear *after* a green test run.
+
+- [ ] Track per-recipient failure and alert somewhere a human reads (the
+      upload-alert chat is already configured and is not the invoice chat).
+- [ ] Keep the zero-recipient fallback from B-2 — same guard, different cause.
+
+### P-3 (Medium-High) — four placeholder fields, not two
+
+`DEFAULT_SETTINGS` (`worker/invoice.js:118-125`) also carries a fake phone
+(`+234 800 000 0000`) and a fake address (`12 Placeholder Road, Uyo, Akwa
+Ibom`), both printed in the letterhead — where a customer looks first.
+
+- [ ] The "not configured" stamp covers company_phone and company_address as
+      well as bank_name / account_number.
+
+### P-4 (Medium) — the caption total is the client's string
+
+`worker/index.js:869` captions with `clip(o.total, 30)`, while the
+server-computed `total` is stored and never displayed. Caption and attached
+PDF can state different figures.
+
+- [ ] Caption the server-computed figure once the row is the source (P-1).
+
+### P-5 (Medium) — B-7 has a third site
+
+Recorded in the B-7 section above: `index.js:332`, the cake gallery modal.
+
+### Checked and clean (do not re-litigate)
+
+`parsePriceEntry` rejects non-numeric, sub-₦1 and over-ceiling correctly ·
+webhook auth is HMAC-compared, 404s on mismatch, refuses when the secret is
+unset · `restoreCartState` has a proper `finally` and validates saved
+sizes/proteins against the live menu before they reach a selector ·
+`INSERT OR IGNORE` + `meta.changes` prevents double-invoicing on the
+sendBeacon/fetch fallback.
+
+### Noted fragility, not a bug
+
+`restoreCartState` clicks `[data-role="qty-wrap"] [data-act="inc"]` without
+a null guard (`index.js:2451`, `index.js:2438`). Both selectors exist today,
+so nothing is broken — but a future rename would throw, and the catch wipes
+the **entire** saved cart instead of skipping one item. Guard it whenever
+that file is next touched.
 
 ---
 
@@ -371,16 +441,23 @@ one list.
 
 ### B-7 (blocker for G-1): caption interpolation is unescaped
 
-`gallery.js:307` and `gallery.js:320` build tile HTML with `innerHTML` and
-interpolate `${item.caption}` raw — including into an `alt="${item.caption}"`
-attribute. Today every caption comes from `gallery-data.js`, authored by us,
-so it is safe.
+**Three** sites, not two — the ponytail sweep on 2026-11-11 found a third:
+
+- `gallery.js:307` — `alt="${item.caption}"` in the tile image.
+- `gallery.js:320` — `${item.caption}` in the `gi-cap` div.
+- `index.js:332` — `alt="${item.caption || 'Cake design'}"` in the cake
+  gallery modal. Easy to miss because it is on the menu page, not the
+  gallery page.
+
+All three build HTML with `innerHTML` and interpolate the caption raw,
+including into an `alt="…"` attribute. Today every caption comes from
+`gallery-data.js`, authored by us, so it is safe.
 
 The moment captions can come from an upload (G-1), they come from the
 **public, unauthenticated** `POST /api/upload`. A caption containing
 `" onerror="...` breaks out of that attribute. Fix it before G-1, not after:
-escape at both sites with the existing `escapeHtml()` (`config.js`) and cap
-the length server-side. The lightbox caption already uses `textContent`
+escape at all three sites with the existing `escapeHtml()` (`config.js`) and
+cap the length server-side. The lightbox caption already uses `textContent`
 (`gallery.js:668`) and is not affected.
 
 ### G-1 — captions for uploaded photos
