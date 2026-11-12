@@ -329,7 +329,7 @@ function cgmLoadMore(){
   next.forEach(item=>{
     const tile = document.createElement('div');
     tile.className = 'cgm-tile';
-    tile.innerHTML = `<div class="media-frame"><img data-src="${item.image}" alt="${item.caption || 'Cake design'}"></div>`;
+    tile.innerHTML = `<div class="media-frame"><img data-src="${item.image}" alt="${escapeHtml(item.caption || 'Cake design')}"></div>`;
     cgmGrid.appendChild(tile);
     const media = tile.querySelector('.media-frame');
     const img = tile.querySelector('img');

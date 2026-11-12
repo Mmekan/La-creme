@@ -154,6 +154,11 @@ PDF can state different figures.
 
 Recorded in the B-7 section above: `index.js:332`, the cake gallery modal.
 
+- [x] **Done 2026-11-11.** Escaped all four caption sites (the third plus a
+      fourth found at `gallery.js:666`, the lightbox image `alt`). `node
+      --check` clean on `gallery.js` and `index.js`. The server-side length
+      cap stays with G-1, where captions first become user input.
+
 ### Verification gap — `node --check` cannot validate the worker files
 
 Found 2026-11-11 the hard way: Node 24.19 exits **0** on a `.js` file that
@@ -487,26 +492,30 @@ Two owner requests, both on the **gallery page**. Neither is a regression —
 they are new work. They are numbered alongside BUG-1 so the phase plan keeps
 one list.
 
-### B-7 (blocker for G-1): caption interpolation is unescaped
+### B-7 (blocker for G-1): caption interpolation is unescaped — ✅ fixed 2026-11-11
 
-**Three** sites, not two — the ponytail sweep on 2026-11-11 found a third:
+**Four** sites, not two — the ponytail sweep on 2026-11-11 found a third, and
+the P-5 fix found a fourth:
 
-- `gallery.js:307` — `alt="${item.caption}"` in the tile image.
+- `gallery.js:308` — `alt="${item.caption}"` in the tile image.
 - `gallery.js:320` — `${item.caption}` in the `gi-cap` div.
+- `gallery.js:666` — `alt="${item.caption}"` in the lightbox image. Missed by
+  the first sweep because the lightbox *caption* uses `textContent`; the
+  image `alt` beside it did not.
 - `index.js:332` — `alt="${item.caption || 'Cake design'}"` in the cake
   gallery modal. Easy to miss because it is on the menu page, not the
   gallery page.
 
-All three build HTML with `innerHTML` and interpolate the caption raw,
+All four built HTML with `innerHTML` and interpolated the caption raw,
 including into an `alt="…"` attribute. Today every caption comes from
-`gallery-data.js`, authored by us, so it is safe.
+`gallery-data.js`, authored by us, so it was safe.
 
 The moment captions can come from an upload (G-1), they come from the
 **public, unauthenticated** `POST /api/upload`. A caption containing
-`" onerror="...` breaks out of that attribute. Fix it before G-1, not after:
-escape at all three sites with the existing `escapeHtml()` (`config.js`) and
-cap the length server-side. The lightbox caption already uses `textContent`
-(`gallery.js:668`) and is not affected.
+`" onerror="...` breaks out of that attribute. All four now go through
+`escapeHtml()` (`config.js`); the lightbox caption still uses `textContent`
+(`gallery.js:668`). **Still open for G-1:** cap the caption length
+server-side when the upload path starts accepting captions.
 
 ### G-1 — captions for uploaded photos
 

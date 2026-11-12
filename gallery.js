@@ -305,7 +305,7 @@ function makeTile(item){
   const media = document.createElement('div');
   media.className = `media-frame ${item.tone || ''}`;
   media.innerHTML = item.image
-    ? `<img data-src="${item.image}" alt="${item.caption}">`
+    ? `<img data-src="${item.image}" alt="${escapeHtml(item.caption || '')}">`
     : `<div class="ring"></div>${item.icon}`;
   el.appendChild(media);
   if(item.image){
@@ -317,7 +317,7 @@ function makeTile(item){
   el.insertAdjacentHTML('beforeend', `
     <div class="gi-overlay">
       <span class="gi-index">${String(item.id).padStart(2, '0')}</span>
-      ${item.caption ? `<div class="gi-cap">${item.caption}</div>` : ''}
+      ${item.caption ? `<div class="gi-cap">${escapeHtml(item.caption)}</div>` : ''}
       ${item.sub ? `<div class="gi-sub">${item.sub}</div>` : ''}
     </div>
     ${item.label ? `<span class="gi-label${item.label === 'Coming Soon' ? ' gi-label--soon' : ''}">${item.label}</span>` : ''}
@@ -663,7 +663,7 @@ function renderLightbox(){
   const item = lbItems[lbIndex];
   if(!item) return;
   lightboxInner.innerHTML = item.image
-    ? `<img src="${item.image}" alt="${item.caption}" loading="lazy" style="border-radius:2px;">`
+    ? `<img src="${item.image}" alt="${escapeHtml(item.caption || '')}" loading="lazy" style="border-radius:2px;">`
     : `<div class="media-frame ${item.tone}" style="aspect-ratio:4/5; border-radius:2px;"><div class="ring"></div>${item.icon}</div>`;
   lightboxCaption.textContent = item.caption;
   lightboxCaption.hidden = !item.caption;

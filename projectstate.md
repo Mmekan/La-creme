@@ -1,6 +1,6 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5; still not deployed)
+**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5, B-7 escaped; still not deployed)
 **HEAD:** `a3dd8ad` (Phase 0) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **pushed** to `origin` (2026-11-11); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
@@ -354,6 +354,24 @@ committed). Files: `worker/invoice.js`, `worker/index.js`,
 **Still owner-supplied:** the real bank name, account number, phone and
 address. Until they are inserted into D1 `settings`, every invoice carries the
 stamp — which is the intended behaviour, not a bug.
+
+---
+
+## Phase 1 — P-5: caption interpolation escaped (B-7)
+
+**2026-11-11.** Files: `gallery.js`, `index.js`.
+
+The B-7 finding listed three raw caption interpolations; the fix found a
+fourth. All four now go through `escapeHtml()`:
+
+- `gallery.js:308` — tile image `alt`.
+- `gallery.js:320` — `gi-cap` div.
+- `gallery.js:666` — lightbox image `alt` (missed by the first sweep; the
+  lightbox *caption* uses `textContent`, the image `alt` beside it did not).
+- `index.js:332` — cake gallery modal `alt`.
+
+`node --check` clean on both files. The server-side caption length cap stays
+with G-1, where captions first become user input.
 
 ---
 
