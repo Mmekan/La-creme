@@ -148,16 +148,28 @@ the file.
 
 ### Task R1.2: Settings loader
 
-- [ ] **Step 1: Add the settings reader to `worker/invoice.js`.**
+- [x] **Step 1: Add the settings reader to `worker/invoice.js`.**
 
-Export `DEFAULT_SETTINGS` (all empty strings) and have `renderInvoice` accept
-`order.settings` — an optional plain object. Missing keys fall back to empty.
-**An empty value omits its line entirely.**
+Export `DEFAULT_SETTINGS` and have `renderInvoice` accept `order.settings` — an
+optional plain object. Missing keys fall back to empty. **An empty value omits
+its line entirely.**
 
-- [ ] **Step 2: Wire it in `worker/index.js`.**
+> **Amended by P-3 (2026-11-11).** `DEFAULT_SETTINGS` is no longer all-empty: it
+> carries development placeholders so the layout can be eyeballed. Those four
+> values (`company_phone`, `company_address`, `bank_name`, `account_number`)
+> are listed in `PLACEHOLDER_VALUES`; `resolveSettings()` blanks any value that
+> is empty *or* still a placeholder and reports it in `missing`, and
+> `renderInvoice` stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO
+> CUSTOMER` when anything is missing. `allowPlaceholders` (env
+> `ALLOW_PLACEHOLDER_SETTINGS=true`, local only) prints the placeholders for
+> layout work.
 
-`handleGetInvoice` reads `SELECT key, value FROM settings` and passes the map
-into `renderInvoice`. A failed read must not fail the endpoint — fall back to
+- [x] **Step 2: Wire it in `worker/index.js`.**
+
+`loadSettings(env)` reads `SELECT key, value FROM settings` (explicit
+`SETTING_KEYS`, so the `tg_update:*` dedupe rows are not dragged in) and both
+`sendInvoiceToCompany` and `handleGetInvoice` pass the map into
+`renderInvoice`. A failed read must not fail the endpoint — fall back to
 defaults and log.
 
 ### Task R1.3: Layout rewrite

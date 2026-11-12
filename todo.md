@@ -1,6 +1,6 @@
 # TODO — La Crème
 
-**Updated:** 2026-11-10 (build plan agreed; no builds yet)
+**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5)
 Companion to `projectstate.md`.
 
 ---
@@ -48,11 +48,11 @@ prepare the message, a human presses send.
 - **0 — Freeze the truth.** Fix `projectstate.md` drift ("no remote" x2,
   HEAD `1be2df2` vs actual `fd19c7c`), check landed boxes in `todo.md`,
   push `invoice-revision`, `.gitignore` stray PDFs.
-- **1 — Invoice safety (B-1, B-2, P-1…P-5).** Expanded by the
-  2026-11-11 ponytail sweep — see the Phase 1 findings section below.
-  In one pass: render the invoice from the stored row, `loadSettings()`
-  reads D1 `settings`, all four placeholder fields guarded, and a failed
-  Telegram send made audible.
+- **1 — Invoice safety (B-1, B-2, P-1…P-5).** ✅ **done 2026-11-11.**
+  Expanded by the 2026-11-11 ponytail sweep — see the Phase 1 findings
+  section below. In one pass: render the invoice from the stored row,
+  `loadSettings()` reads D1 `settings`, all four placeholder fields
+  guarded, and a failed Telegram send made audible.
 - **2 — Numbers, recipients, counter (new info above).** Explicit custom
   flag + `is_custom`; two-tier Telegram auth; dual-WhatsApp UX (primary
   `wa.me` + one-tap business-line follow-up); indexed daily `COUNT` on
@@ -124,8 +124,19 @@ failure most likely to appear *after* a green test run.
 (`+234 800 000 0000`) and a fake address (`12 Placeholder Road, Uyo, Akwa
 Ibom`), both printed in the letterhead — where a customer looks first.
 
-- [ ] The "not configured" stamp covers company_phone and company_address as
+- [x] The "not configured" stamp covers company_phone and company_address as
       well as bank_name / account_number.
+      **Done 2026-11-11.** `PLACEHOLDER_VALUES` + `resolveSettings()` blank any
+      value that is empty or still a development placeholder; `renderInvoice`
+      stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER` when
+      anything is missing. `loadSettings(env)` reads the six `SETTING_KEYS` from
+      D1 `settings` (explicitly, so `tg_update:*` rows are not dragged in) and
+      both `sendInvoiceToCompany` and `handleGetInvoice` pass the map through.
+      A failed settings read falls back to the defaults and logs; it never
+      costs the invoice. `ALLOW_PLACEHOLDER_SETTINGS=true` prints the
+      placeholders for layout work, but only when `ENVIRONMENT=development`
+      (production sets `ENVIRONMENT="production"`, so the flag is inert
+      there). New tests: `node tools/test-invoice.mjs` → 31/31.
 
 ### P-4 (Medium) — the caption total is the client's string
 
@@ -204,10 +215,13 @@ that file is next touched.
       a change is one function, not a rewrite. Nothing has been judged by a
       human eye yet. As of 2026-11-10 the letterhead is `La'Creme
       Confectionery` on the order-number line — still measured, not eyeballed.
-- [ ] **Replace the placeholder bank details before any invoice goes out.**
-      `DEFAULT_SETTINGS` in `worker/invoice.js` currently prints
-      `Demo Bank` / `0123456789` on every invoice (the D1 `settings` table is
-      never read). Either edit the constants or wire `settings` through.
+- [x] **Replace the placeholder bank details before any invoice goes out.**
+      **Done 2026-11-11 (P-3).** The D1 `settings` table is now read, and the
+      four placeholder values are blanked rather than printed. The owner still
+      has to *supply* the real bank/account/phone/address — until she does, the
+      invoice carries the "not configured" stamp instead of a demo account.
+      Insert them with `INSERT OR REPLACE INTO settings (key, value) VALUES
+      ('bank_name', ...)` etc.; no deploy needed.
 - [x] **Commit the 2026-11-10 pass.** Landed as `2c19ce8` (letterhead, NGN
       everywhere, ASCII-only bot text, demo harness). R2.6 sweep followed as
       `fd19c7c`. Scratch output (`sample-*.pdf`, `verify-r1.mjs`,

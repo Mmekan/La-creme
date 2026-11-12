@@ -9,7 +9,11 @@
      validateLines(raw)          -> array       sanitised line items
      parseStoredLines(order)     -> array       what to print for a row
      renderInvoice(order)        -> Uint8Array  the PDF
-     DEFAULT_SETTINGS            -> object       blank business details
+     DEFAULT_SETTINGS            -> object       development defaults
+     PLACEHOLDER_VALUES          -> Set          values that mean "unset"
+     SETTING_KEYS                -> string[]     keys read from D1 settings
+     loadSettings(env)           -> object       business details from D1
+     resolveSettings(loaded)     -> {settings, missing}  what is printable
 
    Everything here is deterministic and testable in isolation; the
    Worker wiring lives in index.js.
@@ -111,10 +115,12 @@ export function summariseLines(lines) {
 // omit their line rather than printing an empty label, so the invoice is
 // shippable before the owner supplies them and gets richer as they land —
 // no code change either way.
-// Placeholders on purpose: they make a freshly-deployed invoice complete
-// enough to look at instead of half-blank. REPLACE every value below with
-// the real business details before any invoice goes to a paying customer —
-// especially account_number, since a customer will pay whatever it says.
+//
+// These are DEVELOPMENT DEFAULTS, not business details. The four values
+// below are placeholders and are never printed on a real invoice: see
+// PLACEHOLDER_VALUES and resolveSettings(). The owner supplies the real
+// bank name, account number, phone and address when she is ready; until
+// then the invoice says so instead of inventing them.
 export const DEFAULT_SETTINGS = {
   company_name: "La'Creme Confectionery",
   company_phone: '+234 800 000 0000',
@@ -123,6 +129,73 @@ export const DEFAULT_SETTINGS = {
   account_name: "La'Creme Confectionery",
   account_number: '0123456789',
 };
+
+// The exact placeholder strings above. A value equal to one of these is
+// treated as "not configured" — blanked before it can reach a page — so a
+// customer can never be told to pay into a demo account. Keep this list in
+// step with DEFAULT_SETTINGS: it is the guard, not documentation.
+export const PLACEHOLDER_VALUES = new Set([
+  DEFAULT_SETTINGS.company_phone,
+  DEFAULT_SETTINGS.company_address,
+  DEFAULT_SETTINGS.bank_name,
+  DEFAULT_SETTINGS.account_number,
+]);
+
+// The keys the invoice reads from D1 `settings`. Explicit, because that
+// table also holds the Telegram dedupe rows (`tg_update:*`) and a blanket
+// SELECT would drag them in.
+export const SETTING_KEYS = [
+  'company_name', 'company_phone', 'company_address',
+  'bank_name', 'account_name', 'account_number',
+];
+
+// Reads the business settings out of D1. Never throws: a settings read that
+// fails must not cost us the invoice, so the caller falls back to the
+// defaults (which resolveSettings then blanks where they are placeholders).
+export async function loadSettings(env) {
+  const out = {};
+  if (!env || !env.DB) return out;
+  try {
+    const placeholders = SETTING_KEYS.map(() => '?').join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT key, value FROM settings WHERE key IN (${placeholders})`
+    ).bind(...SETTING_KEYS).all();
+    for (const row of results || []) {
+      if (!row || typeof row.key !== 'string') continue;
+      if (!SETTING_KEYS.includes(row.key)) continue;
+      if (typeof row.value !== 'string') continue;
+      out[row.key] = row.value;
+    }
+  } catch (err) {
+    console.error('settings:', err && err.name ? err.name : 'error');
+  }
+  return out;
+}
+
+// Merges what D1 supplied over the development defaults and decides what is
+// actually printable. A value that is empty, or still equal to one of the
+// placeholders, is blanked and reported in `missing` — the renderer omits
+// the line and stamps the invoice instead.
+//
+// `allowPlaceholders` exists for local layout work only (see
+// allowPlaceholderSettings() in index.js). It is off unless explicitly set,
+// so the default path can never print a demo account number.
+export function resolveSettings(loaded, allowPlaceholders = false) {
+  const merged = { ...DEFAULT_SETTINGS, ...(loaded || {}) };
+  const settings = {};
+  const missing = [];
+  for (const key of SETTING_KEYS) {
+    const raw = String(merged[key] == null ? '' : merged[key]).trim();
+    const isPlaceholder = PLACEHOLDER_VALUES.has(raw);
+    if (!raw || (isPlaceholder && !allowPlaceholders)) {
+      settings[key] = '';
+      missing.push(key);
+    } else {
+      settings[key] = raw;
+    }
+  }
+  return { settings, missing };
+}
 
 /* ============================================================
    THE PDF
@@ -279,7 +352,11 @@ function logoBytes() {
 
 export function renderInvoice(order) {
   const o = order || {};
-  const s = { ...DEFAULT_SETTINGS, ...(o.settings || {}) };
+  // Never print a development placeholder: resolveSettings blanks any value
+  // that is empty or still a placeholder and reports it in `missing`, which
+  // drives the "not configured" stamp below (P-3).
+  const { settings: s, missing } = resolveSettings(o.settings, o.allowPlaceholders === true);
+  const detailsMissing = missing.length > 0;
   const lines = parseStoredLines(o);
 
   // `revised` counts revisions: 0 = original (v1), 1 = first revision (v2).
@@ -366,6 +443,16 @@ export function renderInvoice(order) {
       if (isPending) {
         fillRect(MARGIN, y - 13, COL_AMT_R - MARGIN, 16, RED);
         text(MARGIN + 8, y - 9, 'PENDING PRICE REVIEW - NOT FOR CUSTOMER', FONT_B, 8.5, WHITE);
+        y -= 26;
+      }
+
+      // P-3: the letterhead and payment block are only as good as the
+      // settings behind them. When any of them is unset or still a
+      // placeholder, say so on the document itself — the rep forwards this
+      // PDF by hand, so the warning has to travel with it.
+      if (detailsMissing) {
+        fillRect(MARGIN, y - 13, COL_AMT_R - MARGIN, 16, RED);
+        text(MARGIN + 8, y - 9, 'BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER', FONT_B, 8.5, WHITE);
         y -= 26;
       }
 

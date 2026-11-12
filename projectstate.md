@@ -1,6 +1,6 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-11 (R2 done and swept; build plan agreed; still not deployed)
+**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5; still not deployed)
 **HEAD:** `a3dd8ad` (Phase 0) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **pushed** to `origin` (2026-11-11); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
@@ -314,10 +314,46 @@ putting emoji/em dashes/arrows in invoice output.
   Confirmed real secret → 200, wrong secret → 404.
 - **Tests:** `node tools/test-bot.mjs` → 28/28 pass (updated for NGN).
 
-⚠️ **`DEFAULT_SETTINGS` is what actually prints on every invoice** —
-`renderInvoice()` never reads the D1 `settings` table, it always falls back to
-these. The bank/account values are placeholders (`Demo Bank` / `0123456789`)
-and **must be replaced before any invoice reaches a paying customer.**
+⚠️ **Superseded by P-3 (2026-11-11).** `renderInvoice()` now reads the D1
+`settings` table through `loadSettings()`, and the four placeholder values
+(`company_phone`, `company_address`, `bank_name`, `account_number`) are
+blanked rather than printed. See "Phase 1 — P-3" below.
+
+---
+
+## Phase 1 — P-3: business details come from D1, placeholders never print
+
+**2026-11-11.** Completes the Phase 1 pass (P-1, P-2, P-4 were already
+committed). Files: `worker/invoice.js`, `worker/index.js`,
+`tools/test-invoice.mjs` (new).
+
+- **`DEFAULT_SETTINGS` is now explicitly development defaults.** The four
+  placeholder values are listed in `PLACEHOLDER_VALUES`; `resolveSettings()`
+  merges D1 over the defaults and blanks any value that is empty *or* still a
+  placeholder, returning `{ settings, missing }`.
+- **`loadSettings(env)`** reads the six `SETTING_KEYS` from D1 `settings` with
+  an explicit `IN (...)` list — the table also holds `tg_update:*` dedupe rows,
+  and a blanket `SELECT` would drag them in. It never throws: a failed read
+  logs and returns `{}`, so the invoice still renders from the defaults.
+- **The stamp.** When anything is missing, `renderInvoice` draws a red band
+  under the pending band: `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO
+  CUSTOMER`. The rep forwards the PDF by hand, so the warning travels with it.
+- **Both render paths wired.** `sendInvoiceToCompany` (order create, revise,
+  approve) and `handleGetInvoice` (admin download) both load settings, so the
+  Telegram copy and the admin download are the same document.
+- **`ALLOW_PLACEHOLDER_SETTINGS=true`** prints the placeholders for local
+  layout work, but only when `ENVIRONMENT=development` too. `wrangler.toml`
+  sets `ENVIRONMENT="production"` for the deployed Worker, so the flag is
+  inert there even if set by mistake; an unset `ENVIRONMENT` counts as
+  production. Local dev opts in via the gitignored `.dev.vars`.
+- **Tests:** `node tools/test-invoice.mjs` → 27/27 (resolveSettings,
+  loadSettings against a fake D1, and the stamp present/absent in the rendered
+  PDF). `node tools/test-bot.mjs` → 28/28 unchanged. `verify-r1.mjs` still
+  passes all checks.
+
+**Still owner-supplied:** the real bank name, account number, phone and
+address. Until they are inserted into D1 `settings`, every invoice carries the
+stamp — which is the intended behaviour, not a bug.
 
 ---
 

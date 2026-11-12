@@ -9,7 +9,7 @@
    Secrets (wrangler secret put): ADMIN_PASSWORD, SESSION_SECRET
 ============================================================ */
 
-import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, renderInvoice } from './invoice.js';
+import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, renderInvoice, loadSettings } from './invoice.js';
 import {
   money, parseCommand, parseOrderNumber, parsePriceEntry, formatLines,
   formatPriceCard, formatApproveCard, newQuoteId, callbackData, parseCallbackData,
@@ -246,7 +246,18 @@ async function alertInvoiceUndelivered(env, order, caption, reason) {
   await sendChatMessage(env, chatId, text);
 }
 
-function sendInvoiceToCompany(env, order, caption) {
+// Local layout work only: when the environment sets this, the development
+// placeholder business details are printed instead of blanked, so the
+// invoice can be eyeballed before the owner supplies real values.
+//
+// Gated on BOTH the flag and a development environment. The deployed Worker
+// has ENVIRONMENT=production (wrangler.toml [vars]), so setting the flag by
+// mistake still cannot produce a placeholder invoice in production. An
+// unset ENVIRONMENT is treated as production, not development.
+export const allowPlaceholderSettings = (env) =>
+  !!(env && env.ENVIRONMENT === 'development' && env.ALLOW_PLACEHOLDER_SETTINGS === 'true');
+
+async function sendInvoiceToCompany(env, order, caption) {
   const ids = invoiceRecipients(env);
   if (!ids.length) {
     // Was a silent return: the order succeeded and no invoice existed
@@ -259,7 +270,11 @@ function sendInvoiceToCompany(env, order, caption) {
 
   let bytes;
   try {
-    bytes = renderInvoice(order);
+    // Business details come from D1 `settings`, not the constants (P-3).
+    // loadSettings never throws; a failed read falls back to the defaults,
+    // which resolveSettings then blanks where they are placeholders.
+    const settings = await loadSettings(env);
+    bytes = renderInvoice({ ...order, settings, allowPlaceholders: allowPlaceholderSettings(env) });
   } catch (err) {
     // Same class of failure: the order is fine, the document is not.
     return alertInvoiceUndelivered(env, order, caption, `PDF render failed (${err && err.name ? err.name : 'error'})`);
@@ -987,7 +1002,15 @@ async function handleGetInvoice(env, orderNumber) {
     .bind(orderNumber).first();
   if (!order) return json({ error: 'Not found' }, 404);
 
-  const bytes = renderInvoice({ ...order, lines_json: JSON.stringify(parseStoredLines(order)) });
+  // Same settings path as the delivered invoice, so the admin download and
+  // the Telegram copy are the same document (P-3).
+  const settings = await loadSettings(env);
+  const bytes = renderInvoice({
+    ...order,
+    lines_json: JSON.stringify(parseStoredLines(order)),
+    settings,
+    allowPlaceholders: allowPlaceholderSettings(env),
+  });
   return new Response(bytes, {
     headers: {
       'Content-Type': 'application/pdf',

@@ -6,6 +6,13 @@ compatibility_date = "2025-01-01"
 # Worker deploys but is unreachable (Cloudflare edge returns error 1042).
 workers_dev = true
 
+# Runtime environment marker. The deployed Worker always sees "production";
+# `wrangler dev` overrides it to "development" via .dev.vars. The invoice's
+# ALLOW_PLACEHOLDER_SETTINGS escape hatch is gated on this, so a placeholder
+# invoice can never be produced in production even if the flag is set.
+[vars]
+ENVIRONMENT = "production"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "la-creme-orders"

@@ -40,6 +40,29 @@ every order still logs, but no invoice is delivered (the Worker log says so).
 `TELEGRAM_OWNER_CHAT_IDS` is added to the same delivery, deduped, so an owner
 who is also listed as the company still gets one copy.
 
+### Business details on the invoice
+
+The letterhead and payment block read from the D1 `settings` table, not from
+code. Until the real values are inserted, the invoice prints a red
+`BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER` band instead of a
+demo bank account. Set them once (no deploy needed):
+
+```
+npx wrangler d1 execute la-creme-orders --remote --command \
+  "INSERT OR REPLACE INTO settings (key, value) VALUES
+     ('company_phone', '0806 655 6677'),
+     ('company_address', '21 Ikot Ekpene Road, Uyo, Akwa Ibom'),
+     ('bank_name', 'Zenith Bank'),
+     ('account_name', 'La Creme Confectionery'),
+     ('account_number', '1234567890')"
+```
+
+`company_name` and `account_name` fall back to `La'Creme Confectionery` when
+unset. For local layout work only, set both `ENVIRONMENT=development` and
+`ALLOW_PLACEHOLDER_SETTINGS=true` in `.dev.vars`; the deployed Worker has
+`ENVIRONMENT="production"` (from `wrangler.toml`), so the flag cannot enable
+placeholder details there even if it is set.
+
 The bot webhook is `POST https://<worker>/api/tg/<TELEGRAM_WEBHOOK_SECRET>`.
 Point Telegram at it once the secret is set:
 
