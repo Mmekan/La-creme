@@ -366,6 +366,25 @@ nothing below is confirmed.
 - Files likely involved: `index.css` (chip/qty styles, tap highlight),
   `index.js` (`buildSoupRow`, `buildRiceRow` — chip listeners).
 
+### BUG-2 (blocked on owner): business details are not configured
+
+Until the owner supplies them, **every** invoice — the Telegram copy and the
+admin download alike — carries the red
+`BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER` band. That is the
+intended fail-safe (P-3), not a defect: no placeholder bank details can reach
+a customer.
+
+The owner will hand these over when she is ready. They go into the D1
+`settings` table (keys listed in `SETTING_KEYS`, `worker/invoice.js`):
+
+- `company_phone` — real phone number
+- `company_address` — real business address
+- `bank_name` — real bank
+- `account_number` — real account number
+
+`company_name` and `account_name` already default correctly. **Name this item
+in every status report** until the values are in D1.
+
 ### INV — Invoice workflow (Telegram bot + PDF invoice)
 
 Owner's flow, 2026-11-06. **Status: INV-1 built 2026-11-07. The plan then
@@ -374,12 +393,52 @@ next.** Each phase depends on the one before it.
 Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
 Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
 
-**Next step:** **R3** — live catalogue prices (`/update-price` is the bot
-command that lands with it; it is a stub today). R2.5 and the R2.6 sweep are
-done. Before writing R3, note the auth-gate ordering landmine in the ponytail
-report: `GET /api/prices` must be registered **above** the `/api/` auth gate
-or it 401s for everyone. Two things only the owner can settle (see "Do first"):
-the invoice layout review, and replacing the placeholder bank details.
+**Next step:** **R3.4 (b)** — the site's displayed menu still uses baked-in
+prices; `/api/prices` changes nothing on screen. Cake auto-pricing (R3.4 a)
+is done and server-side, so this is display only — plus the
+"price finalised on WhatsApp" copy, which must not be added until the site
+can tell a catalogue hit from a miss.
+
+- [x] **R3.1 — storage + `GET /api/prices`** (2026-11-13): registered above
+      the `/api/` auth gate (public, 200 anonymous), `Cache-Control:
+      public, max-age=60`, returns `{ prices, updated_at }` with
+      `updated_at` = newest row, `null` for an empty catalogue (not an
+      error). `worker/seed-prices.sql` seeds 34 rows from the hardcoded
+      menu with `INSERT OR IGNORE`, so re-running never overwrites a price
+      the owner has changed. **Not applied to any database yet.**
+- [x] **R3.2 — cake spec key** (2026-11-13): `cakeSpecKey()` in `config.js`,
+      mirrored in `worker/bot.js`, sent as `specKey` from both cake order
+      paths (single-cake orders only). Occasion, inscription and design are
+      excluded; custom and Wedding return `null`. `tools/test-spec-key.mjs`
+      → 24/24, including the two copies agreeing.
+- [x] **R3.3 — `/update-price`** (2026-11-13): owner-only by chat id
+      (`isOwnerChat`, `TELEGRAM_OWNER_CHAT_IDS`), one-shot
+      `/update-price <key> <price>`, plus `/prices` to list the catalogue.
+      Unknown key refuses rather than creating a row; unchanged price says
+      so; writes are audited as `catalogue-price`. `test-bot` → 44/44.
+      **Cake keys cannot be typed** — they contain spaces, so the parser
+      refuses rather than writing to the wrong row; cake prices still come
+      from `/edit-invoice`'s "Save price".
+- [x] **R3.4 (a) — cake auto-pricing** (2026-11-13): a single-cake order
+      whose `specKey` is in the catalogue is priced server-side in
+      `handleCreateOrder` (`priceCakeFromCatalogue`), so it arrives
+      `priced` instead of waiting for a human. Only `p: null` lines are
+      touched; a D1 failure leaves it pending. `test-catalogue-price` 16/16.
+- [x] **R3.4 (b) — menu overlay** (2026-11-13): `loadPrices()` runs after
+      the first render and repaints every row in place; a failed fetch
+      leaves the constants untouched. Closed the five bugs the audit
+      found (P1–P5) — see `projectstate.md`. `test-live-prices` → 45/45.
+      Still owns the multi-cake order case (one key cannot describe two
+      cakes) and the "price finalised on WhatsApp" copy.
+- [ ] **R3.5 — verify**: no browser run of the overlay yet, and nothing
+      has been deployed or seeded. Needs a real page against a local D1
+      with `worker/seed-prices.sql` applied, then a walk through menu →
+      cart → checkout → WhatsApp text → invoice for one item per
+      category, including one key deliberately removed from the
+      catalogue to prove the pending path.
+
+Two things only the owner can settle (see "Do first"): the invoice layout
+review, and replacing the placeholder bank details (BUG-2).
 
 > Customer places an order → order text notification on company
 > WhatsApp (as today) → **bot receives the PDF/image invoice** → **bot

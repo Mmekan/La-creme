@@ -1,6 +1,6 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5, B-7 escaped; still not deployed)
+**Updated:** 2026-11-13 (R3.4b — the site's menu reads the catalogue; P1–P5 fixed; still not deployed)
 **HEAD:** `a3dd8ad` (Phase 0) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **pushed** to `origin` (2026-11-11); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
@@ -28,7 +28,10 @@ in that order. Phase plan text lives in the past session
 | **R2.4** | `/edit-invoice` + `/approve` — buttons, optimistic guard, re-issue | ✅ done (`654f347`) |
 | **R2.5** | Admin `price_status` badge | ✅ done (`1be2df2`) |
 | **R2.6** | Verify R2 — full page + API + bot sweep | ✅ exercised 2026-11-10 |
-| **R3** | Live catalogue prices — `product_prices`, `GET /api/prices`, `/update-price` | 📋 planned |
+| **R3.1–R3.3** | `GET /api/prices` + seed · cake spec key · `/update-price` + `/prices` | ✅ done |
+| **R3.4a** | Repeat cake auto-prices from the catalogue (server-side) | ✅ done |
+| **R3.4b** | Site's displayed menu reads `/api/prices`; P1–P5 fixed | ✅ built, not deployed |
+| **R3.5** | Verify R3 in a browser against a seeded local D1 | 📋 next |
 
 The INV-2/INV-3 naming below is superseded by R1–R3 in the plan file
 [docs/superpowers/plans/2026-11-09-invoice-revision-plan.md](docs/superpowers/plans/2026-11-09-invoice-revision-plan.md).
@@ -318,6 +321,188 @@ putting emoji/em dashes/arrows in invoice output.
 `settings` table through `loadSettings()`, and the four placeholder values
 (`company_phone`, `company_address`, `bank_name`, `account_number`) are
 blanked rather than printed. See "Phase 1 — P-3" below.
+
+---
+
+## R3.4b — the site's menu reads the catalogue (and P1–P5)
+
+**2026-11-13.** Files: `config.js`, `index.js`, `worker/bot.js`,
+`worker/index.js`, `tools/test-live-prices.mjs` (new).
+
+`loadPrices()` fetches `/api/prices` after the first render and repaints
+every row in place through a `syncPrice()` hook on the element; a failed
+fetch changes nothing, so the menu still works offline. The audit that
+preceded this found five bugs, all fixed here:
+
+- **P1** — the cart dropdown printed `NGN NaN` for a pending line. It now
+  calls the same `lineTotal()` as the checkout review.
+- **P2** — plain finger-food rows and the Chin Chin size chips baked their
+  price into the markup with no repaint hook, so an owner price change
+  never reached them. Every row now exposes `syncPrice()`.
+- **P3** — committed soup/rice lines snapshotted `unitPrice` at Add time,
+  so a price landing after render left the cart stale while the invoice
+  charged the new figure. Cart lines now re-resolve on every read
+  (`soupEntryPrice`/`riceEntryPrice`); the snapshot is only the
+  pre-catalogue fallback. This also fixes restored carts.
+- **P4** — one pending policy for every category. Once the catalogue has
+  loaded it is authoritative: a key it lacks becomes a pending line
+  ("Price via WhatsApp", invoiced `p: null`), never the baked-in constant,
+  which may be a price the owner has since changed. A *failed* fetch is
+  the one exception — the constants stay, so the site is usable offline.
+  A soup with no catalogue price is now orderable like every other
+  category instead of blocking Add.
+- **P5** — `/prices` lists categories and caps each listing at 40 keys
+  (cake keys accumulate, so a flat list would outgrow a Telegram
+  message); the `/update-price` hint names it instead of a raw API URL.
+
+`lineTotal`/`lineAmount` moved from `index.js` to `config.js` so the page
+and the tests share one definition of what a line costs.
+**Tests:** `test-live-prices` → 45/45, covering late responses, restored
+carts, price changes after add, missing catalogue entries, failed
+requests, and menu/cart/checkout/WhatsApp/invoice agreeing on one price.
+
+> ⚠️ The Worker still trusts the `p` the client sends for soups, rice,
+> finger foods and proteins — only *cakes* are re-priced server-side
+> (R3.4a). Until every line carries its catalogue key, a tampered or
+> stale client can still set its own price. Not exploited by the site
+> itself, but it is the next hardening step after R3.5.
+
+---
+
+## R3.4a — a repeat cake prices itself
+
+**2026-11-13.** Files: `worker/index.js`, `tools/test-catalogue-price.mjs`
+(new).
+
+- **Server-side, not a client overlay.** The plan's R3.4 step 2 had the site
+  fetching `/api/prices` and overlaying menu prices. For *cake* pricing that
+  would put the price back in the browser; the spec's own security section
+  says the client never sends a price the server trusts. So
+  `priceCakeFromCatalogue()` runs inside `handleCreateOrder`: it reads
+  `cake:<specKey>` from `product_prices` and prices the line from that row.
+  Steps 1–3 of the plan still apply to the **displayed** menu (R3.4b).
+- **Only `p: null` lines** are touched — a price already on a line came from
+  somewhere a human meant.
+- **Only cake orders.** The guard is on `orderType`, not the spec key: the
+  first test run showed a Catering order carrying a spec key would have been
+  priced from the cake catalogue. `orderType` is now clipped once and shared
+  by the match and the insert.
+- **Failure is pending, never a guessed price.** A D1 error logs and leaves
+  the line unpriced; the order still succeeds.
+- **Stored consistency.** `linesJson` is re-serialised after pricing and used
+  for both `orders.lines_json` and invoice version 1, so the stored lines and
+  the stored total describe the same document (P-4).
+- **Multi-cake orders stay pending** — same one-key-per-order limit as R3.2.
+
+Verified: `test-catalogue-price` 16/16 — match prices and goes `priced`;
+unknown spec, no spec key, thrown D1 read, an already-priced line, and a
+non-cake order all stay unpriced; the catalogue is never queried without a
+spec key. `test-bot` 44/44, `test-invoice` 31/31, `test-spec-key` 24/24,
+`node --check` clean.
+
+---
+
+## R3.3 — `/update-price` + `/prices`
+
+**2026-11-13.** Files: `worker/bot.js`, `worker/index.js`,
+`tools/test-bot.mjs`.
+
+- **Owner gate is chat-id based** — `isOwnerChat(env, chatId)` in `bot.js`
+  reads `TELEGRAM_OWNER_CHAT_IDS` through the existing
+  `parseInvoiceChatIds()`. An unset list means **nobody** is owner. A chat
+  in `TELEGRAM_INVOICE_CHAT_IDS` only is refused (spec §8: the invoice tier
+  prices one order; only the owner changes what every order costs).
+- **Refused before any D1 read.** A non-owner's `/update-price` writes
+  nothing and reads no catalogue. The gate runs again on the parked `price`
+  step, so a chat removed from the owner list mid-conversation loses it.
+- **One-shot grammar** — `/update-price <key> <price>`, optionally the
+  familiar `<n> =` prefix, `NGN`/commas accepted. A bare `/update-price`
+  shows the catalogue and waits. `/prices` lists `key  NGN x` for copying.
+- **The key is looked up, never created.** A typo replies
+  `No catalogue item "..." - nothing was changed.` rather than inserting a
+  second row that would leave the real price silently unchanged.
+- **Unchanged price** says so and writes nothing. Writes are audited as
+  `catalogue-price` with old/new values.
+- **Not supported on purpose:** cake keys (`cake:<spec_key>`) contain
+  spaces, so the parser refuses them instead of guessing which word is the
+  key. Cake catalogue prices are set by `/edit-invoice`'s **Save price**,
+  which already builds the key server-side ([worker/index.js:718](worker/index.js)).
+
+Verified: `node --check` clean on both worker files; `test-bot` 44/44 (16
+new: parser grammar + ceiling, owner gate incl. unset list); stub-D1 probe of
+the real webhook — owner write emits exactly `UPDATE product_prices` +
+`audit_log`, non-owner emits **no catalogue read and no write**, unknown key
+looks up and stops, bare command parks state. `test-invoice` 31/31 and
+`test-spec-key` 24/24 still pass.
+
+---
+
+## R3.2 — cake spec key
+
+**2026-11-13.** Files: `config.js`, `index.js`, `worker/bot.js`,
+`tools/test-spec-key.mjs` (new).
+
+- **`cakeSpecKey(cake)`** exists twice — `config.js` (what the site sends)
+  and `worker/bot.js` (what the Worker looks up). They cannot import each
+  other (config.js is a plain `<script>`), so `test-spec-key.mjs` evaluates
+  the real `config.js` source and asserts both copies return the same thing
+  for the same cake.
+- **In the key:** `tiersLabel`, sorted `tierDetails` (inches + layers),
+  `flavor`, `finish`, each `normKey`-ed (trim, collapse, lowercase) and
+  `|`-joined.
+- **Out of the key, deliberately:** `occasion` (price-neutral — spec §5.1
+  says so and the owner confirmed 2026-11-13; the plan's snippet omitted it
+  only because the caller never passed one), plus `date`, `inscription` and
+  `design` — per-order free text that would make every cake unique.
+- **`null` for custom and Wedding** — they are hand-quoted, so they must
+  never match a catalogue price. Custom is detected from `tiersLabel`
+  beginning `Custom` because only `specKey` (not `isCustom`) reaches the
+  Worker.
+- **Wiring:** `specKey` is added to the `logOrder()` body in
+  `finalizeCakeOrder()` and in the combined checkout, **only when the order
+  contains exactly one cake** — `orders.spec_key` is a single column and two
+  cakes have no single configuration. Both paths pass `null` otherwise, so
+  nothing changes for mixed orders.
+- Measured keys land around 90-110 chars (under the Worker's 200-char clip),
+  e.g. `2 tiers, 3 tiers|step 0: 8" — 2 layers ; step 1: 10" — 3 layers|vanilla|fondant`.
+
+**Still not auto-priced.** `handleCreateOrder` stores `spec_key` but never
+reads `product_prices` to price the line — cake lines still arrive `p: null`
+and stay pending until a human prices them. Closing that gap belongs with
+R3.4/R3.5, not R3.2.
+
+Verified: `node --check` clean on all four changed files; `test-spec-key`
+24/24; `test-bot` 28/28; `test-invoice` 31/31; a stub-D1 probe confirms the
+key reaches the `orders` INSERT's `spec_key` column and that an absent or
+`null` key stores ``NULL``.
+
+---
+
+## R3.1 — `GET /api/prices` + catalogue seed
+
+**2026-11-13.** Files: `worker/index.js`, `worker/seed-prices.sql` (new).
+
+- `handlePrices(env)` returns `{ prices: { "<item_key>": price }, updated_at }`
+  via `jsonCached` (public, `max-age=60`). `updated_at` is the newest row, or
+  `null` when the catalogue is empty — an empty catalogue is a valid 200, not
+  an error, so the site's overlay can no-op.
+- **Registered above the `/api/` auth gate** ([worker/index.js:1349](worker/index.js)),
+  next to `/api/gallery` — the landmine the TODO warned about. Placing it
+  below would 401 every anonymous visitor.
+- `seed-prices.sql` — 34 `INSERT OR IGNORE` rows mirroring the hardcoded
+  menu: 10 soups (`<id>:<5L|10L>`), 12 rice (`<id>:<type>-<style>` — rice
+  varies on both dimensions, so both are keyed), 4 proteins, 8 finger foods.
+  Re-runnable; never clobbers an owner-changed price.
+- **Nothing user-visible changes yet.** The site still uses its baked-in
+  arrays; R3.4 is what reads this endpoint.
+
+**Not applied to any database.** The seed needs
+`npx wrangler d1 execute la-creme-orders --file=worker/seed-prices.sql`
+(remote), after `schema-bot.sql` if that table doesn't exist there yet.
+
+Verified: `node --check worker/index.js` clean; stub-D1 probe 5/5 —
+200 + cache header, prices map, newest `updated_at`, empty catalogue returns
+`{}` / `null`.
 
 ---
 

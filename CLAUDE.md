@@ -34,10 +34,11 @@ There is no build, lint, or test tooling in this repo. To work on it:
 
 ### Content is data-driven
 
-Both pages render their content from arrays of plain objects near the top of the `<script>` (in practice, near the top of `index.js`/`gallery.js`), then build DOM from them — editing content means editing these arrays, not the HTML:
+Both pages render their content from arrays of plain objects, then build DOM from them — editing content means editing these arrays, not the HTML:
 
-- `index.js`: `galleryItems`, `videoTestimonials`, `testimonials`, `cakeGalleryItems`, `fingerFoodMenu` (+ `SMALL_CHOPS_VARIANTS`, `CHIN_CHIN_VARIANTS`), `cateringSoups`, `cateringRice`, `cateringProteins`, `literOptions`/`traySizeOptions`.
-- `gallery.js`: `galleryItems` (larger set, with `filterCategories`), `interstitials`, `videoTestimonials`, `testimonials`.
+- `gallery-data.js` (loaded by **both** pages, before `index.js`/`gallery.js`): `GALLERY_ITEMS` — the one photo/video set, so nothing is duplicated between the pages. `index.js` filters it directly; `gallery.js` derives its local `galleryItems` from it.
+- `index.js`: `videoTestimonials`, `testimonials`, `cakeGalleryItems`, `fingerFoodMenu` (+ `SMALL_CHOPS_VARIANTS`, `CHIN_CHIN_VARIANTS`), `cateringSoups`, `cateringRice`, `cateringProteins`, `literOptions`/`traySizeOptions`.
+- `gallery.js`: `interstitials`, `videoTestimonials`, `testimonials`.
 
 ### Order builders (index.js)
 
@@ -66,10 +67,15 @@ Masonry-style grid with responsive column count (`columnsForWidth`, `layoutBlock
   so operators' old muscle memory still works.
 - **User-facing worker strings are plain ASCII** (parsing rule added next
   paragraph covers the full current set). Keep it that way.
-- **The invoice letterhead/business details live in `DEFAULT_SETTINGS`** in
-  `worker/invoice.js`. `renderInvoice()` does *not* read the D1 `settings`
-  table — change the constant, or wire `settings` through, then regenerate the
-  samples.
+- **The invoice letterhead/business details come from the D1 `settings`
+  table** via `loadSettings()` in `worker/invoice.js`. `DEFAULT_SETTINGS` is
+  development defaults only; `resolveSettings()` blanks any value that is
+  empty or still a placeholder and reports it in `missing`, and the renderer
+  stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER`.
+- **Every status report must name BUG-2** (`todo.md`): the real bank name,
+  account number, phone and address are still missing from D1, so every
+  invoice stamps DO NOT SEND. The owner will supply them when ready — remind
+  her in each report until they land.
 - Plans and specs for ongoing invoice work live in `docs/superpowers/plans/`
   and `docs/superpowers/specs/`; `projectstate.md` + `todo.md` are the live
   memory — update all three after a task, not just the code.

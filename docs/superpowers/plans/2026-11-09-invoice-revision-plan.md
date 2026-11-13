@@ -395,10 +395,16 @@ for Save price), so nothing can land without its audit row.
 
 ### Task R3.1: Storage and endpoint
 
-- [ ] **Step 1:** Add `product_prices` (see spec §5.3).
-- [ ] **Step 2:** `GET /api/prices` → `{ prices, updated_at }`, public,
+> **Done 2026-11-13:** table shipped with R2.4 (`schema-bot.sql`); endpoint
+> is `handlePrices` in `worker/index.js`, registered above the `/api/` auth
+> gate; seed is `worker/seed-prices.sql` (34 rows, `INSERT OR IGNORE`).
+> **Not applied to production D1 yet.** Note the seed's rice keys carry both
+> dimensions — `<id>:<type>-<style>` — because rice price varies on both.
+
+- [x] **Step 1:** Add `product_prices` (see spec §5.3). — already in `schema-bot.sql`
+- [x] **Step 2:** `GET /api/prices` → `{ prices, updated_at }`, public,
   `Cache-Control: public, max-age=60`.
-- [ ] **Step 3:** Seed from the current hardcoded values so nothing changes on
+- [x] **Step 3:** Seed from the current hardcoded values so nothing changes on
   day one:
 
 ```js
@@ -406,9 +412,22 @@ for Save price), so nothing can land without its audit row.
 // e.g. 'afang:5L' -> 30000, 'sc-plate-standard' -> 2500
 ```
 
-### Task R3.2: Cake spec key
+### Task R3.2: Cake spec key — ✅ done 2026-11-13
 
-- [ ] **Step 1:** `cakeSpecKey(cake)` in `config.js` and mirrored in `worker/bot.js`:
+> `tools/test-spec-key.mjs` (24 checks) runs both copies against the same
+> cake and fails if they drift. Three departures from the code below:
+> -(a) `occasion` is deliberately **excluded**, per the owner's 2026-11-13
+> requirement (spec §5.1 already said so; the snippet here omitted it, which
+> only worked because the caller never passed an occasion in).
+> -(b) `inscription` and `design` are also excluded — they are per-order free
+> text, so keying on them would make every cake unique.
+> -(c) Custom is detected from `tiersLabel` starts-with `Custom`, because
+> `orders` only receives `specKey`, not `isCustom`.
+> Wiring: `specKey` is set in `finalizeCakeOrder` and the combined checkout,
+> only when the order holds exactly one cake (one key per order cannot
+> describe two).
+
+- [x] **Step 1:** `cakeSpecKey(cake)` in `config.js` and mirrored in `worker/bot.js`:
 
 ```js
 norm(cake.tiersLabel) + '|' +
@@ -420,22 +439,63 @@ norm(cake.finish || '')
 `norm()` = trim, lowercase, collapse whitespace. This also fixes the existing
 `<option>Chocolate </option>` trailing-space mismatch.
 
-- [ ] **Step 2:** Custom (`isCustom`) and Wedding cakes return `null` — always
+- [x] **Step 2:** Custom (`isCustom`) and Wedding cakes return `null` — always
   pending, never matched.
 
-### Task R3.3: `/update-price`
+### Task R3.3: `/update-price` — ✅ done 2026-11-13
 
-- [ ] **Step 1:** Owner-only. Flow: category → item → current price → new price.
-- [ ] **Step 2:** Write `product_prices`, reply with the applied change.
-- [ ] **Step 3:** `GET /api/prices` reflects it on the next request (≤60 s edge).
+> Built as one-shot `/update-price <key> <price>` rather than a four-step
+> conversation: the owner has the key in front of her from `/prices`, and a
+> stage machine for two values is more steps, more state and more ways to
+> leave a half-finished conversation behind. `/prices` shows the catalogue
+> with exact keys; a bare `/update-price` shows it too. **Non-owner chats are
+> refused before any D1 read.** The key must already exist — a typo refuses
+> instead of silently creating a second row. Writes are audited as
+> `catalogue-price`.
 
-### Task R3.4: Site integration
+- [x] **Step 1:** Owner-only. Flow: category → item → current price → new price.
+- [x] **Step 2:** Write `product_prices`, reply with the applied change.
+- [x] **Step 3:** `GET /api/prices` reflects it on the next request (≤60 s edge).
 
-- [ ] **Step 1:** `config.js` gains `PRICE_OVERRIDES` + `applyPrices(map)`.
-- [ ] **Step 2:** `index.js` fetches `/api/prices` at boot, overlays the menu
-  arrays, and re-renders. Failure leaves the baked-in values — never blank.
-- [ ] **Step 3:** When the cart contains a null-price line, checkout shows
-  *"This item's price will be finalised on WhatsApp."* Only for that case.
+### Task R3.4: Site integration — ✅ done 2026-11-13 (split into a and b)
+
+> **Amended 2026-11-13.** The task as written does two different things, and
+> only the second makes the catalogue matter:
+>
+> - **R3.4a — cake auto-pricing (done).** `handleCreateOrder` looks up
+>   `cake:<specKey>` and prices the line *server-side* before storing. Checked
+>   the spec against the security section's own rule first: "the client never
+>   sends a price the server trusts… catalogue prices are looked up
+>   server-side" — so pricing belongs in the Worker, not as a client overlay.
+>   Verified by `tools/test-catalogue-price.mjs` (16 checks).
+> - **R3.4b — menu overlay (done).** Steps 1–3 below are about the
+>   *displayed* menu in `index.js`. `loadPrices()` fetches once after the
+>   first render and repaints each row through a `syncPrice()` hook; a failed
+>   fetch leaves the constants alone. Verified by
+>   `tools/test-live-prices.mjs` (45 checks).
+>
+> **Policy chosen for a catalogue miss (P4).** Once the catalogue has
+> loaded it is authoritative: a key it lacks is a **pending** line — shown
+> as "Price via WhatsApp" and invoiced `p: null` — never the baked-in
+> constant, which may be a price the owner has since changed. A *failed
+> fetch* is the one exception: the constants stay, so the site is usable
+> offline. A pending line is orderable in every category; before this, a
+> soup with no catalogue price blocked Add while rice and finger foods
+> silently used the constant.
+>
+> **Deliberately not done yet:** the **"This item's price will be finalised on
+> WhatsApp"** line. On a catalogue hit the price is now known, so the old
+> wording would be false — and the sales rep already confirms the total on
+> WhatsApp regardless. Revisit with the owner rather than adding a sentence
+> that may be wrong half the time.
+
+- [x] **Step 1:** `config.js` gains `PRICES` + `applyPrices(map)`.
+- [x] **Step 2:** `index.js` fetches `/api/prices` at boot, overlays the menu
+  rows, and repaints. Failure leaves the baked-in values — never blank.
+- [ ] **Step 3:** ~~Checkout shows "price finalised on WhatsApp" for a
+  null-price line.~~ Superseded: a pending line already prints
+  "Price via WhatsApp" in the cart, the review, the chat text and the
+  invoice. See the note above.
 
 ### Task R3.5: Verify R3
 
