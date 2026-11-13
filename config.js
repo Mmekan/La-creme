@@ -180,6 +180,98 @@ function escapeHtml(str){
 }
 
 /* ============================================================
+   LIVE CATALOGUE PRICES (R3.4b) — the owner edits menu prices from
+   Telegram; this fetches them so the menu shows the real numbers.
+   Every price on the page is written from these maps, so a failed
+   fetch leaves the baked-in prices exactly as they were — the site
+   never blanks a price, and never invents one.
+============================================================ */
+const PRICES = {
+  soups: {},      // 'afang:10L' -> 62000
+  rice: {},       // 'jollof:Tray-Classic' -> 24000
+  items: {},      // 'meat-pie', 'chicken', 'sc-plate-small' -> 2500
+  applied: false,
+};
+
+// Reads the catalogue and folds it over the baked-in menu. Never throws
+// and never blocks the page: the menu is already rendered from the
+// constants when this lands, and only matching keys change anything.
+function applyPrices(prices){
+  if(!prices || typeof prices !== 'object') return false;
+  const num = (v)=> (typeof v === 'number' || typeof v === 'string') && v !== '' && Number.isFinite(Number(v)) && Number(v) > 0
+    ? Number(v) : null;
+  for(const [key, raw] of Object.entries(prices)){
+    const price = num(raw);
+    if(price === null) continue;
+    const sep = key.indexOf(':');
+    if(sep < 0) PRICES.items[key] = price;
+    else {
+      // Rice keys are '<id>:<type>-<style>'; soup keys are '<id>:<size>'.
+      const tail = key.slice(sep + 1);
+      if(/^(lunchpack|tray)-(standard|classic)$/i.test(tail)) PRICES.rice[key] = price;
+      else PRICES.soups[key] = price;
+    }
+  }
+  PRICES.applied = true;
+  return true;
+}
+
+async function loadPrices(){
+  if(!CONFIG.ordersApi) return false;
+  try{
+    const res = await fetch(CONFIG.ordersApi.replace(/\/+$/, '') + '/api/prices');
+    if(!res.ok) return false;
+    const data = await res.json();
+    return applyPrices(data && data.prices);
+  }catch(e){
+    return false;   // offline, blocked, or the Worker is down: keep the constants
+  }
+}
+
+// One policy for every category: once the catalogue has loaded it is
+// authoritative, so a key it lacks is pending (null) rather than the
+// baked-in constant — that constant may be a price the owner has since
+// changed. A failed fetch leaves the constants in place, so the menu
+// still works offline.
+function cataloguePrice(map, key, fallback){
+  if(!PRICES.applied) return fallback;
+  return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null;
+}
+// Look-ups in one place, so the rows only ask for a price, never for a key.
+function priceOf(itemKey, fallback){ return cataloguePrice(PRICES.items, itemKey, fallback); }
+function soupPriceOf(id, label, fallback){ return cataloguePrice(PRICES.soups, `${id}:${label}`, fallback); }
+function ricePriceOf(id, type, style, fallback){ return cataloguePrice(PRICES.rice, `${id}:${type}-${style}`, fallback); }
+function proteinPriceOf(item){ return cataloguePrice(PRICES.items, item.id, item.price); }
+
+// A pending price reads as pending — never as NGN 0, never as a stale
+// constant. Chips drop the parenthetical instead (see chipLabel).
+function fmtPrice(n){ return n == null ? 'Price via WhatsApp' : fmtNaira(n); }
+function chipLabel(label, n){ return n == null ? label : `${label} (${fmtNaira(n)})`; }
+
+// A committed soup/rice cart entry re-resolves its price on every read, so
+// a catalogue price that lands after the item was added — or a cart
+// restored from an older catalogue — is priced at what the menu says now.
+// The entry's own unitPrice is only the pre-catalogue fallback.
+function soupEntryPrice(s){
+  if(!s) return null;
+  return s.sel ? soupPriceOf(s.itemId, s.sel.label, s.unitPrice) : (s.unitPrice || null);
+}
+function riceEntryPrice(r){
+  if(!r) return null;
+  return r.sel ? ricePriceOf(r.itemId, r.sel.type, r.sel.style, r.unitPrice) : r.unitPrice;
+}
+
+// The one place a cart line becomes a displayed price and a summed amount.
+// A line with no catalogue price (unitPrice null) is shown as pending,
+// never as NGN 0, and contributes nothing to a typed total.
+function lineTotal(line){
+  return line.unitPrice == null ? 'Price via WhatsApp' : fmtNaira(line.qty * line.unitPrice);
+}
+function lineAmount(line){
+  return line.unitPrice == null ? 0 : line.qty * line.unitPrice;
+}
+
+/* ============================================================
    CAKE SPEC KEY (R3.2) — the price-affecting configuration of a
    cake, as one stable string. Two cakes with the same tiers,
    inches/layers, flavour and finish produce the same key, so the

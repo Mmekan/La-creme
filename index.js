@@ -1039,9 +1039,13 @@ function buildSmallChopsItem(){
   const priceEl = wrap.querySelector('[data-role="price"]');
   let currentVariant = null;
 
+  // The live catalogue wins; the baked-in price is the fallback.
+  const priceFor = (v)=> priceOf(v.id, v.price);
+  wrap.syncPrice = ()=>{ if(currentVariant) priceEl.textContent = `${fmtPrice(priceFor(currentVariant))} / ${currentVariant.unit}`; };
+
   function selectVariant(variant){
     currentVariant = variant;
-    priceEl.textContent = `${fmtNaira(variant.price)} / ${variant.unit}`;
+    priceEl.textContent = `${fmtPrice(priceFor(variant))} / ${variant.unit}`;
     qtyVal.textContent = ffState[variant.id];
     qtyWrap.style.display = 'block';
     noteEl.textContent = `Contains: ${variant.contents}`;
@@ -1091,6 +1095,11 @@ function buildSmallChopsItem(){
 function buildChinChinItem(){
   const wrap = document.createElement('div');
   wrap.className = 'menu-item has-extra';
+  // The live catalogue wins; the baked-in price is the fallback.
+  const priceFor = (v)=> priceOf(v.id, v.price);
+  // The size chips carry their price in the label, so it is written from
+  // here rather than baked into the template — syncPrice() repaints both.
+  const optionLabel = (v)=> `${v.name.replace('Chin Chin — ', '')} — ${fmtPrice(priceFor(v))}`;
   wrap.innerHTML = `
     <div class="m-top">
       <div class="m-body">
@@ -1104,7 +1113,7 @@ function buildChinChinItem(){
     <div class="m-extra">
       <span class="m-extra-label">Choose a Size</span>
       <div class="liter-chips" data-role="option">
-        ${CHIN_CHIN_VARIANTS.map(v=> `<button type="button" class="liter-chip" data-id="${v.id}">${v.name.replace('Chin Chin — ', '')} — ${fmtNaira(v.price)}</button>`).join('')}
+        ${CHIN_CHIN_VARIANTS.map(v=> `<button type="button" class="liter-chip" data-id="${v.id}">${optionLabel(v)}</button>`).join('')}
       </div>
     </div>
     <div class="m-extra" data-role="qty-wrap" style="display:none;">
@@ -1123,13 +1132,20 @@ function buildChinChinItem(){
   const qtyVal = wrap.querySelector('[data-role="qty-val"]');
   const priceEl = wrap.querySelector('[data-role="price"]');
   let currentVariant = null;
+  wrap.syncPrice = ()=>{
+    optionWrap.querySelectorAll('.liter-chip').forEach(chip=>{
+      const v = CHIN_CHIN_VARIANTS.find(x=> x.id === chip.dataset.id);
+      if(v) chip.textContent = optionLabel(v);
+    });
+    if(currentVariant) priceEl.textContent = `${fmtPrice(priceFor(currentVariant))} / ${currentVariant.unit}`;
+  };
 
   optionWrap.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
       optionWrap.querySelectorAll('.liter-chip').forEach(c=> c.classList.remove('selected'));
       chip.classList.add('selected');
       currentVariant = CHIN_CHIN_VARIANTS.find(v=> v.id === chip.dataset.id);
-      priceEl.textContent = `${fmtNaira(currentVariant.price)} / ${currentVariant.unit}`;
+      priceEl.textContent = `${fmtPrice(priceFor(currentVariant))} / ${currentVariant.unit}`;
       qtyVal.textContent = ffState[currentVariant.id];
       qtyWrap.style.display = 'block';
       if(ffState[currentVariant.id] === 0) maybeShowFfPeekCallout(wrap);
@@ -1157,6 +1173,12 @@ ffWidgets.forEach(w=> fingerFoodList.appendChild(w));
 fingerFoodMenu.forEach(item=>{
   const row = document.createElement('div');
   row.className = 'menu-item' + (item.needsFlavour ? ' has-extra' : '');
+  // data-item-id + syncPrice put this row on the same repaint path as the
+  // soup/rice/protein rows (see the loadPrices() block at the bottom).
+  row.dataset.itemId = item.id;
+  row.syncPrice = ()=>{
+    row.querySelector('[data-role="price"]').textContent = `${fmtPrice(priceOf(item.id, item.price))} / ${item.unit}`;
+  };
   row.innerHTML = `
     <div class="m-top">
       <div class="m-body">
@@ -1165,7 +1187,7 @@ fingerFoodMenu.forEach(item=>{
           <span class="ff-peek-wrap"><button type="button" class="ff-peek" data-preview="${item.id}" aria-label="See what ${item.name} looks like" aria-haspopup="dialog">${FF_PEEK_ICON}</button></span>
         </div>
         <p>${item.desc}</p>
-        <div class="m-price">${fmtNaira(item.price)} / ${item.unit}</div>
+        <div class="m-price" data-role="price">${fmtPrice(priceOf(item.id, item.price))} / ${item.unit}</div>
       </div>
       <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
         <button type="button" aria-label="Decrease" data-act="dec">−</button>
@@ -1274,10 +1296,11 @@ function buildSoupRow(item){
     <div class="m-top">
       <div class="m-body"><h4>${item.name}</h4><p>${item.desc}</p></div>
     </div>
+    <p class="form-note" data-role="price" style="display:none; text-align:left; margin:0 0 10px;"></p>
     <div class="m-extra">
       <span class="m-extra-label">Size</span>
       <div class="liter-chips" data-role="size">
-        ${item.sizes.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}" data-price="${o.price}">${o.label}</button>`).join('')}
+        ${item.sizes.map(o=> `<button type="button" class="liter-chip" data-label="${o.label}">${chipLabel(o.label, soupPriceOf(item.id, o.label, o.price))}</button>`).join('')}
       </div>
     </div>
     <div class="m-extra" data-role="protein-wrap" style="display:none;">
@@ -1298,7 +1321,7 @@ function buildSoupRow(item){
     </div>
     <button type="button" class="cart-add-btn" data-role="add-btn" style="display:none;">Add to Cart</button>`;
 
-  const sel = { label:'', price:0, protein:'', qty:1 };
+  const sel = { label:'', price:null, protein:'', qty:1 };
   const sizeChips = row.querySelector('[data-role="size"]');
   const proteinWrap = row.querySelector('[data-role="protein-wrap"]');
   const proteinChips = row.querySelector('[data-role="protein"]');
@@ -1306,9 +1329,38 @@ function buildSoupRow(item){
   const qtyVal = row.querySelector('[data-role="qty-val"]');
   const addBtn = row.querySelector('[data-role="add-btn"]');
 
+  // A size the catalogue has no price for is still orderable: it lands in
+  // the cart as a pending line, the same as a cake. Only an incomplete
+  // pick (no size, no protein) holds Add back.
   function priceReady(){
     return !!(sel.label && sel.protein);
   }
+
+  // Said only when the catalogue really lacks the key — a soup picked
+  // before prices loaded keeps its baked-in price and says nothing.
+  let missingPrice = false;
+  function syncPriceNote(){
+    const note = row.querySelector('[data-role="price"]');
+    note.textContent = missingPrice
+      ? 'Price being confirmed — we\'ll share the exact total on WhatsApp.'
+      : '';
+    note.style.display = missingPrice ? 'block' : 'none';
+  }
+
+  // Prices landing after render: repaint the size chips and re-resolve the
+  // staged pick, so Add can't commit a figure the chip no longer shows.
+  row.syncPrice = ()=>{
+    sizeChips.querySelectorAll('.liter-chip').forEach(chip=>{
+      const o = item.sizes.find(s=> s.label === chip.dataset.label);
+      if(o) chip.textContent = chipLabel(o.label, soupPriceOf(item.id, o.label, o.price));
+    });
+    if(sel.label){
+      const o = item.sizes.find(s=> s.label === sel.label);
+      sel.price = soupPriceOf(item.id, sel.label, o.price);
+      missingPrice = sel.price == null;
+      syncPriceNote();
+    }
+  };
 
   // Pure UI sync — picking chips only stages a selection; it lands in
   // catState.soups when Add is clicked (see addBtn below).
@@ -1321,8 +1373,10 @@ function buildSoupRow(item){
   }
 
   function resetSelection(){
-    sel.label = ''; sel.price = 0; sel.protein = ''; sel.qty = 1;
+    sel.label = ''; sel.price = null; sel.protein = ''; sel.qty = 1;
+    missingPrice = false;
     row.querySelectorAll('.liter-chip.selected').forEach(c=> c.classList.remove('selected'));
+    syncPriceNote();
     updateVisibility();
   }
 
@@ -1333,7 +1387,10 @@ function buildSoupRow(item){
       if(already) return; // tapping the chosen size deselects it
       chip.classList.add('selected');
       sel.label = chip.dataset.label;
-      sel.price = Number(chip.dataset.price);
+      const size = item.sizes.find(o=> o.label === sel.label);
+      sel.price = soupPriceOf(item.id, sel.label, size.price);
+      missingPrice = sel.price == null;
+      syncPriceNote();
       updateVisibility();
     });
   });
@@ -1395,7 +1452,7 @@ function buildRiceRow(item){
     <div class="m-extra">
       <span class="m-extra-label">Type</span>
       <div class="liter-chips" data-role="type">
-        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${t} (${fmtNaira(RICE_PRICING[t].Standard)}–${fmtNaira(RICE_PRICING[t].Classic)})</button>`).join('')}
+        ${RICE_TYPES.map(t=> `<button type="button" class="liter-chip" data-value="${t}">${typeLabel(t)}</button>`).join('')}
       </div>
     </div>
     <div class="m-extra" data-role="style-wrap" style="display:none;">
@@ -1467,12 +1524,31 @@ function buildRiceRow(item){
   // Style chips' prices depend on which type is picked (Lunchpack vs
   // Tray), so their label is (re)written here rather than baked into
   // the static template.
+  // Live catalogue price for this row's type+style, or the constant.
+  function priceFor(type, style){
+    return ricePriceOf(item.id, type, style, RICE_PRICING[type][style]);
+  }
+  // A type shows its Standard-Classic range. If the catalogue has only one
+  // of the two, or neither, the label shrinks rather than inventing a price.
+  function typeLabel(t){
+    const std = priceFor(t, 'Standard'), cls = priceFor(t, 'Classic');
+    if(std == null && cls == null) return t;
+    if(std == null || cls == null) return chipLabel(t, std ?? cls);
+    return `${t} (${fmtNaira(std)}–${fmtNaira(cls)})`;
+  }
+  function refreshTypeChipLabels(){
+    typeChips.querySelectorAll('.liter-chip').forEach(chip=>{
+      chip.textContent = typeLabel(chip.dataset.value);
+    });
+  }
   function refreshStyleChipLabels(){
     if(!sel.type) return;
     styleChips.querySelectorAll('.liter-chip').forEach(chip=>{
-      chip.textContent = `${chip.dataset.value} (${fmtNaira(RICE_PRICING[sel.type][chip.dataset.value])})`;
+      chip.textContent = chipLabel(chip.dataset.value, priceFor(sel.type, chip.dataset.value));
     });
   }
+  // Prices landing after render: redo every label this row derives.
+  row.syncPrice = ()=>{ refreshTypeChipLabels(); refreshStyleChipLabels(); };
 
   typeChips.querySelectorAll('.liter-chip').forEach(chip=>{
     chip.addEventListener('click', ()=>{
@@ -1528,7 +1604,7 @@ function buildRiceRow(item){
   });
   addBtn.addEventListener('click', ()=>{
     if(!priceReady()) return;
-    const price = RICE_PRICING[sel.type][sel.style];
+    const price = priceFor(sel.type, sel.style);
     const labelBits = [sel.type, sel.style];
     if(sel.sides) labelBits.push(sel.sides);
     // An identical configuration already in the cart isn't a second,
@@ -1566,8 +1642,12 @@ cateringProteins.forEach(item=>{
   catState.proteins[item.id] = 0;
   const row = document.createElement('div');
   row.className = 'menu-item';
+  row.dataset.itemId = item.id;
+  row.syncPrice = ()=>{
+    row.querySelector('[data-role="price"]').textContent = `${fmtPrice(proteinPriceOf(item))} ${item.unit}`;
+  };
   row.innerHTML = `
-    <div class="m-body"><h4>${item.name}</h4><div class="m-price">${fmtNaira(item.price)} ${item.unit}</div></div>
+    <div class="m-body"><h4>${item.name}</h4><div class="m-price" data-role="price">${fmtPrice(proteinPriceOf(item))} ${item.unit}</div></div>
     <div class="qty-with-label"><span class="qty-label">Quantity</span><div class="qty-control">
       <button type="button" aria-label="Decrease" data-act="dec">−</button>
       <span class="qty-val" id="cat-qty-${item.id}">0</span>
@@ -1606,11 +1686,11 @@ function renderCheckoutModal(){
   [...ffLines, ...catLines, ...CART_SOURCES.cake.lines()].forEach(line=>{
     const row = document.createElement('div');
     row.className = 'checkout-review-row';
-    row.innerHTML = `<span>${escapeHtml(line.name)}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${line.priceLabel || fmtNaira(line.qty * line.unitPrice)}</span>`;
+    row.innerHTML = `<span>${escapeHtml(line.name)}${line.qty > 1 ? ` × ${line.qty}` : ''}</span><span>${line.priceLabel || lineTotal(line)}</span>`;
     reviewEl.appendChild(row);
   });
 
-  const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+  const total = [...ffLines, ...catLines].reduce((n,l)=> n + lineAmount(l), 0);
   document.getElementById('checkoutTotal').textContent = fmtNaira(total);
 
   document.getElementById('checkoutEventTypeField').hidden = !hasCat;
@@ -1787,15 +1867,13 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     }
   }
 
-  const ffItemLines = ffLines.map(l=> `${l.qty} × ${l.name} — ${fmtNaira(l.qty * l.unitPrice)}`);
-  const cateringItemLines = [
-    ...catState.soups.map(s=> `${s.qty} × ${s.name}, ${s.label} — ${fmtNaira(s.qty * s.unitPrice)}`),
-    ...catState.rice.map(r=> `${r.qty} × ${r.name}, ${r.label} — ${fmtNaira(r.qty * r.unitPrice)}`),
-    ...cateringProteins.filter(p=> catState.proteins[p.id] > 0)
-      .map(p=> `${catState.proteins[p.id]} × ${p.name} — ${fmtNaira(p.price * catState.proteins[p.id])}`),
-  ];
+  // Built from the same line objects the cart and the checkout review use,
+  // so the chat text, the cart and the invoice can't disagree on a price —
+  // and a line the catalogue has no price for reads as pending here too.
+  const ffItemLines = ffLines.map(l=> `${l.qty} × ${l.name} — ${lineTotal(l)}`);
+  const cateringItemLines = catLines.map(l=> `${l.qty} × ${l.name} — ${lineTotal(l)}`);
   const eventBits = [eventType, guests ? `${guests} guests` : '', checkoutServiceType].filter(Boolean);
-  const total = [...ffLines, ...catLines].reduce((n,l)=> n + l.qty * l.unitPrice, 0);
+  const total = [...ffLines, ...catLines].reduce((n,l)=> n + lineAmount(l), 0);
   const orderNo = generateOrderNumber(name);
   const cakes = cakeCart.slice(); // cakes queued via "Add to Cart" ride along in this order
   for (const c of cakes) {
@@ -1850,8 +1928,10 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     // priceLabel lines are quoted on WhatsApp, not here (see
     // CART_SOURCES.cake); unitPrice 0 on those must never invoice as ₦0.
     lines: invoiceLines([
-      ...ffLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : l.unitPrice })),
-      ...catLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : l.unitPrice })),
+      // `|| null` so a line with no catalogue price sends p:null — never
+      // p:0, which the invoice would print as a genuine free item.
+      ...ffLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : (l.unitPrice || null) })),
+      ...catLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : (l.unitPrice || null) })),
       ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null }))
     ]),
     total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
@@ -1924,7 +2004,9 @@ const CART_SOURCES = {
         id: i.id,
         name: i.name + (i.needsFlavour && ffFlavours[i.id] ? ` — ${ffFlavours[i.id]}` : ''),
         qty: ffState[i.id],
-        unitPrice: i.price,
+        // The catalogue price is what the invoice must charge, and what
+        // the dropdown shows; the menu chip above is display only.
+        unitPrice: priceOf(i.id, i.price),
         stepper: true
       }));
     },
@@ -1937,13 +2019,20 @@ const CART_SOURCES = {
       // Each soup/rice entry is one committed Add-to-Cart (see
       // buildSoupRow/buildRiceRow) with its quantity already set in the
       // menu, so they get a remove action here rather than a +/- stepper.
+      // Price is re-resolved on every read rather than taken from the
+      // entry's snapshot, so a catalogue price that lands after the item
+      // was added (or a restored cart from an older catalogue) is priced
+      // at what the menu says now. The snapshot is only the pre-catalogue
+      // fallback.
       catState.soups.forEach(s=>
-        out.push({ id:`soup:${s.key}`, name:`${s.name}, ${s.label}`, qty:s.qty, unitPrice:s.unitPrice, stepper:false }));
+        out.push({ id:`soup:${s.key}`, name:`${s.name}, ${s.label}`, qty:s.qty,
+                   unitPrice: soupEntryPrice(s), stepper:false }));
       catState.rice.forEach(r=>
-        out.push({ id:`rice:${r.key}`, name:`${r.name}, ${r.label}`, qty:r.qty, unitPrice:r.unitPrice, stepper:false }));
+        out.push({ id:`rice:${r.key}`, name:`${r.name}, ${r.label}`, qty:r.qty,
+                   unitPrice: riceEntryPrice(r), stepper:false }));
       cateringProteins.forEach(p=>{
         if(catState.proteins[p.id] > 0)
-          out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:p.price, stepper:true });
+          out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:proteinPriceOf(p), stepper:true });
       });
       return out;
     },
@@ -2008,7 +2097,9 @@ function buildCartLineRow(line, src){
   nameEl.textContent = line.qty > 1 ? `${line.name} × ${line.qty}` : line.name;
   const priceEl = document.createElement('div');
   priceEl.className = 'cart-dd-line-price';
-  priceEl.textContent = line.priceLabel || fmtNaira(line.qty * line.unitPrice);
+  // Same helper as the checkout review, so a pending line reads as pending
+  // here too instead of printing NGN NaN.
+  priceEl.textContent = line.priceLabel || lineTotal(line);
   body.append(nameEl, priceEl);
   row.appendChild(body);
 
@@ -2072,7 +2163,7 @@ function getCartTotals(){
   const allLines = [...CART_SOURCES.ff.lines(), ...CART_SOURCES.cat.lines(), ...CART_SOURCES.cake.lines()];
   return {
     count: allLines.reduce((n,l)=> n + l.qty, 0),
-    total: allLines.reduce((n,l)=> n + l.qty * l.unitPrice, 0)
+    total: allLines.reduce((n,l)=> n + lineAmount(l), 0)
   };
 }
 
@@ -2545,6 +2636,22 @@ function handleOrderArrival(){
 renderFF();
 renderCatering();
 restoreCartState();
+// The rows above rendered from the baked-in constants. If the owner has
+// since changed a price, the catalogue fetch repaints them in place —
+// and repaints the cart dropdown, which prices its own lines. A failed
+// fetch changes nothing: every element keeps the figure it already has.
+loadPrices().then(ok=>{
+  if(!ok) return;   // menu keeps its constants; nothing to repaint
+  try{
+    // Small Chops and Chin Chin are their own widgets, not plain rows.
+    ffWidgets.forEach(w=>{ if(w.syncPrice) w.syncPrice(); });
+    // Every other row — finger foods, soups, rice, proteins — hangs its
+    // hook off the element. refreshCartUI() then repaints the dropdown,
+    // whose lines re-resolve their price on every read.
+    document.querySelectorAll('.menu-item[data-item-id]').forEach(row=>{ if(row.syncPrice) row.syncPrice(); });
+    refreshCartUI();
+  }catch(e){ /* a repaint must never break a working menu */ }
+});
 handleOrderArrival();
 // From here on, any cart-count change reflects a real user action
 // (add/remove), not the initial restore-from-storage render above —
