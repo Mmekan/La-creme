@@ -25,6 +25,22 @@ export function normKey(s) {
   return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+// Spec §5.1 cake match key: the price-affecting configuration and nothing
+// else. Occasion is excluded (a two-tier vanilla birthday and anniversary
+// cake cost the same), as are date, inscription and design — the last two
+// are per-order text, so including them would make every cake unique and
+// no cake would ever match the catalogue. Mirrors cakeSpecKey() in
+// config.js; tools/test-spec-key.mjs holds the two to the same answers.
+//
+// Returns null for custom and Wedding cakes: they are always quoted by
+// hand, so they must never pick up a catalogue price.
+export function cakeSpecKey({ tiersLabel, tierDetails, flavor, finish, occasion } = {}) {
+  if (/^wedding$/i.test(String(occasion || '').trim())) return null;
+  if (/^custom/i.test(String(tiersLabel || '').trim())) return null;
+  const parts = [tiersLabel, (tierDetails || []).slice().sort().join(' ; '), flavor, finish || ''];
+  return parts.map(normKey).filter(Boolean).join('|');
+}
+
 // "NGN 38,000" — plain ASCII, matching the PDF (base-14 fonts have no
 // naira glyph). Keeping the bot and the invoice on the same spelling also
 // means nothing user-facing depends on how a character gets encoded.

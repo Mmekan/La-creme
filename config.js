@@ -180,6 +180,23 @@ function escapeHtml(str){
 }
 
 /* ============================================================
+   CAKE SPEC KEY (R3.2) — the price-affecting configuration of a
+   cake, as one stable string. Two cakes with the same tiers,
+   inches/layers, flavour and finish produce the same key, so the
+   catalogue can price a repeat order; occasion, date, inscription
+   and design are excluded because none of them change the price.
+   Mirrored by worker/bot.js: cakeSpecKey(). Custom and Wedding
+   cakes return null — they are always quoted by hand.
+============================================================ */
+function cakeSpecKey(cake){
+  const norm = (s)=> String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase();
+  if(/^wedding$/i.test(String(cake.occasion || '').trim())) return null;
+  if(/^custom/i.test(String(cake.tiersLabel || '').trim())) return null;
+  return [cake.tiersLabel, (cake.tierDetails || []).slice().sort().join(' ; '), cake.flavor, cake.finish || '']
+    .map(norm).filter(Boolean).join('|');
+}
+
+/* ============================================================
    PHONE VALIDATION — used by every order form's WhatsApp Number
    field before a message is sent.
 ============================================================ */

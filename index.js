@@ -866,7 +866,10 @@ function finalizeCakeOrder(){
       p: null
     }))),
     total: '',
-    notes: ''
+    notes: '',
+    // Only when the order is a single cake: spec_key is one key per order,
+    // and a multi-cake order has no single configuration to match.
+    specKey: cakeCart.length === 1 ? cakeSpecKey(cakeCart[0]) : null
   });
 
   const opened = openWhatsApp(message);
@@ -1852,7 +1855,10 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
       ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null }))
     ]),
     total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
-    notes
+    notes,
+    // Same one-cake-only rule as the cake-only checkout: a mixed order's
+    // spec_key must describe the whole order, and it can't.
+    specKey: cakes.length === 1 ? cakeSpecKey(cakes[0]) : null
   });
 
   const opened = openWhatsApp(message);
