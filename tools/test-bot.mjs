@@ -65,5 +65,34 @@ const refused = B.formatApproveCard({ orderNo: 'X-1', total: 'price on request',
 eq('approve card refuses while unpriced', refused.includes('CANNOT APPROVE YET'), true);
 eq('approve card names the lines', refused.includes('line 1') && refused.includes('line 3'), true);
 
+// --- R3.3 catalogue prices ---------------------------------------------
+eq('update-price bare key + price', B.parseUpdatePrice('afang:10L 62000'), { itemKey: 'afang:10L', price: 62000 });
+eq('update-price accepts the line-number syntax', B.parseUpdatePrice('afang:10L 1 = 62000'), { itemKey: 'afang:10L', price: 62000 });
+eq('update-price accepts NGN and commas', B.parseUpdatePrice('afang:10L NGN 62,000'), { itemKey: 'afang:10L', price: 62000 });
+eq('update-price keeps the key as typed (it is a lookup)', B.parseUpdatePrice('  afang:10L   62000 '), { itemKey: 'afang:10L', price: 62000 });
+// A cake key contains spaces, so the first word is taken as the key and the
+// rest as the price — it refuses rather than writing to the wrong row.
+eq('update-price refuses a spaced cake key instead of guessing',
+  B.parseUpdatePrice('cake:2 tiers, 3 tiers|vanilla 45000').error !== undefined, true);
+eq('update-price needs a price', B.parseUpdatePrice('afang:10L').error !== undefined, true);
+eq('update-price needs anything at all', B.parseUpdatePrice('').error !== undefined, true);
+eq('update-price rejects clearing', B.parseUpdatePrice('afang:10L -').error !== undefined, true);
+eq('update-price rejects a non-number price', B.parseUpdatePrice('afang:10L cheap').error !== undefined, true);
+eq('update-price rejects zero', B.parseUpdatePrice('afang:10L 0').error !== undefined, true);
+eq('update-price rejects over the ceiling', B.parseUpdatePrice(`afang:10L ${B.MAX_PRICE + 1}`).error !== undefined, true);
+
+// The hint must name a command the owner can actually send: /prices takes an
+// optional category now, and the old text pointed at a raw HTTP endpoint.
+eq('the update-price hint points at /prices', /\/prices/.test(B.UPDATE_PRICE_HINT), true);
+eq('and no longer at the API URL', /GET \/api\/prices/.test(B.UPDATE_PRICE_HINT), false);
+
+// Owner gate is chat-id based, and an unset list means nobody.
+const ownerEnv = { TELEGRAM_OWNER_CHAT_IDS: '-100123, 555' };
+eq('owner chat allowed', B.isOwnerChat(ownerEnv, '-100123'), true);
+eq('second owner chat allowed', B.isOwnerChat(ownerEnv, '555'), true);
+eq('invoice-only chat refused', B.isOwnerChat({ TELEGRAM_INVOICE_CHAT_IDS: '999' }, '999'), false);
+eq('no owner list refuses everyone', B.isOwnerChat({}, '-100123'), false);
+eq('no env refuses everyone', B.isOwnerChat(undefined, '-100123'), false);
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

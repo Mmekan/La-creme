@@ -10,6 +10,8 @@
    Spec: docs/superpowers/specs/2026-11-09-invoice-revision-design.md §8
 ============================================================ */
 
+import { parseInvoiceChatIds } from './invoice.js';
+
 // A price above this is a typo, not a cake. Rejecting it is friendlier
 // than writing NGN 45,000,000 into an invoice and the catalogue.
 export const MAX_PRICE = 100000000;
@@ -159,6 +161,38 @@ export function catalogueKeyFor(order, line) {
   if (!/cake/i.test(String(order.order_type || ''))) return null;
   return `cake:${order.spec_key}`;
 }
+
+// Spec §8: /update-price is owner-tier only. Chat-id based, like every other
+// bot authorisation — a group does not inherit admin rights by membership.
+export function isOwnerChat(env, chatId) {
+  return parseInvoiceChatIds(env && env.TELEGRAM_OWNER_CHAT_IDS).includes(String(chatId));
+}
+
+// `/update-price afang:10L 1 = 62000` → one catalogue row to write, or an
+// error. Mirrors parsePriceEntry's grammar so operators type one format:
+// "key price" with an optional "n =" in front, and "-" to clear.
+export function parseUpdatePrice(args) {
+  const s = String(args || '').trim();
+  if (!s) return { error: `Send it as: /update-price afang:10L 1 = 62000${UPDATE_PRICE_HINT}` };
+  // "<key>", then the price, which may carry parsePriceEntry's optional
+  // "<n> =" prefix. The key is taken as typed, NOT lowercased: it is a
+  // lookup into product_prices ('afang:10L'), and "afang:10l" would just
+  // report "no such item".
+  const [key, ...priceParts] = s.split(/\s+/);
+  const rest = priceParts.join(' ').replace(/^\d{1,3}\s*=\s*/, '');
+  if (!rest) return { error: `Send it as: /update-price afang:10L 62000${UPDATE_PRICE_HINT}` };
+
+  const itemKey = key;
+  const index = 1;
+  const priceText = rest;
+  const parsed = parsePriceEntry(`${index} = ${priceText}`);
+  if (parsed.error) return { error: parsed.error };
+  if (parsed.price === null) return { error: 'A catalogue price cannot be cleared - send a number instead.' };
+  return { itemKey, price: parsed.price };
+}
+
+export const UPDATE_PRICE_HINT =
+  '\nSend /prices to see the categories, then /prices soups for the exact keys.';
 
 // A short label for product_prices.label: the catalogue shows this, and a
 // full invoice description ("Birthday cake, 2 Tiers, Vanilla") is too long

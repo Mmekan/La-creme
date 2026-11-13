@@ -2,6 +2,7 @@
    LA CRÈME — ORDER API (Cloudflare Worker + D1)
 
    Public:   POST /api/orders          the website logs an order here
+             GET  /api/prices          live catalogue prices (R3.1)
    Private:  POST /api/login           password -> 12h session token
              GET  /api/orders          list/search orders
              PATCH /api/orders/:no     update an order's status
@@ -13,7 +14,7 @@ import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, 
 import {
   money, parseCommand, parseOrderNumber, parsePriceEntry, formatLines,
   formatPriceCard, formatApproveCard, newQuoteId, callbackData, parseCallbackData,
-  catalogueKeyFor, catalogueLabel,
+  catalogueKeyFor, catalogueLabel, isOwnerChat, parseUpdatePrice,
 } from './bot.js';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -459,6 +460,8 @@ const HELP_TEXT = [
   'Commands:',
   '/edit-invoice - set a price on an order',
   '/approve - mark a priced invoice final',
+  '/prices - list the catalogue (add a category, e.g. /prices soups)',
+  '/update-price - change a catalogue price (owner)',
   '/cancel - abandon what you were doing',
 ].join('\n');
 
@@ -511,9 +514,16 @@ async function handleBotMessage(env, chatId, userId, text) {
       await setBotState(env, chatId, userId, 'approve', null, null);
       return sendChatMessage(env, chatId, 'Which order? Send the order number to approve it.');
     }
+    if (cmd.command === 'prices') {
+      return showCatalogue(env, chatId, cmd.args);
+    }
     if (cmd.command === 'update-price') {
-      // Owner-only, and R3.3. Saying so is better than silence.
-      return sendChatMessage(env, chatId, 'Catalogue prices (/update-price) arrive with R3 and are not live yet.');
+      // Owner-only (spec §8). The invoice tier may price one order; only the
+      // owner may change what every future order costs.
+      if (!isOwnerChat(env, chatId)) {
+        return sendChatMessage(env, chatId, 'Only the owner can change catalogue prices.');
+      }
+      return startUpdatePrice(env, chatId, userId, cmd.args);
     }
     return sendChatMessage(env, chatId, HELP_TEXT);
   }
@@ -536,6 +546,10 @@ async function handleBotMessage(env, chatId, userId, text) {
     return proposePrice(env, chatId, userId, state, text);
   }
 
+  if (state.step === 'price') {
+    return applyCataloguePrice(env, chatId, userId, state, text);
+  }
+
   if (state.step === 'confirm') {
     return sendChatMessage(env, chatId, 'Press one of the buttons on the confirmation above, or send /cancel.');
   }
@@ -544,6 +558,103 @@ async function handleBotMessage(env, chatId, userId, text) {
 
 // Turns "2 = 4500" into a confirmation card. Nothing is written here — that
 // is the whole point of the extra step.
+// Prints the catalogue as "key  NGN x" so the owner can copy a key straight
+// into /update-price. One category at a time: cake keys accumulate (one per
+// distinct spec), so a single flat list would eventually outgrow a Telegram
+// message. MAX_CATALOGUE_LINES caps even that, since a category can grow too.
+const MAX_CATALOGUE_LINES = 40;
+
+async function showCatalogue(env, chatId, category) {
+  const { results } = await env.DB.prepare(
+    'SELECT item_key, category, price FROM product_prices ORDER BY category, item_key'
+  ).all();
+  const rows = results || [];
+  if (!rows.length) {
+    return sendChatMessage(env, chatId, 'The catalogue is empty. /update-price adds the first price.');
+  }
+
+  const categories = [...new Set(rows.map(r => r.category))];
+  const want = String(category || '').trim().toLowerCase();
+  if (!want) {
+    return sendChatMessage(env, chatId, [
+      'Catalogue categories:',
+      ...categories.map(c => `${c}  (${rows.filter(r => r.category === c).length})`),
+      '',
+      'Send /prices <category> to list its keys, e.g. /prices soups',
+    ].join('\n'));
+  }
+
+  const picked = rows.filter(r => r.category === want);
+  if (!picked.length) {
+    return sendChatMessage(env, chatId,
+      `No category "${want}". Try one of: ${categories.join(', ')}.`);
+  }
+  const shown = picked.slice(0, MAX_CATALOGUE_LINES);
+  return sendChatMessage(env, chatId, [
+    `Catalogue - ${want}:`,
+    ...shown.map(r => `${r.item_key}  ${money(r.price)}`),
+    ...(picked.length > shown.length ? [`... and ${picked.length - shown.length} more`] : []),
+    '',
+    'Change one with /update-price <key> <price>, e.g. /update-price afang:10L 62000',
+  ].join('\n'));
+}
+
+// R3.3. With a complete command this is one message; without it, the bot
+// shows the catalogue and waits, so the owner can read the keys first.
+async function startUpdatePrice(env, chatId, userId, args) {
+  const parsed = parseUpdatePrice(args);
+  if (parsed.error) {
+    await setBotState(env, chatId, userId, 'price', null, null);
+    await showCatalogue(env, chatId);
+    return;
+  }
+  return applyCataloguePrice(env, chatId, userId, null, parsed);
+}
+
+// `state` is the parked conversation, `preset` a command we already parsed.
+// The key must already exist: a typo that silently creates 'afng:10L' would
+// leave the real price unchanged and look like it worked.
+async function applyCataloguePrice(env, chatId, userId, state, input) {
+  // Re-check on the parked step too: a chat removed from the owner list
+  // mid-conversation loses the right with it.
+  if (!isOwnerChat(env, chatId)) {
+    await clearBotState(env, chatId, userId);
+    return sendChatMessage(env, chatId, 'Only the owner can change catalogue prices.');
+  }
+
+  const parsed = typeof input === 'string' ? parseUpdatePrice(input) : input;
+  if (parsed.error) return sendChatMessage(env, chatId, parsed.error);
+
+  const row = await env.DB.prepare(
+    'SELECT item_key, label, price FROM product_prices WHERE item_key = ?'
+  ).bind(parsed.itemKey).first();
+  if (!row) {
+    await clearBotState(env, chatId, userId);
+    return sendChatMessage(env, chatId,
+      `No catalogue item "${parsed.itemKey}". /prices lists the exact keys - nothing was changed.`);
+  }
+  if (row.price === parsed.price) {
+    await clearBotState(env, chatId, userId);
+    return sendChatMessage(env, chatId, `${row.label} is already ${money(row.price)}. Nothing to change.`);
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare('UPDATE product_prices SET price = ?, updated_at = ? WHERE item_key = ?')
+      .bind(parsed.price, now, row.item_key),
+    auditStatement(env, {
+      chatId, userId, orderNumber: null, itemKey: row.item_key,
+      action: 'catalogue-price', oldValue: String(row.price), newValue: String(parsed.price),
+      detail: { label: row.label },
+    }),
+  ]);
+  await clearBotState(env, chatId, userId);
+  return sendChatMessage(env, chatId, [
+    `${row.label}: ${money(row.price)} -> ${money(parsed.price)}`,
+    'Live on the next site load (within a minute).',
+  ].join('\n'));
+}
+
 async function proposePrice(env, chatId, userId, state, text) {
   const parsed = parsePriceEntry(text);
   if (parsed.error) return sendChatMessage(env, chatId, parsed.error);
@@ -1174,6 +1285,22 @@ async function handleGallery(env) {
   })));
 }
 
+// Public read of the price catalogue (R3.1). The site fetches this once at
+// boot and overlays its baked-in menu; a failed fetch leaves those values,
+// so D1 being unreachable never blanks a price.
+async function handlePrices(env) {
+  const { results } = await env.DB.prepare(
+    'SELECT item_key, price, updated_at FROM product_prices'
+  ).all();
+  const prices = {};
+  let updatedAt = null;
+  for (const r of results || []) {
+    prices[r.item_key] = r.price;
+    if (!updatedAt || r.updated_at > updatedAt) updatedAt = r.updated_at;
+  }
+  return jsonCached({ prices, updated_at: updatedAt });
+}
+
 async function handleListUploads(env) {
   const { results } = await env.DB.prepare(
     `SELECT b.id, b.received_at, b.category, b.file_count, b.stored_count,
@@ -1343,6 +1470,7 @@ export default {
       if (url.pathname === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
       if (url.pathname === '/api/upload' && request.method === 'POST') return await handleUpload(request, env, ctx);
       if (url.pathname === '/api/gallery' && request.method === 'GET') return await handleGallery(env);
+      if (url.pathname === '/api/prices' && request.method === 'GET') return await handlePrices(env);
 
       // Telegram's webhook authenticates with the secret in its path, not a
       // session token, so it is matched before the /api/ auth gate below.
