@@ -558,6 +558,31 @@ async function handleBotMessage(env, chatId, userId, text) {
 
 // Turns "2 = 4500" into a confirmation card. Nothing is written here — that
 // is the whole point of the extra step.
+// R3.4. Replaces the price of the cake line in `lines` when the catalogue
+// holds this exact spec. Returns null when there is nothing to price: no
+// catalogue row, a non-cake order, or a malformed spec key. Throws only on
+// a D1 failure, which the caller treats as "still unpriced".
+//
+// Only lines stored as p: null are touched — a price already on a line came
+// from somewhere a human meant, and must not be silently overwritten.
+async function priceCakeFromCatalogue(env, lines, specKey) {
+  if (!Array.isArray(lines) || !lines.some(l => l && l.p === null)) return null;
+
+  // The same key /edit-invoice's "Save price" writes, built by the one
+  // helper that owns that format — not re-derived here.
+  const key = catalogueKeyFor({ order_type: 'Cake', spec_key: specKey }, null);
+  // Long keys cannot exist: the site clips specKey to 200 chars.
+  if (!key || key.length > 210) return null;
+
+  const row = await env.DB.prepare(
+    'SELECT price FROM product_prices WHERE item_key = ?'
+  ).bind(key).first();
+  const price = row && Number(row.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+
+  return lines.map(l => (l && l.p === null ? { ...l, p: price } : l));
+}
+
 // Prints the catalogue as "key  NGN x" so the owner can copy a key straight
 // into /update-price. One category at a time: cake keys accumulate (one per
 // distinct spec), so a single flat list would eventually outgrow a Telegram
@@ -1009,18 +1034,45 @@ async function handleCreateOrder(request, env, ctx) {
   // the request: whatever serializeLines dropped to fit the byte ceiling is
   // then missing from the total too, so the stored figure always describes
   // the stored lines (spec §4.1).
-  const lines = JSON.parse(linesJson);
+  // It is parsed twice on purpose: `lines` is what gets PRICED below, and
+  // `linesJson` must be re-serialised from it so the stored lines and the
+  // stored figure describe the same order (P-4).
+  let lines = JSON.parse(linesJson);
+
+  // Cake match key (spec §5.1): an opaque lookup key the site computes from
+  // the cake's tiers/flavour/finish (R3.2), not something to derive twice
+  // here. No key (custom, Wedding, or a multi-cake order) means unmatched.
+  const specKey = o.specKey ? clip(o.specKey, 200) || null : null;
+
+  // Order type as it will be stored, so the catalogue match can insist on a
+  // cake order rather than trusting a spec key on a catering one.
+  const orderType = clip(o.orderType, 40);
+  const isCakeOrder = /cake/i.test(orderType);
+
+  // R3.4: a cake whose exact spec is in the catalogue is priced here, from
+  // the server's own row — never from the client, which sends p: null. This
+  // is what makes a repeat order flow straight through instead of waiting
+  // for a human. A failed read leaves the line unpriced (pending), which is
+  // the safe direction: never invent a price.
+  let linesJsonStored = linesJson;
+  if (specKey && isCakeOrder) {
+    let priced = null;
+    try {
+      priced = await priceCakeFromCatalogue(env, lines, specKey);
+    } catch (err) {
+      console.error('catalogue price:', err && err.name ? err.name : 'error');
+    }
+    if (priced) {
+      lines = priced;
+      linesJsonStored = serializeLines(lines);
+    }
+  }
+
   const { total, unpriced, allPriced } = summariseLines(lines);
   // Spec §7: one unpriced line and the whole invoice waits for a human.
   // An order with no lines at all counts as priced — there is nothing to
   // quote, and holding every empty order for review would be noise.
   const priceStatus = allPriced ? 'priced' : 'pending';
-
-  // Cake match key (spec §5.1): an opaque lookup key the site computes from
-  // the cake's tiers/flavour/finish (R3.2), not something to derive twice
-  // here. Until the site sends one this stays NULL, which just means every
-  // cake is treated as unmatched.
-  const specKey = o.specKey ? clip(o.specKey, 200) || null : null;
 
   const nowIso = new Date().toISOString();
 
@@ -1033,7 +1085,7 @@ async function handleCreateOrder(request, env, ctx) {
   const stored = {
     order_number: o.orderNumber,
     received_at: nowIso,
-    order_type: clip(o.orderType, 40),
+    order_type: orderType,
     name: clip(o.name, 120),
     phone: clip(o.phone, 40),
     delivery: clip(o.delivery, 20),
@@ -1045,7 +1097,7 @@ async function handleCreateOrder(request, env, ctx) {
     items: clip(o.items, 12000),
     total: clip(o.total, 30),      // the client's own string; display only
     notes: clip(o.notes, 1500),
-    lines_json: linesJson,
+    lines_json: linesJsonStored,
     revised: 0,                    // the cart's own document is v1
     price_status: priceStatus,
     spec_key: specKey,
@@ -1075,7 +1127,7 @@ async function handleCreateOrder(request, env, ctx) {
         `INSERT OR IGNORE INTO invoice_versions
            (order_number, version, created_at, lines_json, total, reason, actor)
          VALUES (?, 1, ?, ?, ?, 'original', 'site')`
-      ).bind(stored.order_number, nowIso, linesJson, total).run();
+      ).bind(stored.order_number, nowIso, linesJsonStored, total).run();
     } catch (err) {
       console.error('invoice version:', err && err.name ? err.name : 'error');
     }
