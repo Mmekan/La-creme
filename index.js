@@ -1930,8 +1930,8 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     lines: invoiceLines([
       // `|| null` so a line with no catalogue price sends p:null — never
       // p:0, which the invoice would print as a genuine free item.
-      ...ffLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : (l.unitPrice || null) })),
-      ...catLines.map(l=>({ d: l.name, q: l.qty, p: l.priceLabel ? null : (l.unitPrice || null) })),
+      ...ffLines.map(l=>({ d: l.name, q: l.qty, k: l.key, p: l.priceLabel ? null : (l.unitPrice || null) })),
+      ...catLines.map(l=>({ d: l.name, q: l.qty, k: l.key, p: l.priceLabel ? null : (l.unitPrice || null) })),
       ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null }))
     ]),
     total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
@@ -2002,6 +2002,8 @@ const CART_SOURCES = {
     lines(){
       return ALL_FF_ITEMS.filter(i=> ffState[i.id] > 0).map(i=>({
         id: i.id,
+        // The catalogue key the Worker re-prices this line from (R3.4c).
+        key: i.id,
         name: i.name + (i.needsFlavour && ffFlavours[i.id] ? ` — ${ffFlavours[i.id]}` : ''),
         qty: ffState[i.id],
         // The catalogue price is what the invoice must charge, and what
@@ -2025,14 +2027,16 @@ const CART_SOURCES = {
       // at what the menu says now. The snapshot is only the pre-catalogue
       // fallback.
       catState.soups.forEach(s=>
-        out.push({ id:`soup:${s.key}`, name:`${s.name}, ${s.label}`, qty:s.qty,
+        out.push({ id:`soup:${s.key}`, key: s.sel ? soupKey(s.itemId, s.sel.label) : '',
+                   name:`${s.name}, ${s.label}`, qty:s.qty,
                    unitPrice: soupEntryPrice(s), stepper:false }));
       catState.rice.forEach(r=>
-        out.push({ id:`rice:${r.key}`, name:`${r.name}, ${r.label}`, qty:r.qty,
+        out.push({ id:`rice:${r.key}`, key: r.sel ? riceKey(r.itemId, r.sel.type, r.sel.style) : '',
+                   name:`${r.name}, ${r.label}`, qty:r.qty,
                    unitPrice: riceEntryPrice(r), stepper:false }));
       cateringProteins.forEach(p=>{
         if(catState.proteins[p.id] > 0)
-          out.push({ id:`protein:${p.id}`, name:p.name, qty:catState.proteins[p.id], unitPrice:proteinPriceOf(p), stepper:true });
+          out.push({ id:`protein:${p.id}`, key: p.id, name:p.name, qty:catState.proteins[p.id], unitPrice:proteinPriceOf(p), stepper:true });
       });
       return out;
     },

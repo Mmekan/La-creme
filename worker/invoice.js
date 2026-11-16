@@ -54,7 +54,14 @@ export function validateLines(raw) {
     if (!Number.isInteger(q) || q < 1 || q > 9999) continue;
     const p = l.p === null || l.p === undefined ? null : Number(l.p);
     if (p !== null && (!Number.isFinite(p) || p < 0)) continue;
-    out.push({ d, q, p: p === null ? null : Math.round(p) });
+    const line = { d, q, p: p === null ? null : Math.round(p) };
+    // R3.4c: the catalogue key the line was priced from, so the Worker can
+    // price it itself instead of trusting `p`. Printable ASCII only and
+    // length-capped — every key in the catalogue is of that form, and a
+    // control character or a 10 KB key has no business in a stored line.
+    const k = typeof l.k === 'string' ? l.k.trim().slice(0, 120) : '';
+    if (k && /^[\x20-\x7E]{1,120}$/.test(k)) line.k = k;
+    out.push(line);
     if (out.length >= MAX_INVOICE_LINES) break;
   }
   return out;

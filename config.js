@@ -149,11 +149,17 @@ function invoiceLines(lines){
   return lines
     .filter(l=> l && l.d)
     .slice(0, 100)
-    .map(l=>({
-      d: String(l.d).slice(0, 160),
-      q: Math.max(1, Math.floor(Number(l.q) || 1)),
-      p: l.p == null ? null : Math.max(0, Number(l.p) || 0)
-    }));
+    .map(l=>{
+      const out = {
+        d: String(l.d).slice(0, 160),
+        q: Math.max(1, Math.floor(Number(l.q) || 1)),
+        p: l.p == null ? null : Math.max(0, Number(l.p) || 0)
+      };
+      // Only a string key is sent; a cake line has none.
+      const k = typeof l.k === 'string' ? l.k.trim().slice(0, 120) : '';
+      if(k) out.k = k;
+      return out;
+    });
 }
 
 /* ============================================================
@@ -237,10 +243,17 @@ function cataloguePrice(map, key, fallback){
   if(!PRICES.applied) return fallback;
   return Object.prototype.hasOwnProperty.call(map, key) ? map[key] : null;
 }
+// The catalogue key for each line shape, built in exactly one place. The
+// menu lookup and the key sent with the order both call these, so a
+// displayed price and the server's re-price can never disagree about
+// which row they are describing.
+function soupKey(id, label){ return `${id}:${label}`; }
+function riceKey(id, type, style){ return `${id}:${type}-${style}`; }
+
 // Look-ups in one place, so the rows only ask for a price, never for a key.
 function priceOf(itemKey, fallback){ return cataloguePrice(PRICES.items, itemKey, fallback); }
-function soupPriceOf(id, label, fallback){ return cataloguePrice(PRICES.soups, `${id}:${label}`, fallback); }
-function ricePriceOf(id, type, style, fallback){ return cataloguePrice(PRICES.rice, `${id}:${type}-${style}`, fallback); }
+function soupPriceOf(id, label, fallback){ return cataloguePrice(PRICES.soups, soupKey(id, label), fallback); }
+function ricePriceOf(id, type, style, fallback){ return cataloguePrice(PRICES.rice, riceKey(id, type, style), fallback); }
 function proteinPriceOf(item){ return cataloguePrice(PRICES.items, item.id, item.price); }
 
 // A pending price reads as pending — never as NGN 0, never as a stale

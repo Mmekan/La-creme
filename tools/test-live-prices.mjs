@@ -171,5 +171,34 @@ const CATALOGUE = {
   eq('so the constants still show', g('priceOf')('meat-pie', 1500), 1500);
 }
 
+/* --- 11. R3.4c: the key the menu prices from is the key the invoice
+   sends, so the Worker re-prices the same row the customer was shown --- */
+{
+  const g = fresh();
+  eq('soup key shape matches the seed', g('soupKey')('afang', '10L'), 'afang:10L');
+  eq('rice key shape matches the seed', g('riceKey')('jollof', 'Tray', 'Classic'), 'jollof:Tray-Classic');
+  eq('the soup lookup uses that key', g('soupPriceOf')('afang', '10L', 1), 1);
+  g('applyPrices')({ 'afang:10L': 70000, 'jollof:Tray-Classic': 26000 });
+  eq('soup lookup and key agree after the catalogue lands', g('soupPriceOf')('afang', '10L', 1), 70000);
+  eq('rice lookup and key agree after the catalogue lands', g('ricePriceOf')('jollof', 'Tray', 'Classic', 1), 26000);
+}
+
+/* --- 12. invoiceLines carries the key through to the order body ------- */
+{
+  const g = fresh();
+  const out = g('invoiceLines')([
+    { d: 'Afang Soup, 10L, Goat meat', q: 2, p: 62000, k: 'afang:10L' },
+    { d: 'Birthday cake, 2 tiers', q: 1, p: null },
+    { d: 'Meat Pie', q: 1, p: 1000, k: '  meat-pie  ' },
+    { d: 'No key', q: 1, p: 500, k: 42 },
+  ]);
+  eq('a keyed line keeps its key', out[0].k, 'afang:10L');
+  eq('a cake line has no key', 'k' in out[1], false);
+  eq('a key is trimmed', out[2].k, 'meat-pie');
+  eq('a non-string key is dropped', 'k' in out[3], false);
+  eq('the price still travels as the fallback', out[0].p, 62000);
+  eq('an overlong key is clipped to 120', g('invoiceLines')([{ d: 'x', q: 1, p: 1, k: 'k'.repeat(300) }])[0].k.length, 120);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

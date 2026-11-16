@@ -589,6 +589,42 @@ async function priceCakeFromCatalogue(env, lines, specKey) {
 // message. MAX_CATALOGUE_LINES caps even that, since a category can grow too.
 const MAX_CATALOGUE_LINES = 40;
 
+// R3.4c. Every menu line carries the catalogue key the site priced it
+// from. The Worker re-reads those keys and replaces the client's price
+// with the catalogue's, so a stale page, a tampered body, or a price the
+// owner changed after the page loaded cannot decide what an invoice
+// charges. A key the catalogue does not hold becomes p: null — the same
+// pending rule the site shows (P4), because the key exists and the server
+// can see the catalogue lacks it. Lines with no key are left exactly as
+// they arrived: cake lines are priced by spec key (R3.4a), and a cached
+// page from before R3.4c sends no keys at all.
+//
+// Returns null when no line carries a key. Throws only on a D1 failure,
+// which the caller treats as "keep what the client sent" rather than
+// turning every order pending on a flaky read.
+const PRICE_KEY_CHUNK = 50; // D1 caps bound parameters per query
+
+async function priceLinesFromCatalogue(env, lines) {
+  if (!Array.isArray(lines)) return null;
+  const keys = [...new Set(lines.map(l => l && l.k).filter(Boolean))];
+  if (!keys.length) return null;
+
+  const prices = new Map();
+  for (let i = 0; i < keys.length; i += PRICE_KEY_CHUNK) {
+    const chunk = keys.slice(i, i + PRICE_KEY_CHUNK);
+    const placeholders = chunk.map(() => '?').join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT item_key, price FROM product_prices WHERE item_key IN (${placeholders})`
+    ).bind(...chunk).all();
+    for (const row of results || []) {
+      const price = Number(row.price);
+      if (Number.isFinite(price) && price > 0) prices.set(row.item_key, price);
+    }
+  }
+
+  return lines.map(l => (l && l.k ? { ...l, p: prices.has(l.k) ? prices.get(l.k) : null } : l));
+}
+
 async function showCatalogue(env, chatId, category) {
   const { results } = await env.DB.prepare(
     'SELECT item_key, category, price FROM product_prices ORDER BY category, item_key'
@@ -1066,6 +1102,21 @@ async function handleCreateOrder(request, env, ctx) {
       lines = priced;
       linesJsonStored = serializeLines(lines);
     }
+  }
+
+  // R3.4c: every menu line carries its catalogue key, so the price is
+  // read here rather than taken from the body. This runs after the cake
+  // pass because a cake line has no key of its own (its price comes from
+  // spec_key) — the two rules never touch the same line.
+  let keyPriced = null;
+  try {
+    keyPriced = await priceLinesFromCatalogue(env, lines);
+  } catch (err) {
+    console.error('key price:', err && err.name ? err.name : 'error');
+  }
+  if (keyPriced) {
+    lines = keyPriced;
+    linesJsonStored = serializeLines(lines);
   }
 
   const { total, unpriced, allPriced } = summariseLines(lines);
