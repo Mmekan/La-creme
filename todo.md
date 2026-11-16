@@ -5,6 +5,40 @@ Companion to `projectstate.md`.
 
 ---
 
+## Remote state — measured 2026-11-16
+
+**Last code deploy: 2026-10-09 11:41 UTC** (`2557b5a9`). That predates R1,
+so the live Worker has none of the invoice work: no PDF, no bot, no
+`/api/prices` (it returns 401). The 2026-11-16 deployment entry is the
+secret change, not code.
+
+**Remote D1 is un-migrated for the invoice work.** Tables present:
+`orders`, `login_attempts`, `upload_batches`, `upload_items`,
+`upload_rate`, `bot_state`, `audit_log`, `product_prices` (last three
+created 2026-11-16). Still missing:
+
+| Missing | Created by | Blocks |
+|---|---|---|
+| `settings` table | `schema-pricing.sql` | BUG-2 cannot be stored at all |
+| `invoice_versions` table | `schema-pricing.sql` | every invoice revision |
+| `orders.price_status`, `orders.spec_key` | `schema-pricing.sql` | pending/paid state, cake pricing |
+| `orders.lines_json`, `orders.revised` | `schema-invoice.sql` | structured invoice lines |
+
+Both files are `ALTER ... ADD COLUMN`, so they run **once** and fail if
+re-run. `orders` holds 5 real rows; the ALTERs are additive and leave them
+intact (`price_status` defaults to `'priced'`).
+
+**Secrets.** Set: `ADMIN_PASSWORD`, `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_CHAT_IDS`. Unset:
+`TELEGRAM_INVOICE_CHAT_IDS` (company chat id unavailable),
+`TELEGRAM_WEBHOOK_SECRET` (must be chosen before `setWebhook`).
+
+**Also outstanding:** the updated static site files have not been uploaded
+to the web host (the Worker only serves the API and media); `invoice-revision`
+is 13 commits ahead of `origin` and unpushed; BUG-1 open; BUG-2 open.
+
+---
+
 ## Outstanding — supplied by the owner, not yet applied
 
 - **`TELEGRAM_INVOICE_CHAT_IDS` — company chat id.** Not available yet, so
