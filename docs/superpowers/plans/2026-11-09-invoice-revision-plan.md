@@ -522,6 +522,45 @@ norm(cake.finish || '')
 >
 > Verified: `test-catalogue-price` 39/39, `test-live-prices` 56/56.
 
+### Task R3.4d: Fail closed, and stop trusting the client's key — ✅ done 2026-11-16
+
+> Two holes left in R3.4c, both found by review before deployment.
+>
+> **1. A D1 failure fell back to the client's price.** Both pricing passes
+> kept the request's `p` when the catalogue read threw, which is exactly
+> the price-manipulation route R3.4c was meant to close. Every line's `p`
+> is now blanked *before* pricing, so a failed read leaves the line
+> pending. The client is never a price source, for menu lines or cakes.
+>
+> **2. The catalogue key was trusted.** A request could name a cheaper
+> existing key for an item it had not ordered. Pricing no longer reads
+> `k` at all: a menu line is priced from the catalogue row its own
+> **description** names — the same text the invoice prints — so the
+> description and the price always describe the same row. The claimed key
+> is kept in `lines_json` for audit only.
+>
+> Matching is by label words and requires the label to be a **prefix** of
+> the description. Prefix, not subset: "Afang Soup, 10L, Beef" must not
+> match the "Beef" protein row (a subset rule priced a deleted Egusi soup
+> as a portion of beef at ₦2,200 in the first test run). The most specific
+> label wins; no match or a tie leaves the line pending.
+>
+> Cake lines are marked `cake: true` by the site and priced by `spec_key`,
+> never by description. The four protein seed labels lost their
+> "(per portion)" suffix so the label is a word-for-word prefix of the
+> line the site sends.
+>
+> **Residual:** a description naming two sizes prices the first one; the
+> invoice still prints the whole description, so a human sees it. Closing
+> that would need per-category token rules, which is more drift than it
+> is worth.
+>
+> Verified: `test-catalogue-price` 39/39 (fail-closed for menu and cake,
+> cheaper-key, protein-collision, ambiguous, missing-label, zero-price),
+> `test-live-prices` 58/58, `test-invoice` 34/34, `test-bot` 46/46,
+> `test-spec-key` 24/24. Browser 23/23, endpoint-down 4/4, plus three
+> tampered orders against a real local Worker.
+
 ### Task R3.5: Verify R3 — ✅ done 2026-11-16
 
 > Run against a local D1 seeded with `worker/seed-prices.sql` and a local

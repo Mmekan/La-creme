@@ -442,6 +442,15 @@ so every invoice still stamps DO NOT SEND.
       chunked `IN (...)` query. The client's `p` is not trusted for a keyed
       line; a missing key becomes `p: null` (pending).
       `test-catalogue-price` 39/39, `test-live-prices` 56/56.
+- [x] **R3.4 (d) — fail closed, and stop trusting the key** (2026-11-16):
+      every line's price is blanked before pricing, so a D1 failure leaves
+      the order pending instead of invoicing the request's figure. Menu
+      lines are priced from the catalogue row their own description names
+      (label must be a prefix), so a cheaper key cannot change the price;
+      `k` is kept for audit only. Cake lines are marked `cake: true` and
+      priced by `spec_key`, same fail-closed rule. Protein seed labels
+      lost "(per portion)" so they match the line the site sends.
+      `test-catalogue-price` 39/39, `test-live-prices` 58/58.
 - [x] **R3.5 — verified in a browser** (2026-11-16): local D1 with the
       seed, `wrangler dev`, real page in Chrome. Owner `/update-price`
       reached the menu; a deleted key showed no price and stored

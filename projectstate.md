@@ -1,7 +1,7 @@
 # Project State — La Crème
 
 **Updated:** 2026-11-16 (R3.4c — the Worker prices every menu line; R3.5 verified in a browser against a seeded local D1; still not deployed)
-**HEAD:** `0e55bb6` (R3.4c) + the docs commit on top · Phases 1–6 + R1–R3.5 committed · branch `invoice-revision` (9 commits ahead of `origin/invoice-revision`, not pushed); `main` is untouched and still behind
+**HEAD:** `e0833bd` (R3.4d) + the docs commit on top · Phases 1–6 + R1–R3.5 committed · branch `invoice-revision` (11 commits ahead of `origin/invoice-revision`, not pushed); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -32,6 +32,7 @@ in that order. Phase plan text lives in the past session
 | **R3.4a** | Repeat cake auto-prices from the catalogue (server-side) | ✅ done |
 | **R3.4b** | Site's displayed menu reads `/api/prices`; P1–P5 fixed | ✅ built, not deployed |
 | **R3.4c** | Worker prices every menu line from its catalogue key | ✅ done (`0e55bb6`) |
+| **R3.4d** | Fail closed on D1 errors; price from the line description, not the key | ✅ done 2026-11-16 |
 | **R3.5** | Verify R3 in a browser against a seeded local D1 | ✅ done 2026-11-16 |
 
 The INV-2/INV-3 naming below is superseded by R1–R3 in the plan file
@@ -325,6 +326,46 @@ blanked rather than printed. See "Phase 1 — P-3" below.
 
 ---
 
+## R3.4d — fail closed, and price from the description
+
+**2026-11-16.** Files: `worker/index.js`, `worker/invoice.js`, `config.js`,
+`index.js`, `worker/seed-prices.sql`, both pricing test suites.
+
+Two holes in R3.4c, found by review before deployment:
+
+- **A D1 failure fell back to the client's price.** Both pricing passes
+  kept the request's `p` when the read threw — the exact manipulation
+  route R3.4c was meant to close. `handleCreateOrder` now blanks every
+  line's `p` **before** pricing, so a failed read leaves the line pending.
+  The client is never a price source, for menu lines or cakes.
+- **The catalogue key was trusted.** A request could name a cheaper
+  existing key. Pricing no longer reads `k`: a menu line is priced from
+  the catalogue row its own **description** names, the same text the
+  invoice prints. `k` is still stored, for audit only.
+- **Prefix matching, not subset.** The first run of the new rule priced a
+  deleted Egusi soup at ₦2,200 because "Beef" (the protein at the end of
+  the description) was a catalogue row. A label must now be a **prefix**
+  of the description; the most specific label wins; no match or a tie
+  leaves the line pending.
+- **Cake lines are marked.** The site sends `cake: true` on cake lines and
+  `validateLines` keeps the marker (boolean only). Cake lines are priced
+  by `spec_key`, never by description, and follow the same fail-closed
+  rule.
+- **Seed labels trimmed.** The four protein labels lost "(per portion)" so
+  each label is a word-for-word prefix of the line the site sends.
+- **Residual:** a description naming two sizes prices the first one. The
+  invoice prints the whole description, so a human sees it. Closing that
+  needs per-category token rules — more drift than it is worth.
+
+Verified: `test-catalogue-price` 39/39 (fail-closed menu + cake,
+cheaper-key, protein collision, ambiguous, missing label, zero price),
+`test-live-prices` 58/58, `test-invoice` 34/34, `test-bot` 46/46,
+`test-spec-key` 24/24. Browser 23/23, endpoint-down 4/4. Three tampered
+orders against a real local Worker stored `70000 / null / null`, all
+`pending`, none of the sent prices.
+
+---
+
 ## R3.5 — verified in a browser against a seeded local D1
 
 **2026-11-16.** Files: `tools/serve-test.mjs` (new), `tools/test-browser.mjs`
@@ -380,10 +421,10 @@ blanked rather than printed. See "Phase 1 — P-3" below.
   R3.4a), and a page cached before this commit sends no keys at all.
 - **`validateLines()` keeps `k`** — printable ASCII, 120 chars — so the
   key survives into `lines_json` and the invoice-version snapshot.
-- **Residual risk, accepted.** The key is client-supplied, so a tampered
-  client could name a cheaper *existing* key. It cannot invent a price,
-  and every order still lands in Telegram with its lines and total for
-  review. Closing it needs server-derived keys — a design change.
+- ~~**Residual risk, accepted.** The key is client-supplied, so a tampered
+  client could name a cheaper *existing* key.~~ **Closed by R3.4d**
+  (below): pricing no longer reads the key; it prices from the line's own
+  description.
 - **Tests:** `test-catalogue-price` 39/39 (keyed lines priced, sent
   prices ignored, missing key pending, mixed cake+menu, D1 failure,
   malformed keys), `test-live-prices` 56/56 (key shapes match the seed,
