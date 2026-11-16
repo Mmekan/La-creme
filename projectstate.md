@@ -326,6 +326,29 @@ blanked rather than printed. See "Phase 1 — P-3" below.
 
 ---
 
+## Remote D1 — seeded 2026-11-16
+
+Applied to the **production** database `la-creme-orders`
+(`56b749e6-a899-4126-b93b-9c5b4a5a222a`), with the owner's approval:
+
+- `schema-bot.sql` — created `bot_state`, `audit_log`, `product_prices`
+  (all `CREATE ... IF NOT EXISTS`; `product_prices` did not exist before).
+- `seed-prices.sql` — 34 rows: soups 10, rice 12, catering 4,
+  finger-foods 8. Verified by `GROUP BY category` and by reading the four
+  protein rows back (labels are the trimmed `Chicken` / `Turkey` / `Beef` /
+  `Fish (Titus/Croaker)`, not the old "(per portion)" forms).
+
+**The site does not read these yet.** The deployed Worker is the pre-R3
+build: `GET /api/prices` returns **401**, so `loadPrices()` fails and the
+menu keeps using the baked-in constants. The prices go live when the
+Worker is redeployed with the R3 code — a separate step, not yet approved.
+
+Secrets: `TELEGRAM_OWNER_CHAT_IDS=5541964557` set. `TELEGRAM_INVOICE_CHAT_IDS`
+deliberately unset (company chat id not available; the owner id already
+receives invoices). `TELEGRAM_WEBHOOK_SECRET` still unset.
+
+---
+
 ## R3.4d — fail closed, and price from the description
 
 **2026-11-16.** Files: `worker/index.js`, `worker/invoice.js`, `config.js`,

@@ -1,7 +1,30 @@
 # TODO — La Crème
 
-**Updated:** 2026-11-16 (R3 complete and verified locally — R3.4c + R3.5; nothing deployed)
+**Updated:** 2026-11-16 (prices seeded to remote D1; Worker still the old build)
 Companion to `projectstate.md`.
+
+---
+
+## Outstanding — supplied by the owner, not yet applied
+
+- **`TELEGRAM_INVOICE_CHAT_IDS` — company chat id.** Not available yet, so
+  the secret is deliberately unset. The owner's id already receives every
+  invoice through `TELEGRAM_OWNER_CHAT_IDS`, so nothing is missing today.
+  Add the company chat here the moment it exists — and only a 1:1 chat or a
+  genuine staff group, never a group that should not see invoices.
+- **Do not use `9049885698` as an invoice recipient.** That is
+  `@Lacremebotuyo`'s own id; a bot cannot send a document to itself, so
+  every invoice send would fail. It belongs in no recipient list.
+- **`TELEGRAM_WEBHOOK_SECRET` is unset.** The bot webhook cannot be
+  registered until a secret is chosen and `setWebhook` is called.
+
+### Chat ids on file (2026-11-16)
+
+| Who | Id | Where it goes |
+|---|---|---|
+| Owner | `5541964557` | `TELEGRAM_OWNER_CHAT_IDS` — **set** 2026-11-16 |
+| `@Lacremebotuyo` (the bot) | `9049885698` | nowhere — a bot cannot receive from itself |
+| Company chat | — | `TELEGRAM_INVOICE_CHAT_IDS`, when available |
 
 ---
 
