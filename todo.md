@@ -1,6 +1,6 @@
 # TODO — La Crème
 
-**Updated:** 2026-11-11 (Phase 1 complete — P-1…P-5)
+**Updated:** 2026-11-16 (R3 complete and verified locally — R3.4c + R3.5; nothing deployed)
 Companion to `projectstate.md`.
 
 ---
@@ -209,6 +209,11 @@ that file is next touched.
       button is disabled during the send, the click is a no-op, and it
       re-enables afterwards. A real-device pass is still nice to have but no
       longer blocking.
+- [ ] **Approve the R3 deploy.** Nothing is seeded, deployed or pushed.
+  The sequence: apply `worker/seed-prices.sql` to the remote D1, set
+  `TELEGRAM_OWNER_CHAT_IDS` (owner tier for `/update-price`), deploy the
+  Worker, upload the site, then place one real order. **BUG-2 still
+  blocks sending any invoice** until the four business values land.
 - [ ] **Set `TELEGRAM_INVOICE_CHAT_IDS` before deploying INV-1.** Without it
       every order still logs and the site behaves normally, but **no invoice
       is delivered** — the only trace is a line in the Worker log. Needs the
@@ -393,11 +398,12 @@ next.** Each phase depends on the one before it.
 Spec: [docs/superpowers/specs/2026-11-06-invoice-workflow-design.md](docs/superpowers/specs/2026-11-06-invoice-workflow-design.md)
 Plan: [docs/superpowers/plans/2026-11-06-invoice-inv1.md](docs/superpowers/plans/2026-11-06-invoice-inv1.md)
 
-**Next step:** **R3.4 (b)** — the site's displayed menu still uses baked-in
-prices; `/api/prices` changes nothing on screen. Cake auto-pricing (R3.4 a)
-is done and server-side, so this is display only — plus the
-"price finalised on WhatsApp" copy, which must not be added until the site
-can tell a catalogue hit from a miss.
+**Status 2026-11-16: R3 is built and verified end-to-end against a local
+D1. Nothing is deployed, seeded remotely or pushed.** **Next step:** owner
+approval to apply `worker/seed-prices.sql` to the remote D1, set
+`TELEGRAM_OWNER_CHAT_IDS`, deploy the Worker and the site, then one real
+order. **BUG-2 stays open** — the four business values are still missing,
+so every invoice still stamps DO NOT SEND.
 
 - [x] **R3.1 — storage + `GET /api/prices`** (2026-11-13): registered above
       the `/api/` auth gate (public, 200 anonymous), `Cache-Control:
@@ -430,12 +436,19 @@ can tell a catalogue hit from a miss.
       found (P1–P5) — see `projectstate.md`. `test-live-prices` → 45/45.
       Still owns the multi-cake order case (one key cannot describe two
       cakes) and the "price finalised on WhatsApp" copy.
-- [ ] **R3.5 — verify**: no browser run of the overlay yet, and nothing
-      has been deployed or seeded. Needs a real page against a local D1
-      with `worker/seed-prices.sql` applied, then a walk through menu →
-      cart → checkout → WhatsApp text → invoice for one item per
-      category, including one key deliberately removed from the
-      catalogue to prove the pending path.
+- [x] **R3.4 (c) — server-side pricing for every category** (2026-11-16):
+      every menu line carries the catalogue key it was priced from (`k`),
+      and `handleCreateOrder` re-prices it from `product_prices` in one
+      chunked `IN (...)` query. The client's `p` is not trusted for a keyed
+      line; a missing key becomes `p: null` (pending).
+      `test-catalogue-price` 39/39, `test-live-prices` 56/56.
+- [x] **R3.5 — verified in a browser** (2026-11-16): local D1 with the
+      seed, `wrangler dev`, real page in Chrome. Owner `/update-price`
+      reached the menu; a deleted key showed no price and stored
+      `p: null`; a repeat cake priced, different inches and Wedding stayed
+      pending; a non-owner chat was refused; the endpoint-down case kept
+      the constants. Browser checks 21/21, endpoint-down 4/4. Harness
+      committed as `tools/serve-test.mjs` + `tools/test-browser.mjs`.
 
 Two things only the owner can settle (see "Do first"): the invoice layout
 review, and replacing the placeholder bank details (BUG-2).

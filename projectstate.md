@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-13 (R3.4b — the site's menu reads the catalogue; P1–P5 fixed; still not deployed)
-**HEAD:** `a3dd8ad` (Phase 0) · Phases 1–6 + R1–R2.6 committed · branch `invoice-revision` **pushed** to `origin` (2026-11-11); `main` is untouched and still behind
+**Updated:** 2026-11-16 (R3.4c — the Worker prices every menu line; R3.5 verified in a browser against a seeded local D1; still not deployed)
+**HEAD:** `0e55bb6` (R3.4c) + the docs commit on top · Phases 1–6 + R1–R3.5 committed · branch `invoice-revision` (9 commits ahead of `origin/invoice-revision`, not pushed); `main` is untouched and still behind
 
 This file is the "where am I" record. Update it after each task.
 `todo.md` is the "what comes next" list.
@@ -31,7 +31,8 @@ in that order. Phase plan text lives in the past session
 | **R3.1–R3.3** | `GET /api/prices` + seed · cake spec key · `/update-price` + `/prices` | ✅ done |
 | **R3.4a** | Repeat cake auto-prices from the catalogue (server-side) | ✅ done |
 | **R3.4b** | Site's displayed menu reads `/api/prices`; P1–P5 fixed | ✅ built, not deployed |
-| **R3.5** | Verify R3 in a browser against a seeded local D1 | 📋 next |
+| **R3.4c** | Worker prices every menu line from its catalogue key | ✅ done (`0e55bb6`) |
+| **R3.5** | Verify R3 in a browser against a seeded local D1 | ✅ done 2026-11-16 |
 
 The INV-2/INV-3 naming below is superseded by R1–R3 in the plan file
 [docs/superpowers/plans/2026-11-09-invoice-revision-plan.md](docs/superpowers/plans/2026-11-09-invoice-revision-plan.md).
@@ -324,6 +325,72 @@ blanked rather than printed. See "Phase 1 — P-3" below.
 
 ---
 
+## R3.5 — verified in a browser against a seeded local D1
+
+**2026-11-16.** Files: `tools/serve-test.mjs` (new), `tools/test-browser.mjs`
+(new). No product code changed.
+
+- **What was run.** A local D1 with all four schemas + `seed-prices.sql`
+  (34 rows), `wrangler dev --local` on 8792, the real site served on 8899
+  with `config.js`'s `ordersApi` overridden in the response only, and
+  Chrome driven by Playwright.
+- **Server checks (curl + D1 reads).** `/update-price afang:10L 70000`
+  from the owner chat → `/api/prices` returns 70000; the same command from
+  a non-owner chat and an unknown key both change nothing. A keyed order
+  sent with `p: 1 / 0 / 999999` was stored as `70000 / 24000 / 1000` and
+  `priced`; deleting `egusi:10L` from the catalogue made the next order
+  `p: null` and `pending`. A repeat cake spec priced at 45000; the same
+  cake with different inches and a Wedding cake both stayed pending.
+- **Browser checks (21/21).** The menu shows `10L (₦70,000)` and shows no
+  price for the deleted key; the cart, the dropdown, the WhatsApp text and
+  the `/api/orders` body all agree; every line in the body carries its
+  catalogue key.
+- **Endpoint down (4/4).** With `ordersApi` pointed at a dead port the
+  catalogue never applies, the chips keep their baked-in prices, and the
+  cart still prices from the constant while carrying the key.
+- **Re-running it.** Prerequisites are in the `tools/test-browser.mjs`
+  header. `--offline` runs the endpoint-down half against a second server
+  (`PORT=8898 WORKER=http://127.0.0.1:8799 node tools/serve-test.mjs`).
+  Playwright is resolved from `playwright` or the global
+  `@playwright/cli` bundle; run with `NODE_PATH="$(npm root -g)"`.
+
+---
+
+## R3.4c — the Worker prices every menu line
+
+**2026-11-16.** Files: `config.js`, `index.js`, `worker/index.js`,
+`worker/invoice.js`, `tools/test-catalogue-price.mjs`,
+`tools/test-live-prices.mjs`.
+
+- **The hole.** R3.4a re-priced cakes only. Soups, rice, finger foods and
+  proteins still carried the client's `p`, so a stale page or a tampered
+  body decided what an invoice charged — against spec §9.
+- **The key travels with the line.** `CART_SOURCES` now puts `key` on
+  every menu line (`i.id`, `soupKey(itemId, size)`, `riceKey(itemId, type,
+  style)`, `p.id`); `invoiceLines()` sends it as `k`. `soupKey`/`riceKey`
+  are the same helpers the menu lookup uses, so the displayed price and
+  the server's re-price cannot describe different rows.
+- **The Worker decides.** `priceLinesFromCatalogue()` collects the
+  distinct keys, reads them in one chunked `IN (...)` query (50 per
+  query, D1's bound-parameter cap), and replaces `p` on every keyed line.
+  A key the catalogue lacks becomes `p: null` — the P4 pending rule,
+  applied server-side. A D1 failure keeps what the client sent rather
+  than turning every order pending on a flaky read.
+- **Untouched lines.** Cake lines have no key (priced by `spec_key`,
+  R3.4a), and a page cached before this commit sends no keys at all.
+- **`validateLines()` keeps `k`** — printable ASCII, 120 chars — so the
+  key survives into `lines_json` and the invoice-version snapshot.
+- **Residual risk, accepted.** The key is client-supplied, so a tampered
+  client could name a cheaper *existing* key. It cannot invent a price,
+  and every order still lands in Telegram with its lines and total for
+  review. Closing it needs server-derived keys — a design change.
+- **Tests:** `test-catalogue-price` 39/39 (keyed lines priced, sent
+  prices ignored, missing key pending, mixed cake+menu, D1 failure,
+  malformed keys), `test-live-prices` 56/56 (key shapes match the seed,
+  `invoiceLines` carries the key).
+
+---
+
 ## R3.4b — the site's menu reads the catalogue (and P1–P5)
 
 **2026-11-13.** Files: `config.js`, `index.js`, `worker/bot.js`,
@@ -361,11 +428,10 @@ and the tests share one definition of what a line costs.
 carts, price changes after add, missing catalogue entries, failed
 requests, and menu/cart/checkout/WhatsApp/invoice agreeing on one price.
 
-> ⚠️ The Worker still trusts the `p` the client sends for soups, rice,
-> finger foods and proteins — only *cakes* are re-priced server-side
-> (R3.4a). Until every line carries its catalogue key, a tampered or
-> stale client can still set its own price. Not exploited by the site
-> itself, but it is the next hardening step after R3.5.
+> ✅ **Closed by R3.4c** (below): every menu line now carries its
+> catalogue key, and the Worker prices it from the catalogue. The client's
+> `p` is only a fallback for lines with no key — cake lines (priced by
+> `spec_key`) and pages cached before R3.4c.
 
 ---
 
@@ -695,13 +761,21 @@ human judgement of the invoice layout.
 - `1be2df2` (R2.5 badge), `fd19c7c` (R2.6 sweep). Working tree is clean
   apart from local scratch, now gitignored (`sample-*.pdf`,
   `verify-r1.mjs`, `.demo-dev.log`).
+- R3, six commits on `invoice-revision`, **not pushed**: `954e0cf`
+  (R3.1+R3.3), `34eadad` (R3.2), `e56a53a` (R3.4a), `0d91c73` (R3.4b),
+  `3a4b26f` (R3.4b docs), `0e55bb6` (R3.4c). R3.1 and R3.3 share a commit
+  because their worker hunks interleave. `index.js` is committed with CRLF
+  (`git hash-object -w --no-filters`) — staging it normally rewrites the
+  whole file to LF and produces a 5,000-line diff.
 
 ---
 
 ## Not verified / known gaps
 
-- WhatsApp message composition was not captured end-to-end (submitting opens
-  `wa.me`). Its soup lines come from the array verified in Phase 4.
+- ~~WhatsApp message composition was not captured end-to-end.~~ **Now
+  captured** by `tools/test-browser.mjs` (R3.5): the `wa.me` text is read
+  from the stubbed `window.open` and checked against the cart and the
+  `/api/orders` body.
 - The upload **send** itself was exercised against a stubbed `XMLHttpRequest`,
   not the real worker: Clear is confirmed disabled mid-flight, the click is a
   no-op, and it re-enables after `finish()`. No bytes were sent to R2.
@@ -717,9 +791,14 @@ human judgement of the invoice layout.
   pagination and text placement were checked numerically; the new letterhead
   (name on the order-number line) has only been measured, not looked at on
   screen. The spec expects the owner to want changes.
-- **`DEFAULT_SETTINGS` holds placeholder bank details** (`Demo Bank` /
-  `0123456789`) that print on every invoice. Replace before real use, or wire
-  the D1 `settings` table through (it is currently never read).
+- ~~`DEFAULT_SETTINGS` placeholders print on every invoice.~~ **Superseded
+  by P-3**: `loadSettings()` reads D1 `settings`, placeholders are blanked,
+  and the invoice stamps DO NOT SEND. **BUG-2 is still open** — the owner
+  has not yet supplied `company_phone`, `company_address`, `bank_name` or
+  `account_number`, so every invoice still stamps DO NOT SEND.
+- **Nothing is deployed.** The Worker, the seed and the site changes are
+  local only; no remote D1 was touched, nothing was pushed, and no real
+  Telegram delivery has been exercised (stub token throughout).
 - The PDF renderer's text widths are an approximation (three character
   classes), used only for right-alignment and truncation. Exact AFM metrics
   were not worth 200 numbers; a very wide glyph could sit a point or two off.

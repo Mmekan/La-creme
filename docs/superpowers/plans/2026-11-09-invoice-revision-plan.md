@@ -497,15 +497,50 @@ norm(cake.finish || '')
   "Price via WhatsApp" in the cart, the review, the chat text and the
   invoice. See the note above.
 
-### Task R3.5: Verify R3
+### Task R3.4c: Server-side pricing for every menu category — ✅ done 2026-11-16
 
-- [ ] `/update-price soups afang 32000` → `GET /api/prices` returns 32000 →
-  site renders ₦32,000 after reload.
-- [ ] Repeat cake with identical spec auto-prices from catalogue.
-- [ ] Same cake with different inches → pending, not auto-priced.
-- [ ] Custom/Wedding → always pending.
-- [ ] Unauthorised chat calling `/update-price` → refused, no write.
-- [ ] Prices endpoint down → site still shows baked-in values.
+> The hardening R3.4a left open. Only cakes were re-priced server-side;
+> soups, rice, finger foods and proteins still carried the client's `p`,
+> so a stale page or a tampered body could decide what an invoice charged
+> (spec §9 says it must not).
+>
+> Every cart line now carries the catalogue key it was priced from (`k`),
+> built by the same `soupKey()`/`riceKey()` helpers the menu lookup uses.
+> `handleCreateOrder` reads those keys in one chunked `IN (...)` query and
+> replaces `p` with the catalogue's price. A key the catalogue lacks
+> becomes `p: null` — the same pending rule the site shows (P4). A D1
+> failure keeps what the client sent rather than turning every order
+> pending on a flaky read. Lines with no key are untouched: cake lines are
+> priced by `spec_key` (R3.4a), and a cached page from before this commit
+> sends no keys at all.
+>
+> **Residual risk, accepted:** the key itself is client-supplied, so a
+> tampered client could name a cheaper *existing* key. It cannot invent a
+> price, and every order still lands in Telegram with its lines and total
+> for review. Closing that would need the server to derive the key from
+> structured fields, which is a design change, not a fix.
+>
+> Verified: `test-catalogue-price` 39/39, `test-live-prices` 56/56.
+
+### Task R3.5: Verify R3 — ✅ done 2026-11-16
+
+> Run against a local D1 seeded with `worker/seed-prices.sql` and a local
+> `wrangler dev`, then the real page in Chrome via Playwright. The harness
+> is committed: `tools/serve-test.mjs` + `tools/test-browser.mjs`
+> (`--offline` for the endpoint-down case); prerequisites are in the
+> script header.
+
+- [x] `/update-price afang:10L 70000` → `GET /api/prices` returns 70000 →
+  the site renders `10L (₦70,000)` after reload.
+- [x] Repeat cake with identical spec auto-prices from catalogue (45000).
+- [x] Same cake with different inches → pending, not auto-priced.
+- [x] Custom/Wedding → always pending.
+- [x] Unauthorised chat calling `/update-price` → refused, no write.
+- [x] Prices endpoint down → site still shows baked-in values.
+- [x] A key deleted from the catalogue → the site shows no price, the
+  order stores `p: null` and `price_status = 'pending'`.
+- [x] Browser: menu → cart → checkout → WhatsApp text → `/api/orders`
+  body all agree, and every line carries its key (21/21 checks).
 
 ---
 

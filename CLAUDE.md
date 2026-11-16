@@ -12,10 +12,16 @@ The one package.json-free exception is tooling: `tools/*.mjs` are plain Node scr
 
 ## Running / testing
 
-There is no build, lint, or test tooling in this repo. To work on it:
+There is no build or lint step. Tests are plain Node scripts in `tools/`, run directly:
+
+- `node tools/test-live-prices.mjs` — the price policy across menu/cart/checkout/invoice (loads the real `config.js` in a `vm`).
+- `node tools/test-catalogue-price.mjs` — server-side pricing in `handleCreateOrder` against a stubbed D1.
+- `node tools/test-spec-key.mjs`, `node tools/test-invoice.mjs`, `node tools/test-bot.mjs`.
+- `tools/test-browser.mjs` — the real page in Chrome via Playwright against a local `wrangler dev` + seeded D1; prerequisites are in the file header. `--offline` covers the catalogue-endpoint-down case. `tools/serve-test.mjs` serves the site with `ordersApi` pointed at the local Worker.
+
+To work on the site itself:
 
 - Serve the folder with any static server (e.g. via XAMPP, since it lives under `htdocs`) and open `index.html` / `gallery.html` in a browser. Opening the files directly with `file://` also works since there's no server-side logic.
-- Verify changes manually in the browser — there are no automated tests.
 - Deployment is just uploading the static files (Netlify Drop, GitHub Pages, or `vercel deploy` — see README.md for details).
 
 ## Architecture
