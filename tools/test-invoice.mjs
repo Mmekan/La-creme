@@ -102,5 +102,13 @@ eq('placeholders off in development without the flag',
 eq('placeholders on in development with the flag',
   allowPlaceholderSettings({ ENVIRONMENT: 'development', ALLOW_PLACEHOLDER_SETTINGS: 'true' }), true);
 
+// --- R3.4d: the cake marker survives validation, and only as a boolean ---
+eq('validateLines keeps the cake marker',
+  I.validateLines([{ d: 'Birthday cake', q: 1, p: null, cake: true }])[0].cake, true);
+eq('a non-boolean cake marker is dropped',
+  'cake' in I.validateLines([{ d: 'Birthday cake', q: 1, p: null, cake: 'yes' }])[0], false);
+eq('a menu line carries no cake marker',
+  'cake' in I.validateLines([{ d: 'Meat Pie', q: 1, p: 1000, k: 'meat-pie' }])[0], false);
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

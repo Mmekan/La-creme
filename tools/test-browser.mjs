@@ -14,10 +14,16 @@
           npx wrangler d1 execute la-creme-orders --local --file=schema-pricing.sql
           npx wrangler d1 execute la-creme-orders --local --file=schema-bot.sql
           npx wrangler d1 execute la-creme-orders --local --file=seed-prices.sql
-     2. The Worker:  npx wrangler dev --local --port 8792
-     3. The site:    node tools/serve-test.mjs
-     4. Playwright:  npm i -g playwright
+     2. One row removed, to exercise the pending path:
+          npx wrangler d1 execute la-creme-orders --local \
+            --command="DELETE FROM product_prices WHERE item_key='egusi:10L'"
+     3. The Worker:  npx wrangler dev --local --port 8792
+     4. The site:    node tools/serve-test.mjs
+     5. Playwright:  npm i -g playwright
         then run with  NODE_PATH="$(npm root -g)" node tools/test-browser.mjs
+
+   The test sets afang:10L to 70,000 through the owner webhook itself, so
+   only the DELETE above is manual state.
 
    --offline runs the other half: the site is served against a dead Worker
    port and must stay on its baked-in constants.
@@ -41,6 +47,7 @@ let chromium;
 
 const OFFLINE = process.argv.includes('--offline');
 const BASE = OFFLINE ? 'http://127.0.0.1:8898' : 'http://127.0.0.1:8899';
+const WORKER = 'http://127.0.0.1:8792';
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => {
@@ -55,6 +62,26 @@ const ok = (name, cond, detail = '') => {
 
 // The bundled build may not be downloaded; the system Chrome almost always
 // is. Try Chrome first, then fall back.
+// Put the catalogue into the state this test asserts, through the same
+// owner command the owner uses. The one row the seed cannot remove for us
+// (`egusi:10L`) is deleted by the setup step in the header.
+if (!OFFLINE) {
+  const tg = await fetch(`${WORKER}/api/tg/demosecret`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      // Unique per run: the Worker de-duplicates updates by id.
+      update_id: Date.now(),
+      message: { message_id: 1, from: { id: 999 }, chat: { id: 999 }, text: '/update-price afang:10L 70000' },
+    }),
+  });
+  if (tg.status !== 200) { console.error(`webhook returned ${tg.status}`); process.exit(1); }
+  const live = await (await fetch(`${WORKER}/api/prices`)).json();
+  eq('the owner price change reached the catalogue', live.prices['afang:10L'], 70000);
+  eq('the setup removed egusi:10L (see the header)',
+    Object.prototype.hasOwnProperty.call(live.prices, 'egusi:10L'), false);
+}
+
 const browser = await chromium.launch({ channel: 'chrome' }).catch(() => chromium.launch());
 const page = await browser.newPage();
 

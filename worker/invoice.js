@@ -55,12 +55,16 @@ export function validateLines(raw) {
     const p = l.p === null || l.p === undefined ? null : Number(l.p);
     if (p !== null && (!Number.isFinite(p) || p < 0)) continue;
     const line = { d, q, p: p === null ? null : Math.round(p) };
-    // R3.4c: the catalogue key the line was priced from, so the Worker can
-    // price it itself instead of trusting `p`. Printable ASCII only and
-    // length-capped — every key in the catalogue is of that form, and a
-    // control character or a 10 KB key has no business in a stored line.
+    // R3.4c: the catalogue key the site priced the line from. Recorded for
+    // audit only — the Worker prices from the description, never from this
+    // key or from `p`. Printable ASCII only and length-capped: every key
+    // in the catalogue is of that form, and a control character or a 10 KB
+    // key has no business in a stored line.
     const k = typeof l.k === 'string' ? l.k.trim().slice(0, 120) : '';
     if (k && /^[\x20-\x7E]{1,120}$/.test(k)) line.k = k;
+    // R3.4d: a cake line is marked by the site, because its price comes
+    // from the order's spec key rather than from its description.
+    if (l.cake === true) line.cake = true;
     out.push(line);
     if (out.length >= MAX_INVOICE_LINES) break;
   }

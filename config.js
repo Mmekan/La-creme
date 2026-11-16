@@ -158,6 +158,9 @@ function invoiceLines(lines){
       // Only a string key is sent; a cake line has none.
       const k = typeof l.k === 'string' ? l.k.trim().slice(0, 120) : '';
       if(k) out.k = k;
+      // A cake line is priced by the order's spec key, not by its
+      // description, so the Worker needs to be told which it is.
+      if(l.cake === true) out.cake = true;
       return out;
     });
 }

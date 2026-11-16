@@ -558,15 +558,16 @@ async function handleBotMessage(env, chatId, userId, text) {
 
 // Turns "2 = 4500" into a confirmation card. Nothing is written here — that
 // is the whole point of the extra step.
-// R3.4. Replaces the price of the cake line in `lines` when the catalogue
-// holds this exact spec. Returns null when there is nothing to price: no
+// R3.4. Prices the cake lines of a cake order from the catalogue row for
+// this exact spec. Returns null when there is nothing to price: no
 // catalogue row, a non-cake order, or a malformed spec key. Throws only on
 // a D1 failure, which the caller treats as "still unpriced".
 //
-// Only lines stored as p: null are touched — a price already on a line came
-// from somewhere a human meant, and must not be silently overwritten.
+// Only lines the site marked as cake lines are touched, and the caller has
+// already blanked every line's price — so a failed read leaves the cake
+// pending rather than charging whatever the request claimed.
 async function priceCakeFromCatalogue(env, lines, specKey) {
-  if (!Array.isArray(lines) || !lines.some(l => l && l.p === null)) return null;
+  if (!Array.isArray(lines) || !lines.some(l => l && l.cake)) return null;
 
   // The same key /edit-invoice's "Save price" writes, built by the one
   // helper that owns that format — not re-derived here.
@@ -580,7 +581,7 @@ async function priceCakeFromCatalogue(env, lines, specKey) {
   const price = row && Number(row.price);
   if (!Number.isFinite(price) || price <= 0) return null;
 
-  return lines.map(l => (l && l.p === null ? { ...l, p: price } : l));
+  return lines.map(l => (l && l.cake ? { ...l, p: price } : l));
 }
 
 // Prints the catalogue as "key  NGN x" so the owner can copy a key straight
@@ -589,40 +590,64 @@ async function priceCakeFromCatalogue(env, lines, specKey) {
 // message. MAX_CATALOGUE_LINES caps even that, since a category can grow too.
 const MAX_CATALOGUE_LINES = 40;
 
-// R3.4c. Every menu line carries the catalogue key the site priced it
-// from. The Worker re-reads those keys and replaces the client's price
-// with the catalogue's, so a stale page, a tampered body, or a price the
-// owner changed after the page loaded cannot decide what an invoice
-// charges. A key the catalogue does not hold becomes p: null — the same
-// pending rule the site shows (P4), because the key exists and the server
-// can see the catalogue lacks it. Lines with no key are left exactly as
-// they arrived: cake lines are priced by spec key (R3.4a), and a cached
-// page from before R3.4c sends no keys at all.
+// R3.4c/R3.4d. A menu line is priced from the catalogue row its own
+// description names — the same text the invoice prints — never from the
+// key or the price the request carried. A tampered body can therefore
+// only choose which catalogue item it is ordering, not what that item
+// costs: the description and the price always describe the same row.
 //
-// Returns null when no line carries a key. Throws only on a D1 failure,
-// which the caller treats as "keep what the client sent" rather than
-// turning every order pending on a flaky read.
-const PRICE_KEY_CHUNK = 50; // D1 caps bound parameters per query
+// Matching is by label words, and the label must be a PREFIX of the
+// description: "Afang Soup - 10L" matches "Afang Soup, 10L, Goat meat",
+// but "Beef" does not — the protein at the end of a soup line must never
+// price it as a portion of beef. The most specific row wins (the one with
+// the most label words), so "Afang Soup - 10L" beats a hypothetical
+// "Afang Soup". No match, or a tie between equally specific rows, leaves
+// the line pending — an ambiguous description is never guessed at.
+//
+// Cake rows are excluded: cake lines are priced by spec key above, and a
+// cake row's label is a whole invoice description, which would otherwise
+// be a very broad match.
+function labelWords(text) {
+  return String(text || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
 
-async function priceLinesFromCatalogue(env, lines) {
-  if (!Array.isArray(lines)) return null;
-  const keys = [...new Set(lines.map(l => l && l.k).filter(Boolean))];
-  if (!keys.length) return null;
-
-  const prices = new Map();
-  for (let i = 0; i < keys.length; i += PRICE_KEY_CHUNK) {
-    const chunk = keys.slice(i, i + PRICE_KEY_CHUNK);
-    const placeholders = chunk.map(() => '?').join(',');
-    const { results } = await env.DB.prepare(
-      `SELECT item_key, price FROM product_prices WHERE item_key IN (${placeholders})`
-    ).bind(...chunk).all();
-    for (const row of results || []) {
-      const price = Number(row.price);
-      if (Number.isFinite(price) && price > 0) prices.set(row.item_key, price);
+function priceForDescription(description, rows) {
+  const words = labelWords(description);
+  if (!words.length) return null;
+  let best = null;
+  let bestWords = 0;
+  let tied = false;
+  for (const row of rows) {
+    const label = labelWords(row.label);
+    if (!label.length || label.length > words.length) continue;
+    let fits = true;
+    for (let i = 0; i < label.length; i++) {
+      if (label[i] !== words[i]) { fits = false; break; }
+    }
+    if (!fits) continue;
+    const price = Number(row.price);
+    if (!Number.isFinite(price) || price <= 0) continue;
+    if (label.length > bestWords) {
+      best = price;
+      bestWords = label.length;
+      tied = false;
+    } else if (label.length === bestWords) {
+      tied = true;
     }
   }
+  return tied ? null : best;
+}
 
-  return lines.map(l => (l && l.k ? { ...l, p: prices.has(l.k) ? prices.get(l.k) : null } : l));
+// Returns the lines with every non-cake line priced from the catalogue or
+// left at p: null. Throws only on a D1 failure; the caller has already
+// blanked the prices, so a failure leaves the order pending.
+async function priceMenuLinesFromCatalogue(env, lines) {
+  if (!Array.isArray(lines) || !lines.length) return null;
+  const { results } = await env.DB.prepare(
+    "SELECT item_key, label, price FROM product_prices WHERE category IS NULL OR category <> 'cakes'"
+  ).all();
+  const rows = Array.isArray(results) ? results : [];
+  return lines.map(l => (l && !l.cake ? { ...l, p: priceForDescription(l.d, rows) } : l));
 }
 
 async function showCatalogue(env, chatId, category) {
@@ -1075,6 +1100,12 @@ async function handleCreateOrder(request, env, ctx) {
   // stored figure describe the same order (P-4).
   let lines = JSON.parse(linesJson);
 
+  // R3.4d. Fail closed: no line keeps a price the request carried. Every
+  // line is priced below from the catalogue, or stays pending. A D1
+  // failure therefore leaves the order pending instead of invoicing
+  // whatever the body claimed — the client is never a price source.
+  lines = lines.map(l => (l ? { ...l, p: null } : l));
+
   // Cake match key (spec §5.1): an opaque lookup key the site computes from
   // the cake's tiers/flavour/finish (R3.2), not something to derive twice
   // here. No key (custom, Wedding, or a multi-cake order) means unmatched.
@@ -1086,11 +1117,11 @@ async function handleCreateOrder(request, env, ctx) {
   const isCakeOrder = /cake/i.test(orderType);
 
   // R3.4: a cake whose exact spec is in the catalogue is priced here, from
-  // the server's own row — never from the client, which sends p: null. This
-  // is what makes a repeat order flow straight through instead of waiting
-  // for a human. A failed read leaves the line unpriced (pending), which is
-  // the safe direction: never invent a price.
-  let linesJsonStored = linesJson;
+  // the server's own row — never from the request. This is what makes a
+  // repeat order flow straight through instead of waiting for a human. A
+  // failed read leaves the line unpriced (pending), which is the safe
+  // direction: never invent a price.
+  let linesJsonStored = serializeLines(lines);
   if (specKey && isCakeOrder) {
     let priced = null;
     try {
@@ -1104,18 +1135,16 @@ async function handleCreateOrder(request, env, ctx) {
     }
   }
 
-  // R3.4c: every menu line carries its catalogue key, so the price is
-  // read here rather than taken from the body. This runs after the cake
-  // pass because a cake line has no key of its own (its price comes from
-  // spec_key) — the two rules never touch the same line.
-  let keyPriced = null;
+  // R3.4c: menu lines are priced from the catalogue row their description
+  // names. Runs after the cake pass; the two never touch the same line.
+  let menuPriced = null;
   try {
-    keyPriced = await priceLinesFromCatalogue(env, lines);
+    menuPriced = await priceMenuLinesFromCatalogue(env, lines);
   } catch (err) {
-    console.error('key price:', err && err.name ? err.name : 'error');
+    console.error('menu price:', err && err.name ? err.name : 'error');
   }
-  if (keyPriced) {
-    lines = keyPriced;
+  if (menuPriced) {
+    lines = menuPriced;
     linesJsonStored = serializeLines(lines);
   }
 

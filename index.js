@@ -863,7 +863,10 @@ function finalizeCakeOrder(){
     lines: invoiceLines(cakeCart.map(cake=>({
       d: `${cake.occasion} cake, ${cake.tiersLabel}, ${cake.flavor}`,
       q: 1,
-      p: null
+      p: null,
+      // Tells the Worker this line is priced by the order's spec key,
+      // not by its description (R3.4d).
+      cake: true
     }))),
     total: '',
     notes: '',
@@ -1932,7 +1935,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
       // p:0, which the invoice would print as a genuine free item.
       ...ffLines.map(l=>({ d: l.name, q: l.qty, k: l.key, p: l.priceLabel ? null : (l.unitPrice || null) })),
       ...catLines.map(l=>({ d: l.name, q: l.qty, k: l.key, p: l.priceLabel ? null : (l.unitPrice || null) })),
-      ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null }))
+      ...cakes.map(c=>({ d: `${c.occasion} cake, ${c.tiersLabel}, ${c.flavor}`, q: 1, p: null, cake: true }))
     ]),
     total: fmtNaira(total) + (cakes.length ? ' + cake price via WhatsApp' : ''),
     notes,

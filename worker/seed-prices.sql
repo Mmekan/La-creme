@@ -4,6 +4,10 @@
 -- INSERT OR IGNORE, so re-running never overwrites a price the owner has
 -- since changed with /update-price; delete a row to re-seed it.
 --
+-- Labels are matched word-for-word against the invoice line description
+-- (R3.4d), so a label must not carry words the site never prints. The
+-- unit ("per portion") lives in the menu, not in the label.
+--
 -- Key format (spec 5.3): '<item id>:<size>' for soups, '<item id>:<type>-
 -- <style>' for rice (rice price varies on two dimensions, so both are in
 -- the key), '<item id>' for proteins and finger foods.
@@ -32,10 +36,10 @@ INSERT OR IGNORE INTO product_prices (item_key, category, label, price, updated_
   ('coconut-rice:Tray-Standard',     'rice','Coconut Rice - Tray (Standard)',      20000, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   ('coconut-rice:Tray-Classic',      'rice','Coconut Rice - Tray (Classic)',       24000, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
 
-  ('chicken',               'catering',     'Chicken (per portion)',             2500, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('turkey',                'catering',     'Turkey (per portion)',              3000, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('beef',                  'catering',     'Beef (per portion)',                2200, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('fish',                  'catering',     'Fish (Titus/Croaker) (per portion)', 3200, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('chicken',               'catering',     'Chicken',             2500, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('turkey',                'catering',     'Turkey',              3000, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('beef',                  'catering',     'Beef',                2200, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('fish',                  'catering',     'Fish (Titus/Croaker)', 3200, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
 
   ('sc-plate-standard',     'finger-foods', 'Small Chops - Plate (Standard)',    2500, strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   ('sc-plate-classic',      'finger-foods', 'Small Chops - Plate (Classic)',     4000, strftime('%Y-%m-%dT%H:%M:%fZ','now')),

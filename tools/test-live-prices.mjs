@@ -198,6 +198,10 @@ const CATALOGUE = {
   eq('a non-string key is dropped', 'k' in out[3], false);
   eq('the price still travels as the fallback', out[0].p, 62000);
   eq('an overlong key is clipped to 120', g('invoiceLines')([{ d: 'x', q: 1, p: 1, k: 'k'.repeat(300) }])[0].k.length, 120);
+  eq('a cake line is marked for the Worker',
+    g('invoiceLines')([{ d: 'Birthday cake, 2 tiers, vanilla', q: 1, p: null, cake: true }])[0].cake, true);
+  eq('a menu line is not marked as a cake',
+    'cake' in g('invoiceLines')([{ d: 'Meat Pie', q: 1, p: 1000, k: 'meat-pie' }])[0], false);
 }
 
 console.log(`${pass} passed, ${fail} failed`);
