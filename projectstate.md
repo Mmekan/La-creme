@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-16 (D0 pre-deploy hardening in progress)
-**HEAD:** `fb3048d` · branch `invoice-revision`, **18 commits ahead of
+**Updated:** 2026-11-16 (D0 done; D1–D6 awaiting approval)
+**HEAD:** `02e1219` · branch `invoice-revision`, **19 commits ahead of
 `origin/invoice-revision`, unpushed** · `main` untouched and behind.
 
 This is the only live memory file. Update it after each task.
@@ -14,35 +14,40 @@ Phases 0–6 (the customer's 14-item change list) and R1–R3.5 (PDF invoice,
 pricing, bot) are **built and committed**. Nothing is deployed: the live
 Worker is the 2026-10-09 build and predates all of it.
 
-Work is now organised as a deployment plan, D0 → D6. **D0 is local; D1–D6
+Work is now organised as a deployment plan, D0 → D6. **D0 was local; D1–D6
 touch the remote and each needs explicit approval.**
 
 | Phase | Scope | Status |
 |---|---|---|
-| **D0** | Close the audit holes: auth fails closed, order rate limit, per-device gate | **in progress** |
-| D1 | Apply the three schema files to remote D1 | not started |
-| D2 | Telegram webhook secret + `setWebhook` | not started |
-| D3 | Deploy the Worker | not started |
-| D4 | Upload the static site | blocked — host unknown |
+| **D0** | Close the audit holes: auth fails closed, order rate limit, per-device gate | **done** (`fb3048d`, `02e1219`) |
+| D1 | Apply the three schema files to remote D1 | not started — needs approval |
+| D2 | `setWebhook` onto the existing secret | not started — needs approval |
+| D3 | Deploy the Worker | not started — needs approval |
+| D4 | Ship the static site | not started — it is Sonnet, git-connected (see below) |
 | D5 | One real end-to-end order | not started |
-| D6 | Push the branch | not started |
+| D6 | Push the branch; merging to `main` is what ships D4 | not started |
 
 ### D0 — what it covers
 
+- `fb3048d`: the per-device rate limit and the challenge gate below.
+- `02e1219`: invoice totals sum from the lines actually stored, plus
+  dead-code removal — the other half of the D0 audit fixes.
 - `0cd5955`: `isAuthed()` returns false when `SESSION_SECRET` is unset;
   `handleLogin()` returns 503 when `ADMIN_PASSWORD`/`SESSION_SECRET` are
   unset, before touching D1. Both used to fail **open**.
 - Order endpoint rate-limited per device: **5 requests / 20 minutes**,
-  counted in the existing `upload_rate` D1 table (Cloudflare's Rate Limiting
-  binding is pay-as-you-go only, so `[[ratelimits]]` is not available).
+  counted in the existing `upload_rate` D1 table (Cloudflare’s Rate
+  Limiting binding is pay-as-you-go only, so `[[ratelimits]]` is not
+  available).
 - Over the limit → `429 { requiresChallenge: true }` → full-screen
   scroll-locked gate on `index.html` with a WhatsApp fallback link, plus a
   Telegram alert on every refusal.
-- **Turnstile is scaffolded but cannot pass yet**: `TURNSTILE_SITE_KEY` is a
-  placeholder and no `TURNSTILE_SECRET` is set, so `verifyTurnstile()`
-  always returns false. A challenged visitor is stuck on the gate until a
-  real key pair exists — the WhatsApp link is their only way through.
-  **This is a D2/D3 prerequisite for D5.**
+- Turnstile is fully configured: widget `la-creme-order-protection`, site
+  key `0x4AAAAAAGG8LsW-btDaKwPe` at `index.js:1987`, and
+  `TURNSTILE_SECRET` set on the Worker. The key pair is real, but
+  **nothing can pass until D3 deploys the `verifyTurnstile()` code** —
+  the live Worker predates it, so a challenged visitor is stuck on the gate
+  and the WhatsApp link is their way through.
 
 ### D1 traps
 
@@ -54,6 +59,15 @@ a second run errors `duplicate column name`, which is expected and safe. A
 Verify after: `PRAGMA table_info(orders)` shows `price_status`, `spec_key`,
 `lines_json`, `revised`; `settings` and `invoice_versions` exist;
 `SELECT COUNT(*) FROM product_prices` = 34.
+
+### D4 — the site is Sonnet
+
+`https://www.lacremeconfectionery.com` 301s to the apex, which is served by
+**Sonnet** (confirmed from the live response headers), behind Cloudflare DNS.
+Sonnet is git-connected to this repo, so D4 is not an upload: **production is
+whatever Sonnet builds from `main`**, and `main` has none of this work. Pushing
+`invoice-revision` gives a Sonnet preview URL to test against; merging to `main`
+is what ships it, and that is a live deploy — same approval bar as D3.
 
 ### D6 landmine
 
@@ -77,10 +91,11 @@ bot, and `/api/prices` returns 401.
 `invoice_versions`, and the four `orders` columns — see D1.
 
 **Secrets set:** `ADMIN_PASSWORD`, `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_CHAT_IDS` (`5541964557`).
-**Unset:** `TELEGRAM_INVOICE_CHAT_IDS`, `TELEGRAM_WEBHOOK_SECRET`.
-`handleTelegramWebhook` returns 404 for every request while the webhook
-secret is unset, so the bot is entirely dead without it.
+`TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_CHAT_IDS` (`5541964557`),
+`TELEGRAM_WEBHOOK_SECRET`, `TURNSTILE_SECRET`.
+**Unset:** `TELEGRAM_INVOICE_CHAT_IDS` — the only secret still missing.
+The webhook verifies against the secret now, so D2 is only `setWebhook`.
+What is missing is deployment, not configuration — see D3.
 
 **Never use `9049885698` as an invoice recipient** — that is
 `@Lacremebotuyo` itself, and a bot cannot send a document to itself.
@@ -89,12 +104,10 @@ secret is unset, so the bot is entirely dead without it.
 
 ## Open questions for the user
 
-1. **Where is the static site hosted?** (Netlify Drop / GitHub Pages /
-   something else / local only) — blocks D4.
-2. **`TELEGRAM_INVOICE_CHAT_IDS`** — the owner's personal chat, or a
+1. **`TELEGRAM_INVOICE_CHAT_IDS`** — the owner's personal chat, or a
    company/rep chat id? Blocks D2.
-3. **Go-ahead for D1 and D3** — both write to the remote.
-4. **BUG-2's four values** — see below.
+2. **Go-ahead for D1 and D3** — both write to the remote.
+3. **BUG-2's four values** — see below.
 
 ---
 
