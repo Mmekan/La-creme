@@ -23,8 +23,9 @@ const MAX_FAILED_LOGINS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 // Orders land here before WhatsApp opens, so the endpoint is public. Each
 // accepted order writes two D1 rows and fans a PDF to every invoice chat, so
-// an unthrottled loop rings the owner's phone. Counted per device (an
-// X-Device-Id header), not per IP: a family on one home network, or a whole
+// an unthrottled loop rings the owner's phone. Counted per device (a
+// deviceId field in the order body, because the sendBeacon path cannot set
+// headers), not per IP: a family on one home network, or a whole
 // carrier behind one NAT, must not share a limit.
 const ORDER_LIMIT = 5;
 const ORDER_WINDOW_MS = 20 * 60 * 1000;
@@ -1476,7 +1477,14 @@ async function handleCreateOrder(request, env, ctx) {
     linesJsonStored = serializeLines(lines);
   }
 
-  const { total, unpriced, allPriced } = summariseLines(lines);
+  // The total must be summed from what was actually stored. serializeLines
+// drops lines to fit the byte ceiling, so the in-memory array can be longer
+// than linesJsonStored — summing it would quote a total for lines the
+// invoice does not contain.
+// shortcut: re-parsing costs one JSON round-trip; cheaper than threading a
+// dropped-count back out of serializeLines.
+lines = parseStoredLines({ lines_json: linesJsonStored });
+const { total, unpriced, allPriced } = summariseLines(lines);
   // Spec §7: one unpriced line and the whole invoice waits for a human.
   // An order with no lines at all counts as priced — there is nothing to
   // quote, and holding every empty order for review would be noise.

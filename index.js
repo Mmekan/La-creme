@@ -445,10 +445,6 @@ function addTierRow(tierNumber){
   if(nextRow) tierConfigEl.insertBefore(row, nextRow);
   else tierConfigEl.appendChild(row);
 }
-function removeTierRow(tierNumber){
-  const row = tierConfigEl.querySelector(`.tier-row[data-index="${tierNumber}"]`);
-  if(row) row.remove();
-}
 
 // The full set of tier numbers that should currently have a row —
 // one per checked preset (1/2/3/4/5+). Custom deliberately never

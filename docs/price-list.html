@@ -1,0 +1,421 @@
+<title>La'Crème Menu Prices</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* Layout: a single measured column, document-like, with a fixed change bar. */
+  :root {
+    --bg: #FBF7F3;
+    --surface: #FFFFFF;
+    --fg: #2B2027;
+    --muted: #6F5F67;
+    --rule: #E8DCD4;
+    --accent: #7C2D4C;
+    --accent-soft: #F6E7EC;
+    --gold: #A9762A;
+    --display: "Fraunces", Georgia, "Times New Roman", serif;
+    --body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #191316;
+      --surface: #221A1F;
+      --fg: #F3EAEE;
+      --muted: #B4A3AB;
+      --rule: #3A2C33;
+      --accent: #E7A0B8;
+      --accent-soft: #33222A;
+      --gold: #D6A75A;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #191316;
+    --surface: #221A1F;
+    --fg: #F3EAEE;
+    --muted: #B4A3AB;
+    --rule: #3A2C33;
+    --accent: #E7A0B8;
+    --accent-soft: #33222A;
+    --gold: #D6A75A;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.55;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding-block: 40px 24px; }
+
+  header { border-bottom: 2px solid var(--fg); padding-bottom: 20px; margin-bottom: 8px; }
+  .eyebrow {
+    font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600; margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600; font-size: clamp(1.9rem, 5vw, 2.6rem);
+    line-height: 1.1; margin: 0 0 10px; text-wrap: balance; letter-spacing: -0.01em;
+  }
+  .meta { color: var(--muted); font-size: 0.9rem; margin: 0; }
+  .intro { margin: 20px 0 0; max-width: 60ch; }
+  .intro strong { font-weight: 600; }
+
+  section { margin-top: 36px; }
+  h2 {
+    font-family: var(--display); font-weight: 600; font-size: 1.3rem;
+    margin: 0 0 4px; letter-spacing: -0.005em;
+  }
+  .note { color: var(--muted); font-size: 0.88rem; margin: 0 0 12px; max-width: 62ch; }
+
+  .cols, .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 120px 132px;
+    gap: 12px;
+    align-items: center;
+  }
+  .cols {
+    font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+    padding: 0 0 8px; border-bottom: 1px solid var(--rule);
+  }
+  .cols span:nth-child(2), .cols span:nth-child(3) { text-align: right; }
+  .row { padding: 11px 0; border-bottom: 1px solid var(--rule); }
+  .name { font-weight: 500; }
+  .variant { color: var(--muted); font-size: 0.85rem; }
+  .price {
+    text-align: right; font-variant-numeric: tabular-nums;
+    white-space: nowrap; font-weight: 500;
+  }
+  .new { display: flex; justify-content: flex-end; }
+  .new label { display: none; }
+  .new input {
+    width: 100%; max-width: 132px; text-align: right;
+    font: inherit; font-variant-numeric: tabular-nums;
+    color: var(--fg); background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 6px;
+    padding: 7px 9px;
+  }
+  .new input::placeholder { color: var(--muted); opacity: 0.7; }
+  .new input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+  .row.changed { background: var(--accent-soft); }
+  .row.changed .price { color: var(--muted); text-decoration: line-through; }
+
+  .cakes { border: 1px solid var(--rule); border-radius: 10px; padding: 18px 20px; background: var(--surface); }
+  .cakes p { margin: 0; max-width: 62ch; }
+  .cakes p + p { margin-top: 8px; color: var(--muted); font-size: 0.9rem; }
+
+  footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.85rem; }
+
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: var(--surface); border-top: 1px solid var(--rule);
+    padding: 12px max(16px, env(safe-area-inset-left, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  }
+  .bar-inner { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .count { font-size: 0.9rem; color: var(--muted); margin-right: auto; }
+  .count b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit; font-weight: 500; cursor: pointer;
+    border-radius: 8px; padding: 9px 16px; border: 1px solid transparent;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); color: var(--bg); }
+  .primary:disabled { opacity: 0.45; cursor: default; }
+  .ghost { background: transparent; color: var(--fg); border-color: var(--rule); }
+  .ghost:disabled { opacity: 0.45; cursor: default; }
+
+  @media (max-width: 560px) {
+    .cols { display: none; }
+    .row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; }
+    .new { grid-column: 1 / -1; justify-content: stretch; }
+    .new label {
+      display: block; font-size: 0.72rem; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted); font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .new { display: block; }
+    .new input { max-width: none; text-align: left; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">La'Crème Confectionery</p>
+    <h1>Menu price list</h1>
+    <p class="meta">Every price the website shows today · 16 November 2026</p>
+    <p class="intro">
+      Please check each price. Where a price should change, type the new one in the
+      <strong>New price</strong> column and leave the rest blank. Then press
+      <strong>Copy changes</strong> and send the message back — nothing on the site
+      changes until it is applied.
+    </p>
+  </header>
+
+  <div id="list"></div>
+
+  <section>
+    <h2>Cakes</h2>
+    <div class="cakes">
+      <p>Cakes are priced per order, not from this list. The website shows
+      “Price via WhatsApp” and the price is agreed in the chat.</p>
+      <p>Once a cake has been priced, the same cake — same tiers, flavour and
+      finish — can be given a standing price, so a repeat order is quoted
+      automatically.</p>
+    </div>
+  </section>
+
+  <footer>
+    Delivery is arranged on WhatsApp and is not priced on the site.
+    Prices on the website update within a minute of being applied.
+  </footer>
+</div>
+
+<div class="bar">
+  <div class="bar-inner">
+    <span class="count" id="count">No changes yet</span>
+    <button class="ghost" id="clear" type="button" disabled>Clear</button>
+    <button class="primary" id="copy" type="button" disabled>Copy changes</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var SECTIONS = [
+    {
+      title: 'Soups',
+      note: 'The choice of protein — goat meat, beef, fish or cow leg — does not change the price.',
+      rows: [
+        ['afang:5L', 'Afang Soup', '5 litres', 30000],
+        ['afang:10L', 'Afang Soup', '10 litres', 60000],
+        ['edikang-ikong:5L', 'Edikang Ikong', '5 litres', 30000],
+        ['edikang-ikong:10L', 'Edikang Ikong', '10 litres', 60000],
+        ['atama:5L', 'Atama Soup', '5 litres', 28000],
+        ['atama:10L', 'Atama Soup', '10 litres', 56000],
+        ['white-soup:5L', 'White Soup', '5 litres', 28000],
+        ['white-soup:10L', 'White Soup', '10 litres', 56000],
+        ['egusi:5L', 'Egusi Soup', '5 litres', 28000],
+        ['egusi:10L', 'Egusi Soup', '10 litres', 56000]
+      ]
+    },
+    {
+      title: 'Rice',
+      note: 'Lunchpack is a personal portion; a tray serves 10. Classic adds a side — salad or plantain.',
+      rows: [
+        ['jollof:Lunchpack-Standard', 'Jollof Rice', 'Lunchpack · Standard', 3500],
+        ['jollof:Lunchpack-Classic', 'Jollof Rice', 'Lunchpack · Classic', 4500],
+        ['jollof:Tray-Standard', 'Jollof Rice', 'Tray · Standard', 20000],
+        ['jollof:Tray-Classic', 'Jollof Rice', 'Tray · Classic', 24000],
+        ['fried-rice:Lunchpack-Standard', 'Fried Rice', 'Lunchpack · Standard', 3500],
+        ['fried-rice:Lunchpack-Classic', 'Fried Rice', 'Lunchpack · Classic', 4500],
+        ['fried-rice:Tray-Standard', 'Fried Rice', 'Tray · Standard', 20000],
+        ['fried-rice:Tray-Classic', 'Fried Rice', 'Tray · Classic', 24000],
+        ['coconut-rice:Lunchpack-Standard', 'Coconut Rice', 'Lunchpack · Standard', 3500],
+        ['coconut-rice:Lunchpack-Classic', 'Coconut Rice', 'Lunchpack · Classic', 4500],
+        ['coconut-rice:Tray-Standard', 'Coconut Rice', 'Tray · Standard', 20000],
+        ['coconut-rice:Tray-Classic', 'Coconut Rice', 'Tray · Classic', 24000]
+      ]
+    },
+    {
+      title: 'Proteins',
+      note: 'Sold per portion, alongside rice or on their own.',
+      rows: [
+        ['chicken', 'Chicken', 'per portion', 2500],
+        ['turkey', 'Turkey', 'per portion', 3000],
+        ['beef', 'Beef', 'per portion', 2200],
+        ['fish', 'Fish (Titus/Croaker)', 'per portion', 3200]
+      ]
+    },
+    {
+      title: 'Finger foods',
+      note: 'Small chops come as a plate or a tray, standard or classic.',
+      rows: [
+        ['sc-plate-standard', 'Small Chops', 'Plate · Standard', 2500],
+        ['sc-plate-classic', 'Small Chops', 'Plate · Classic', 4000],
+        ['sc-tray-standard', 'Small Chops', 'Tray · Standard', 13000],
+        ['sc-tray-classic', 'Small Chops', 'Tray · Classic', 25000],
+        ['cc-standard', 'Chin Chin', 'Standard pack', 2000],
+        ['cc-bucket', 'Chin Chin', 'Bucket', 15000],
+        ['meat-pie', 'Meat Pie', 'per piece', 1000],
+        ['cake-slices', 'Cake Slices', 'per slice', 3500]
+      ]
+    }
+  ];
+
+  var STORE = 'lacreme-price-draft-v1';
+  var naira = function (n) { return '₦' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+  var digits = function (s) { return String(s).replace(/[^0-9]/g, ''); };
+
+  var draft = {};
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+    if (saved && typeof saved === 'object') draft = saved;
+  } catch (e) { draft = {}; }
+
+  var list = document.getElementById('list');
+  var inputs = {};
+
+  SECTIONS.forEach(function (section) {
+    var el = document.createElement('section');
+    var h = document.createElement('h2');
+    h.textContent = section.title;
+    el.appendChild(h);
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.textContent = section.note;
+    el.appendChild(note);
+
+    var cols = document.createElement('div');
+    cols.className = 'cols';
+    cols.innerHTML = '<span>Item</span><span>Price</span><span>New price</span>';
+    el.appendChild(cols);
+
+    section.rows.forEach(function (row) {
+      var key = row[0], name = row[1], variant = row[2], price = row[3];
+      var line = document.createElement('div');
+      line.className = 'row';
+      line.dataset.key = key;
+
+      var item = document.createElement('div');
+      item.className = 'item';
+      var n = document.createElement('div');
+      n.className = 'name';
+      n.textContent = name;
+      var v = document.createElement('div');
+      v.className = 'variant';
+      v.textContent = variant;
+      item.appendChild(n);
+      item.appendChild(v);
+
+      var p = document.createElement('div');
+      p.className = 'price';
+      p.textContent = naira(price);
+
+      var wrap = document.createElement('div');
+      wrap.className = 'new';
+      var id = 'new-' + key.replace(/[^a-z0-9]/gi, '-');
+      var label = document.createElement('label');
+      label.setAttribute('for', id);
+      label.textContent = 'New price';
+      var input = document.createElement('input');
+      input.id = id;
+      input.type = 'text';
+      input.inputMode = 'numeric';
+      input.autocomplete = 'off';
+      input.placeholder = '—';
+      input.setAttribute('aria-label', 'New price for ' + name + ', ' + variant);
+      if (draft[key]) input.value = draft[key];
+      input.addEventListener('input', function () {
+        var value = digits(input.value);
+        if (value !== input.value) input.value = value;
+        if (value) draft[key] = value; else delete draft[key];
+        line.classList.toggle('changed', !!value);
+        save();
+        refresh();
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      inputs[key] = { input: input, line: line, name: name, variant: variant, price: price };
+
+      line.appendChild(item);
+      line.appendChild(p);
+      line.appendChild(wrap);
+      el.appendChild(line);
+    });
+
+    list.appendChild(el);
+  });
+
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(draft)); } catch (e) { /* private window */ }
+  }
+
+  var countEl = document.getElementById('count');
+  var copyBtn = document.getElementById('copy');
+  var clearBtn = document.getElementById('clear');
+
+  function changes() {
+    return Object.keys(draft).filter(function (k) {
+      return inputs[k] && Number(draft[k]) !== inputs[k].price;
+    });
+  }
+
+  function refresh() {
+    var n = changes().length;
+    countEl.innerHTML = n ? '<b>' + n + '</b> ' + (n === 1 ? 'change' : 'changes') : 'No changes yet';
+    copyBtn.disabled = n === 0;
+    clearBtn.disabled = Object.keys(draft).length === 0;
+    copyBtn.textContent = 'Copy changes';
+  }
+
+  function message() {
+    var lines = ["La'Crème price changes — 16 Nov 2026"];
+    SECTIONS.forEach(function (section) {
+      var rows = section.rows.filter(function (r) {
+        return draft[r[0]] && Number(draft[r[0]]) !== r[3];
+      });
+      if (!rows.length) return;
+      lines.push('');
+      lines.push(section.title);
+      rows.forEach(function (r) {
+        lines.push(r[1] + ' — ' + r[2] + ': ' + naira(r[3]) + ' → ' + naira(Number(draft[r[0]])));
+      });
+    });
+    return lines.join('\n');
+  }
+
+  copyBtn.addEventListener('click', function () {
+    var text = message();
+    var done = function () {
+      copyBtn.textContent = 'Copied';
+      setTimeout(function () { copyBtn.textContent = 'Copy changes'; }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { copyBtn.textContent = 'Select the text below'; }
+      document.body.removeChild(ta);
+    }
+  });
+
+  var clearArmed = false;
+  clearBtn.addEventListener('click', function () {
+    if (!clearArmed) {
+      clearArmed = true;
+      clearBtn.textContent = 'Click again to clear';
+      setTimeout(function () { clearArmed = false; clearBtn.textContent = 'Clear'; }, 3000);
+      return;
+    }
+    clearArmed = false;
+    clearBtn.textContent = 'Clear';
+    draft = {};
+    Object.keys(inputs).forEach(function (k) {
+      inputs[k].input.value = '';
+      inputs[k].line.classList.remove('changed');
+    });
+    save();
+    refresh();
+  });
+
+  refresh();
+})();
+</script>

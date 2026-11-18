@@ -78,13 +78,13 @@ Masonry-style grid with responsive column count (`columnsForWidth`, `layoutBlock
   development defaults only; `resolveSettings()` blanks any value that is
   empty or still a placeholder and reports it in `missing`, and the renderer
   stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER`.
-- **Every status report must name BUG-2** (`todo.md`): the real bank name,
+- **Every status report must name BUG-2** (`projectstate.md`): the real bank name,
   account number, phone and address are still missing from D1, so every
   invoice stamps DO NOT SEND. The owner will supply them when ready — remind
   her in each report until they land.
-- Plans and specs for ongoing invoice work live in `docs/superpowers/plans/`
-  and `docs/superpowers/specs/`; `projectstate.md` + `todo.md` are the live
-  memory — update all three after a task, not just the code.
+- `projectstate.md` is the single live memory file — update it after a task,
+  not just the code. `docs/superpowers/` holds only the current invoice
+  revision plan and design; delete a doc there once its work has shipped.
 
 ## Worker parity check (do this before touching worker/invoice.js or worker/bot.js)
 
