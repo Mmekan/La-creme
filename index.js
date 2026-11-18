@@ -1988,7 +1988,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
    Turnstile is loaded lazily, only when the gate is first shown, so
    the main page still ships nothing from Cloudflare's script host.
    ============================================================ */
-const TURNSTILE_SITE_KEY = '0x4AAAAAAGG8LsW-btDaKwPe'; // placeholder — see worker/README.md
+const TURNSTILE_SITE_KEY = '0x4AAAAAAGG8LsW-btDaKwPe'; // la-creme-order-protection
 let lastOrderMessage = '';
 
 function ensureTurnstile(){
