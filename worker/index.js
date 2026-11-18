@@ -23,10 +23,14 @@ const MAX_FAILED_LOGINS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 // Orders land here before WhatsApp opens, so the endpoint is public. Each
 // accepted order writes two D1 rows and fans a PDF to every invoice chat, so
-// an unthrottled loop rings the owner's phone. 19 leaves room for a genuine
-// busy day while still stopping a flood.
-const MAX_ORDERS_PER_HOUR = 19;
-const ORDER_RATE_HOUR_MS = 60 * 60 * 1000;
+// an unthrottled loop rings the owner's phone. Counted per device (an
+// X-Device-Id header), not per IP: a family on one home network, or a whole
+// carrier behind one NAT, must not share a limit.
+const ORDER_LIMIT = 5;
+const ORDER_WINDOW_MS = 20 * 60 * 1000;
+// Every order-alert names the offender, so a real person's flood is
+// distinguishable from a script's at a glance.
+const MAX_DEVICE_ID = 64;
 const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Cancelled'];
 const ORDER_NO_RE = /^\d{8}-\d{9}-[A-Z]{1,3}$/;
 
@@ -71,37 +75,57 @@ function slugifyCategory(cat) {
 // Returns true if this IP has exhausted its allowance. Inserts a
 // timestamped row when allowed, so the *next* call sees it.
 //
-// `scope` namespaces the row so separate limits share one table without
-// sharing a counter: uploads keep the bare IP, orders prefix it. Reads are
-// exact-match on `ip`, so a prefix can never be counted as a bare one.
-async function rateLimited(ip, env, scope, maxPerWindow, windowMs) {
-  const key = scope ? `${scope}:${ip}` : ip;
+// `key` is the whole counter name, not an IP: the column is `ip` only
+// because it predates the order limiter. `countOnly` reports how many calls
+// the key has made in the window without spending one, which is what the
+// order path needs to decide "allowed" vs "challenge" vs "refused".
+async function rateLimited(key, env, maxPerWindow, windowMs, countOnly) {
   const now = Date.now();
   await env.DB.prepare('DELETE FROM upload_rate WHERE ts < ?').bind(now - RATE_DAY_MS).run();
 
   const hour = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
   ).bind(key, now - windowMs).all();
-  if (hour.results[0].n >= maxPerWindow) return true;
-
-  // The distinct-hours-per-day rule is an upload rule (spec 6.4). An order
-  // limiter has no daily dimension, so it skips it rather than silently
-  // inheriting a cap nobody chose.
-  if (!scope) {
-    // ts / 3600000 is integer division in SQLite, so this counts distinct
-    // hour-buckets rather than hours — matches "20 distinct hours per day".
-    const day = await env.DB.prepare(
-      'SELECT COUNT(DISTINCT (ts / 3600000)) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
-    ).bind(key, now - RATE_DAY_MS).all();
-    if (day.results[0].n >= RATE_MAX_HOURS_PER_DAY) return true;
-  }
+  const used = Number((hour.results && hour.results[0] && hour.results[0].n) || 0);
+  if (countOnly) return used;
+  if (used >= maxPerWindow) return true;
 
   await env.DB.prepare('INSERT INTO upload_rate (ip, ts) VALUES (?, ?)').bind(key, now).run();
   return false;
 }
 
 async function uploadRateLimited(ip, env) {
-  return rateLimited(ip, env, '', RATE_MAX_PER_WINDOW, RATE_WINDOW_MS);
+  const now = Date.now();
+  // The distinct-hours-per-day rule stays an upload rule (spec 6.4) and is
+  // checked exactly where it was, so uploads behave identically.
+  const day = await env.DB.prepare(
+    'SELECT COUNT(DISTINCT (ts / 3600000)) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
+  ).bind(ip, now - RATE_DAY_MS).all();
+  if (day.results[0].n >= RATE_MAX_HOURS_PER_DAY) return true;
+  return rateLimited(ip, env, RATE_MAX_PER_WINDOW, RATE_WINDOW_MS, false);
+}
+
+// Cloudflare Turnstile, server-side. Returns true only on an explicit
+// success: a network failure or a missing secret is a refusal, because the
+// alternative is letting an unsolved challenge through.
+async function verifyTurnstile(env, token, ip) {
+  if (!env.TURNSTILE_SECRET) return false;
+  if (!token) return false;
+  try {
+    const form = new FormData();
+    form.append('secret', env.TURNSTILE_SECRET);
+    form.append('response', token);
+    if (ip && ip !== 'unknown') form.append('remoteip', ip);
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST', body: form,
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data && data.success === true;
+  } catch (err) {
+    console.error('turnstile:', err && err.name ? err.name : 'error');
+    return false;
+  }
 }
 
 // Creates the batch row on the file's first arrival, otherwise returns
@@ -1107,20 +1131,84 @@ async function handleLogin(request, env) {
   return json({ token: await makeToken(env), expiresInMs: SESSION_TTL_MS });
 }
 
-async function handleCreateOrder(request, env, ctx) {
-  // Before parsing: a flood costs a D1 round-trip, not a JSON parse and a
-  // PDF render. Fails closed - a D1 error here refuses the order rather than
-  // letting an unthrottled request through.
-  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  if (await rateLimited(ip, env, 'order', MAX_ORDERS_PER_HOUR, ORDER_RATE_HOUR_MS)) {
-    return json({ error: 'Too many orders right now. Please send your order on WhatsApp.' }, 429);
-  }
+// The owner's cue that someone is hammering the order endpoint. Sent to the
+// upload-alert chat (TELEGRAM_CHAT_ID), which is where operational noise
+// already goes, not the invoice list. Plain ASCII and no emoji, per the
+// parity rule in CLAUDE.md. Values come from request headers and the order
+// body, so every field is clipped before it lands in a message.
+function alertOrderRate(env, { ip, device, used, order }) {
+  const preview = [
+    `Name: ${clip(order && order.name, 60) || '(none)'}`,
+    `Type: ${clip(order && order.orderType, 40) || '(none)'}`,
+    `Order no: ${clip(order && order.orderNumber, 24)}`,
+  ].join('\n');
+  return sendTelegram(env, [
+    'RATE LIMIT - order endpoint',
+    `IP: ${clip(ip, 45)}`,
+    `Device: ${device ? clip(device, MAX_DEVICE_ID) : '(none sent)'}`,
+    `Requests this window: ${used} of ${ORDER_LIMIT} (${ORDER_WINDOW_MS / 60000} min)`,
+    '',
+    preview,
+    '',
+    'The visitor was offered a challenge. Their order is still in their browser.',
+  ].join('\n'));
+}
 
+async function handleCreateOrder(request, env, ctx) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   let o;
   try { o = JSON.parse(raw); } catch (e) { return json({ error: 'Bad request' }, 400); }
+ // The client sends its id in the body (config.js logOrder), because a
+ // sendBeacon cannot set headers. Missing or junk ids fall back to the IP.
+ const device = String((o && o.deviceId) || '').trim().slice(0, MAX_DEVICE_ID);
   if (!o || !ORDER_NO_RE.test(String(o.orderNumber || ''))) return json({ error: 'Bad order number' }, 400);
+
+  // Per-device limit, checked before any pricing or D1 write. A resend may
+  // carry a Turnstile token; a missing or unusable device id falls back to
+  // the IP so a script that simply omits the header is still counted.
+  //
+  // Fails closed: if the counter cannot be read the order is refused rather
+  // than let through unthrottled.
+   const key = `order:${device || ip}`;
+  let used;
+  try {
+    used = await rateLimited(key, env, ORDER_LIMIT, ORDER_WINDOW_MS, true);
+  } catch (err) {
+    console.error('order rate:', err && err.name ? err.name : 'error');
+    return json({ error: 'Could not accept the order right now. Please send it on WhatsApp.' }, 503);
+  }
+
+  if (used >= ORDER_LIMIT) {
+    // Over the limit, a solved challenge buys this one order. The alert fires
+    // on every refusal, challenged or not, so the owner sees a flood even if
+    // the spammer is never blocked.
+    const passed = await verifyTurnstile(env, o.turnstileToken, ip);
+    if (!passed) {
+      ctx.waitUntil(alertOrderRate(env, { ip, device, used, order: o }));
+      return json({
+        error: 'rate_limited',
+        requiresChallenge: true,
+        message: "We've received many order requests from you. Please complete the check to continue.",
+      }, 429);
+    }
+    // A passed challenge is spent like a normal order, so the counter keeps
+    // moving and a solver cannot loop it for free.
+    try {
+      await rateLimited(key, env, ORDER_LIMIT, ORDER_WINDOW_MS, false);
+    } catch (err) {
+      console.error('order rate spend:', err && err.name ? err.name : 'error');
+    }
+  } else {
+    try {
+      await rateLimited(key, env, ORDER_LIMIT, ORDER_WINDOW_MS, false);
+    } catch (err) {
+      // Spending failed after the read succeeded: the order is within its
+      // allowance, so proceed rather than drop a genuine customer's order.
+      console.error('order rate spend:', err && err.name ? err.name : 'error');
+    }
+  }
 
   // Structured lines for the invoice. The items text blob above is still
   // written and still what the admin list and printReceipt render from;

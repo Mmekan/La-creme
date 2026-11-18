@@ -377,15 +377,15 @@ const nothing = { waitUntil() {} };
 }
 
 {
-  // 19 in the window is the ceiling, per the owner's choice.
-  const env = countedEnv(19);
+// 5 per device per 20 minutes is the ceiling, per the owner's choice.
+const env = countedEnv(5);
   const r = await mod.default.fetch(
     req('/api/orders', { method: 'POST', body: body({ lines: [] }) }), env, nothing);
-  eq('the 20th order in an hour is refused', r.status, 429);
-  const spent = countedEnv(18);
+  eq('the 6th order in the window is refused', r.status, 429);
+const spent = countedEnv(4);
   const ok = await mod.default.fetch(
     req('/api/orders', { method: 'POST', body: body({ lines: [] }) }), spent, nothing);
-  eq('order 19 is still accepted', ok.status, 200);
+  eq('order 5 is still accepted', ok.status, 200);
 }
 
 console.log(`${pass} passed, ${fail} failed`);

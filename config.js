@@ -118,22 +118,51 @@ function generateOrderNumber(name){
   return `${date}-${time}-${orderInitials(name)}`;
 }
 
-function logOrder(order){
+// Per-device id, so one visitor's orders are counted together rather than
+// every visitor sharing an IP or a carrier's NAT. Kept in localStorage so it
+// survives a reload. A private window or a script that clears storage gets a
+// fresh id each time — the IP half of the limiter's key (rateLimited in
+// worker/index.js) is what covers that.
+function deviceId(){
+  let id = null;
+  try{ id = localStorage.getItem('lcDeviceId'); }catch(e){ /* storage blocked */ }
+  if(!id){
+    id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+      : 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    try{ localStorage.setItem('lcDeviceId', id); }catch(e){ /* storage blocked */ }
+  }
+  return id;
+}
+
+// onResult(err, info) is how a page learns the order landed, was refused for
+// being too frequent, or never reached the server at all.
+//
+// A rate-limited order has to be sent with fetch, not sendBeacon: the page
+// must read the 429 to challenge the visitor, and only fetch gives it a
+// response. The order object is kept by the caller, so the same order can be
+// resent after the check is solved instead of rebuilding a cleared cart.
+function logOrder(order, onResult){
   if(!CONFIG.ordersApi) return;
   const endpoint = CONFIG.ordersApi.replace(/\/+$/, '') + '/api/orders';
   // text/plain keeps this a "simple" request, so the browser doesn't
   // need a CORS preflight before the order is sent.
-  const body = JSON.stringify(order);
+  // The device id rides in the body, not a header: sendBeacon below cannot
+ // set headers, and a beacon-sent order must be counted against the device
+ // just like a fetched one. The Worker reads order.deviceId.
+ const body = JSON.stringify({ ...order, deviceId: deviceId() });
+  const report = (err, info)=>{ if(typeof onResult === 'function') onResult(err || null, info || {}); };
   try{
     if(navigator.sendBeacon){
       const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
       if(navigator.sendBeacon(endpoint, blob)) return;
     }
     fetch(endpoint, {
-      method: 'POST', mode: 'no-cors', keepalive: true,
+      method: 'POST', keepalive: true,
       headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
       body
-    }).catch(()=>{});
+    }).then((res)=> report(res.ok ? null : new Error('refused'),
+        res.status === 429 ? { limited: true } : { status: res.status }))
+      .catch((err)=> report(err));
   }catch(e){ /* logging must never break checkout */ }
 }
 

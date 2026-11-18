@@ -794,6 +794,26 @@ section{ padding: 118px 0; position: relative; scroll-margin-top: calc(84px + va
   opacity:0; pointer-events:none; transition: opacity .3s ease;
 }
 .checkout-modal.open{ opacity:1; pointer-events:auto; }
+
+/* Order challenge gate — the only overlay with no dismiss control, so it
+   needs its own lock: a full-screen fixed panel whose card scrolls if the
+   Turnstile widget plus the text is taller than a small phone. */
+.order-gate{
+  position: fixed; inset:0; z-index: 900;
+  display:flex; align-items:center; justify-content:center;
+  padding: 24px; background: rgba(24,19,15,0.92);
+  overscroll-behavior: contain;
+}
+.order-gate-card{
+  background: var(--ivory); border-radius: 4px;
+  max-width: 520px; width:100%; max-height: 88vh; overflow-y:auto;
+  padding: 32px 28px; text-align: center;
+}
+.order-gate-card h2{ font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; margin: 0 0 12px; }
+.order-gate-card p{ color: var(--ink); font-size: .95rem; line-height: 1.6; margin: 0 0 16px; }
+#orderGateWidget{ display:flex; justify-content:center; min-height: 65px; margin: 8px 0 16px; }
+.order-gate-note{ font-size: .85rem; color: var(--text-muted); }
+.order-gate-wa{ display:inline-block; margin-top: 8px; font-size: .9rem; color: var(--wine); text-decoration: underline; }
 .checkout-backdrop{ position:absolute; inset:0; background: rgba(24,19,15,0.85); }
 .checkout-panel{
   position: relative; background: var(--ivory); border-radius: 4px;

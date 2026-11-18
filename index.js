@@ -1917,7 +1917,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     ];
   });
 
-  logOrder({
+  const orderBody = {
     orderNumber: orderNo,
     orderType: [cakes.length ? 'Cake' : '', ffLines.length ? 'Finger Foods' : '', hasCat ? 'Catering' : ''].filter(Boolean).join(' + '),
     name, phone,
@@ -1942,6 +1942,18 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
     // Same one-cake-only rule as the cake-only checkout: a mixed order's
     // spec_key must describe the whole order, and it can't.
     specKey: cakes.length === 1 ? cakeSpecKey(cakes[0]) : null
+  };
+  lastOrderMessage = message;
+
+  // The cart is cleared below whether or not the order reaches the server.
+  // Keeping the order object is what lets the gate resend it unchanged, and
+  // keeping the message is what gives WhatsApp open and the gate's fallback
+  // link the same text.
+  logOrder(orderBody, (err, info)=>{
+    if(!err) return;
+    if(info && info.limited){ showOrderGate(orderBody); return; }
+    // Any other failure is the old behaviour: the order still reached
+    // WhatsApp and a toast already told the visitor their order number.
   });
 
   const opened = openWhatsApp(message);
@@ -1958,6 +1970,98 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
 // create a duplicate order. Drives the real widgets so their chips and
 // steppers reset along with the underlying state. Cakes clear themselves
 // in finalizeCakeOrder().
+/* ============================================================
+   ORDER CHALLENGE GATE — shown when the order API refuses an order
+   for being too frequent (see the 429 branch in the checkout submit
+   handler). Full-screen, scroll locked, no dismiss control: the only
+   way out is to solve the check or reload. The order object is held
+   here so a solved check resends the same order rather than asking a
+   visitor to rebuild a cart that has already been cleared.
+
+   Turnstile is loaded lazily, only when the gate is first shown, so
+   the main page still ships nothing from Cloudflare's script host.
+   ============================================================ */
+const TURNSTILE_SITE_KEY = '0x4AAAAAAAAAAAAAAAAAAAAAA'; // placeholder — see worker/README.md
+let pendingOrder = null;
+let lastOrderMessage = '';
+
+function ensureTurnstile(){
+  if(document.getElementById('cf-turnstile-script')) return;
+  const s = document.createElement('script');
+  s.id = 'cf-turnstile-script';
+  s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+  s.async = true; s.defer = true;
+  document.head.appendChild(s);
+}
+
+function showOrderGate(order){
+  pendingOrder = order;
+  let gate = document.getElementById('orderGate');
+  if(!gate){
+    gate = document.createElement('div');
+    gate.id = 'orderGate';
+    gate.className = 'order-gate';
+    gate.setAttribute('role', 'dialog');
+    gate.setAttribute('aria-modal', 'true');
+    gate.setAttribute('aria-labelledby', 'orderGateTitle');
+    gate.innerHTML = `
+      <div class="order-gate-card" role="document">
+        <h2 id="orderGateTitle">One quick check</h2>
+        <p>We have received many order requests from you at the moment, and our
+          customer service has added you to a queue. Please solve the check below
+          to send this order, order no. <strong id="orderGateNo"></strong>.</p>
+        <div class="cf-turnstile" id="orderGateWidget"></div>
+        <p class="order-gate-note" id="orderGateNote">Your order is ready to send — nothing is lost.</p>
+        <a class="order-gate-wa" id="orderGateWa" target="_blank" rel="noopener">Or send it yourself on WhatsApp</a>
+      </div>`;
+    document.body.appendChild(gate);
+  }
+  document.getElementById('orderGateNo').textContent = order.orderNumber || '';
+  document.getElementById('orderGateNote').textContent = 'Your order is ready to send — nothing is lost.';
+  document.getElementById('orderGateWa').href = waLink(lastOrderMessage);
+  lockBodyScroll('orderGate');
+  ensureTurnstile();
+
+  const widget = document.getElementById('orderGateWidget');
+  widget.innerHTML = '';
+  let waited = 0;
+  const mount = ()=>{
+    if(!window.turnstile || typeof window.turnstile.render !== 'function'){
+      waited += 200;
+      if(waited > 10000){
+        widget.innerHTML = '<p class="order-gate-note">The check did not load. Use the WhatsApp link below.</p>';
+        return;
+      }
+      setTimeout(mount, 200);
+      return;
+    }
+    window.turnstile.render(widget, {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token)=>{ resendOrder(order, token); },
+      'error-callback': ()=>{ document.getElementById('orderGateNote').textContent = 'That check failed. Please try again.'; },
+    });
+  };
+  mount();
+}
+
+function resendOrder(order, token){
+  document.getElementById('orderGateNote').textContent = 'Sending your order…';
+  logOrder({ ...order, turnstileToken: token }, (err, info)=>{
+    // A second refusal means the challenge was not accepted; leave the gate
+    // up so the visitor can try again rather than pretending it worked.
+    if(err){
+      document.getElementById('orderGateNote').textContent =
+        info && info.limited ? 'The check did not clear. Please solve it again.' : 'Could not send. Try the WhatsApp link below.';
+      if(window.turnstile) window.turnstile.reset(document.getElementById('orderGateWidget'));
+      return;
+    }
+    pendingOrder = null;
+    document.getElementById('orderGate').remove();
+    unlockBodyScroll('orderGate');
+    showToast(`Order no. ${order.orderNumber} sent.`);
+  });
+}
+
 function clearFingerFoodAndCateringCart(){
   ALL_FF_ITEMS.forEach(item=>{ ffState[item.id] = 0; });
   Object.keys(ffFlavours).forEach(id=>{
