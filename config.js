@@ -152,7 +152,10 @@ function logOrder(order, onResult){
  const body = JSON.stringify({ ...order, deviceId: deviceId() });
   const report = (err, info)=>{ if(typeof onResult === 'function') onResult(err || null, info || {}); };
   try{
-    if(navigator.sendBeacon){
+    // sendBeacon is fire-and-forget: it reports nothing back, so it is only
+    // used when the caller does not need an answer. A caller that passes
+    // onResult (the challenge gate) needs the 429, so it always uses fetch.
+    if(!onResult && navigator.sendBeacon){
       const blob = new Blob([body], { type: 'text/plain;charset=UTF-8' });
       if(navigator.sendBeacon(endpoint, blob)) return;
     }

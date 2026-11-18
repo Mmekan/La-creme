@@ -850,7 +850,7 @@ function finalizeCakeOrder(){
     `${name}, ${phone}`,
   ]);
 
-  logOrder({
+  const cakeOrderBody = {
     orderNumber: orderNo,
     orderType: 'Cake',
     name, phone,
@@ -873,6 +873,13 @@ function finalizeCakeOrder(){
     // Only when the order is a single cake: spec_key is one key per order,
     // and a multi-cake order has no single configuration to match.
     specKey: cakeCart.length === 1 ? cakeSpecKey(cakeCart[0]) : null
+  };
+  lastOrderMessage = message;
+  // Same gate as the mixed checkout: a refused cake order must not vanish
+  // silently. The body is kept so the gate can resend it unchanged.
+  logOrder(cakeOrderBody, (err, info)=>{
+    if(!err) return;
+    if(info && info.limited){ showOrderGate(cakeOrderBody); return; }
   });
 
   const opened = openWhatsApp(message);
@@ -1981,8 +1988,7 @@ document.getElementById('checkoutForm').addEventListener('submit', (e)=>{
    Turnstile is loaded lazily, only when the gate is first shown, so
    the main page still ships nothing from Cloudflare's script host.
    ============================================================ */
-const TURNSTILE_SITE_KEY = '0x4AAAAAAAAAAAAAAAAAAAAAA'; // placeholder — see worker/README.md
-let pendingOrder = null;
+const TURNSTILE_SITE_KEY = '0x4AAAAAAGG8LsW-btDaKwPe'; // placeholder — see worker/README.md
 let lastOrderMessage = '';
 
 function ensureTurnstile(){
@@ -1995,7 +2001,6 @@ function ensureTurnstile(){
 }
 
 function showOrderGate(order){
-  pendingOrder = order;
   let gate = document.getElementById('orderGate');
   if(!gate){
     gate = document.createElement('div');
@@ -2055,7 +2060,6 @@ function resendOrder(order, token){
       if(window.turnstile) window.turnstile.reset(document.getElementById('orderGateWidget'));
       return;
     }
-    pendingOrder = null;
     document.getElementById('orderGate').remove();
     unlockBodyScroll('orderGate');
     showToast(`Order no. ${order.orderNumber} sent.`);

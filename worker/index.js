@@ -1167,7 +1167,7 @@ async function handleCreateOrder(request, env, ctx) {
 
   // Per-device limit, checked before any pricing or D1 write. A resend may
   // carry a Turnstile token; a missing or unusable device id falls back to
-  // the IP so a script that simply omits the header is still counted.
+  // the IP so a script that simply omits the field is still counted.
   //
   // Fails closed: if the counter cannot be read the order is refused rather
   // than let through unthrottled.
