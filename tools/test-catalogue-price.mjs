@@ -53,7 +53,9 @@ function makeEnv({
       calls.push({ sql, args: a, bound: true });
       return {
         run: async () => ({ meta: { changes: 1 } }),
-        all: async () => ({ results: [] }),
+        // The rate limiter reads COUNT(*) through bind(); a bare [] made it
+        // throw. Nothing has been counted yet, so 0 is the truthful answer.
+        all: async () => ({ results: [{ n: 0 }] }),
         first: async () => {
           calls.push({ sql, args: a, bound: true, first: true });
           if (!/SELECT price FROM product_prices WHERE item_key/.test(sql)) return null;
@@ -332,6 +334,58 @@ const line = (over) => ({ d: 'Meat Pie', q: 1, p: null, ...over });
   eq('the unmatched line is null, not the sent price', r.lines[1].p, null);
   eq('the invoice version totals only the priced lines', r.versionTotal, 60000);
   eq('the claimed key is kept for audit', r.lines[0].k, 'afang:10L');
+}
+
+/* ======================================================================
+   Guards added for the deploy: auth fails closed, orders are rate limited
+   ====================================================================== */
+
+// A D1 stub whose COUNT returns whatever the limiter should see.
+function countedEnv(n) {
+  const prepare = (sql) => ({
+    bind: (...a) => ({
+      run: async () => ({ meta: { changes: 1 } }),
+      all: async () => ({ results: [{ n }] }),
+      first: async () => null,
+    }),
+    run: async () => ({ meta: { changes: 1 } }),
+    all: async () => ({ results: [] }),
+    first: async () => null,
+  });
+  return { DB: { prepare } };
+}
+
+const req = (path, init = {}, headers = {}) =>
+  new Request(`https://x${path}`, { ...init, headers: { 'content-type': 'application/json', ...headers } });
+const nothing = { waitUntil() {} };
+
+{
+  // Unset secrets used to make the password the literal string "undefined".
+  const env = countedEnv(0);
+  env.SESSION_SECRET = 's';
+  const r = await mod.default.fetch(
+    req('/api/login', { method: 'POST', body: JSON.stringify({ password: 'undefined' }) }), env, nothing);
+  eq('login refuses when ADMIN_PASSWORD is unset', r.status, 503);
+  eq('login returns no token in that case', await r.json(), { error: 'Login is not configured.' });
+}
+
+{
+  const env = countedEnv(0);
+  const r = await mod.default.fetch(
+    req('/api/orders', { method: 'GET' }, { Authorization: 'Bearer 9999999999999.x' }), env, nothing);
+  eq('a token cannot verify when SESSION_SECRET is unset', r.status, 401);
+}
+
+{
+  // 19 in the window is the ceiling, per the owner's choice.
+  const env = countedEnv(19);
+  const r = await mod.default.fetch(
+    req('/api/orders', { method: 'POST', body: body({ lines: [] }) }), env, nothing);
+  eq('the 20th order in an hour is refused', r.status, 429);
+  const spent = countedEnv(18);
+  const ok = await mod.default.fetch(
+    req('/api/orders', { method: 'POST', body: body({ lines: [] }) }), spent, nothing);
+  eq('order 19 is still accepted', ok.status, 200);
 }
 
 console.log(`${pass} passed, ${fail} failed`);

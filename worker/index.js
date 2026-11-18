@@ -21,6 +21,12 @@ const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 30 * 1024;
 const MAX_FAILED_LOGINS = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+// Orders land here before WhatsApp opens, so the endpoint is public. Each
+// accepted order writes two D1 rows and fans a PDF to every invoice chat, so
+// an unthrottled loop rings the owner's phone. 19 leaves room for a genuine
+// busy day while still stopping a flood.
+const MAX_ORDERS_PER_HOUR = 19;
+const ORDER_RATE_HOUR_MS = 60 * 60 * 1000;
 const STATUSES = ['New', 'Confirmed', 'In Progress', 'Ready', 'Delivered', 'Cancelled'];
 const ORDER_NO_RE = /^\d{8}-\d{9}-[A-Z]{1,3}$/;
 
@@ -64,24 +70,38 @@ function slugifyCategory(cat) {
 
 // Returns true if this IP has exhausted its allowance. Inserts a
 // timestamped row when allowed, so the *next* call sees it.
-async function uploadRateLimited(ip, env) {
+//
+// `scope` namespaces the row so separate limits share one table without
+// sharing a counter: uploads keep the bare IP, orders prefix it. Reads are
+// exact-match on `ip`, so a prefix can never be counted as a bare one.
+async function rateLimited(ip, env, scope, maxPerWindow, windowMs) {
+  const key = scope ? `${scope}:${ip}` : ip;
   const now = Date.now();
   await env.DB.prepare('DELETE FROM upload_rate WHERE ts < ?').bind(now - RATE_DAY_MS).run();
 
   const hour = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
-  ).bind(ip, now - RATE_WINDOW_MS).all();
-  if (hour.results[0].n >= RATE_MAX_PER_WINDOW) return true;
+  ).bind(key, now - windowMs).all();
+  if (hour.results[0].n >= maxPerWindow) return true;
 
-  // ts / 3600000 is integer division in SQLite, so this counts distinct
-  // hour-buckets rather than hours — matches "20 distinct hours per day".
-  const day = await env.DB.prepare(
-    'SELECT COUNT(DISTINCT (ts / 3600000)) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
-  ).bind(ip, now - RATE_DAY_MS).all();
-  if (day.results[0].n >= RATE_MAX_HOURS_PER_DAY) return true;
+  // The distinct-hours-per-day rule is an upload rule (spec 6.4). An order
+  // limiter has no daily dimension, so it skips it rather than silently
+  // inheriting a cap nobody chose.
+  if (!scope) {
+    // ts / 3600000 is integer division in SQLite, so this counts distinct
+    // hour-buckets rather than hours — matches "20 distinct hours per day".
+    const day = await env.DB.prepare(
+      'SELECT COUNT(DISTINCT (ts / 3600000)) AS n FROM upload_rate WHERE ip = ? AND ts > ?'
+    ).bind(key, now - RATE_DAY_MS).all();
+    if (day.results[0].n >= RATE_MAX_HOURS_PER_DAY) return true;
+  }
 
-  await env.DB.prepare('INSERT INTO upload_rate (ip, ts) VALUES (?, ?)').bind(ip, now).run();
+  await env.DB.prepare('INSERT INTO upload_rate (ip, ts) VALUES (?, ?)').bind(key, now).run();
   return false;
+}
+
+async function uploadRateLimited(ip, env) {
+  return rateLimited(ip, env, '', RATE_MAX_PER_WINDOW, RATE_WINDOW_MS);
 }
 
 // Creates the batch row on the file's first arrival, otherwise returns
@@ -1053,6 +1073,9 @@ async function makeToken(env) {
 }
 
 async function isAuthed(request, env) {
+  // No secret means no way to verify anything. Encoding an unset value would
+  // HMAC the literal string "undefined", so every token would verify.
+  if (!env.SESSION_SECRET) return false;
   const header = request.headers.get('Authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
   const [exp, sig] = token.split('.');
@@ -1062,6 +1085,11 @@ async function isAuthed(request, env) {
 
 /* ---------- handlers ---------- */
 async function handleLogin(request, env) {
+  // Same fail-closed reason as isAuthed: unset secrets used to make the
+  // password "undefined" a valid login.
+  if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET) {
+    return json({ error: 'Login is not configured.' }, 503);
+  }
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
   const now = Date.now();
   await env.DB.prepare('DELETE FROM login_attempts WHERE ts < ?').bind(now - LOGIN_WINDOW_MS).run();
@@ -1080,6 +1108,14 @@ async function handleLogin(request, env) {
 }
 
 async function handleCreateOrder(request, env, ctx) {
+  // Before parsing: a flood costs a D1 round-trip, not a JSON parse and a
+  // PDF render. Fails closed - a D1 error here refuses the order rather than
+  // letting an unthrottled request through.
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (await rateLimited(ip, env, 'order', MAX_ORDERS_PER_HOUR, ORDER_RATE_HOUR_MS)) {
+    return json({ error: 'Too many orders right now. Please send your order on WhatsApp.' }, 429);
+  }
+
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   let o;
