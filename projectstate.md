@@ -32,6 +32,9 @@ touch the remote and each needs explicit approval.**
 - `fb3048d`: the per-device rate limit and the challenge gate below.
 - `02e1219`: invoice totals sum from the lines actually stored, plus
   dead-code removal — the other half of the D0 audit fixes.
+- `2fa8d31`: `admin.html` prints that same figure instead of the visitor's
+ typed `total`, and reads "NGN 8,000 + 2 unpriced" when some lines still have
+ no price — the gap stays visible instead of being rounded into a number.
 - `0cd5955`: `isAuthed()` returns false when `SESSION_SECRET` is unset;
   `handleLogin()` returns 503 when `ADMIN_PASSWORD`/`SESSION_SECRET` are
   unset, before touching D1. Both used to fail **open**.
