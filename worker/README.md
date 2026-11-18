@@ -43,9 +43,11 @@ who is also listed as the company still gets one copy.
 ### Business details on the invoice
 
 The letterhead and payment block read from the D1 `settings` table, not from
-code. Until the real values are inserted, the invoice prints a red
-`BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER` band instead of a
-demo bank account. Set them once (no deploy needed):
+code. The owner's real details are in that table (applied 2026-11-18). Any
+key that is empty or still a development placeholder is blanked, and the
+invoice then prints a red `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO
+CUSTOMER` band instead of a demo bank account. To change them (no deploy
+needed):
 
 ```
 npx wrangler d1 execute la-creme-orders --remote --command \
@@ -53,7 +55,7 @@ npx wrangler d1 execute la-creme-orders --remote --command \
      ('company_phone', '0806 655 6677'),
      ('company_address', '21 Ikot Ekpene Road, Uyo, Akwa Ibom'),
      ('bank_name', 'Zenith Bank'),
-     ('account_name', 'La Creme Confectionery'),
+     ('account_name', 'La''creme Confectionery and Catering'),
      ('account_number', '1234567890')"
 ```
 

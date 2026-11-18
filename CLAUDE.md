@@ -78,10 +78,10 @@ Masonry-style grid with responsive column count (`columnsForWidth`, `layoutBlock
   development defaults only; `resolveSettings()` blanks any value that is
   empty or still a placeholder and reports it in `missing`, and the renderer
   stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER`.
-- **Every status report must name BUG-2** (`projectstate.md`): the real bank name,
-  account number, phone and address are still missing from D1, so every
-  invoice stamps DO NOT SEND. The owner will supply them when ready — remind
-  her in each report until they land.
+- **The business details live in D1 `settings`** (`projectstate.md`, BUG-2,
+  closed 2026-11-18). Never hardcode them, and never weaken the guard: a key
+  that is empty or still a development placeholder must blank and stamp
+  DO NOT SEND rather than print a demo account.
 - `projectstate.md` is the single live memory file — update it after a task,
   not just the code. `docs/superpowers/` holds only the current invoice
   revision plan and design; delete a doc there once its work has shipped.

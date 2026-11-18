@@ -1,7 +1,7 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-16 (D0 done; D1–D6 awaiting approval)
-**HEAD:** `02e1219` · branch `invoice-revision`, **19 commits ahead of
+**Updated:** 2026-11-18 (D0 and D1 done; D2–D6 awaiting approval)
+**HEAD:** `f55d445` · branch `invoice-revision`, **19 commits ahead of
 `origin/invoice-revision`, unpushed** · `main` untouched and behind.
 
 This is the only live memory file. Update it after each task.
@@ -20,7 +20,7 @@ touch the remote and each needs explicit approval.**
 | Phase | Scope | Status |
 |---|---|---|
 | **D0** | Close the audit holes: auth fails closed, order rate limit, per-device gate | **done** (`fb3048d`, `02e1219`) |
-| D1 | Apply the three schema files to remote D1 | not started — needs approval |
+| D1 | Apply the three schema files to remote D1 | **done** 2026-11-18, verified |
 | D2 | `setWebhook` onto the existing secret | not started — needs approval |
 | D3 | Deploy the Worker | not started — needs approval |
 | D4 | Ship the static site | not started — it is Sonnet, git-connected (see below) |
@@ -49,16 +49,17 @@ touch the remote and each needs explicit approval.**
   the live Worker predates it, so a challenged visitor is stuck on the gate
   and the WhatsApp link is their way through.
 
-### D1 traps
+### D1 — applied and verified 2026-11-18
 
 `schema-pricing.sql` → `schema-invoice.sql` → `schema-bot.sql`, in that
 order. The first two are `ALTER ... ADD COLUMN` and are **not re-runnable**:
 a second run errors `duplicate column name`, which is expected and safe. A
 *first*-run duplicate means partial application — stop and inspect.
 
-Verify after: `PRAGMA table_info(orders)` shows `price_status`, `spec_key`,
-`lines_json`, `revised`; `settings` and `invoice_versions` exist;
-`SELECT COUNT(*) FROM product_prices` = 34.
+Verified against the remote: `orders` has `price_status`, `spec_key`,
+`lines_json`, `revised`; `settings` and `invoice_versions` exist with the
+expected columns; `product_prices` = 34 rows. `settings` holds the owner's
+real business details, so the DO NOT SEND band is gone (BUG-2 closed).
 
 ### D4 — the site is Sonnet
 
@@ -85,10 +86,11 @@ LF throughout.
 **Last code deploy: 2026-10-09 11:41 UTC.** The live Worker has no PDF, no
 bot, and `/api/prices` returns 401.
 
-**Remote D1 is un-migrated for the invoice work.** Present: `orders`,
-`login_attempts`, `upload_batches`, `upload_items`, `upload_rate`,
-`bot_state`, `audit_log`, `product_prices` (34 rows). Missing: `settings`,
-`invoice_versions`, and the four `orders` columns — see D1.
+**Remote D1 carries the invoice schema** (applied 2026-11-18): `orders`
+(with `price_status`, `spec_key`, `lines_json`, `revised`), `login_attempts`,
+`upload_batches`, `upload_items`, `upload_rate`, `bot_state`, `audit_log`,
+`product_prices` (34 rows), `settings` (real business details) and
+`invoice_versions`.
 
 **Secrets set:** `ADMIN_PASSWORD`, `SESSION_SECRET`, `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_CHAT_ID`, `TELEGRAM_OWNER_CHAT_IDS` (`5541964557`),
@@ -106,8 +108,7 @@ What is missing is deployment, not configuration — see D3.
 
 1. **`TELEGRAM_INVOICE_CHAT_IDS`** — the owner's personal chat, or a
    company/rep chat id? Blocks D2.
-2. **Go-ahead for D1 and D3** — both write to the remote.
-3. **BUG-2's four values** — see below.
+2. **Go-ahead for D2 and D3** — both write to the remote.
 
 ---
 
@@ -141,17 +142,15 @@ the tapped spot and selects nothing. Suspects: tap-highlight offset from the
 real hit area, or a listener on a wrapper that the visual sits outside of.
 Next step is an instrumented page on the owner's real device.
 
-## BUG-2 (blocked on owner): business details are not configured
+## BUG-2 (resolved 2026-11-18): business details
 
-The real bank name, account number, phone and address are missing from D1,
-so **every** invoice — Telegram copy and admin download alike — carries the
-red `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER` band. That
-is the intended fail-safe, not a defect: no placeholder bank details can
-reach a customer.
-
-They go into the D1 `settings` table (keys in `SETTING_KEYS`,
-`worker/invoice.js`) once the owner supplies them. **Every status report
-names BUG-2 until it is resolved.**
+The owner supplied the bank name, account number, phone and address; they
+are in the D1 `settings` table (keys in `SETTING_KEYS`,
+`worker/invoice.js`), so `resolveSettings()` reports nothing missing and no
+invoice carries the red `DO NOT SEND TO CUSTOMER` band any more. The
+fail-safe itself stays: any key that is empty or still a development
+placeholder is blanked and re-stamps the band rather than printing a demo
+account.
 
 ---
 
