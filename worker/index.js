@@ -1637,7 +1637,23 @@ async function handleListOrders(url, env) {
   const rows = await env.DB.prepare(`SELECT * FROM orders ${clause} ORDER BY received_at DESC LIMIT ? OFFSET ?`)
     .bind(...args, limit, offset).all();
   const count = await env.DB.prepare(`SELECT COUNT(*) AS n FROM orders ${clause}`).bind(...args).all();
-  return json({ orders: rows.results, total: count.results[0].n });
+
+  // orders.total is the client's typed string ("0", blank, a guess) and says
+  // nothing about what the invoice is worth. The admin list shows the same
+  // figure the PDF prints, computed here from the stored lines, and only when
+  // at least one line is priced — otherwise the client's own string stands as
+  // a quote pending prices.
+  const orders = rows.results.map((row) => {
+    const stored = parseStoredLines(row);
+    const s = summariseLines(stored);
+    // total === 0 with unpriced lines means nothing has a price yet, so there
+    // is no invoice figure to show and the admin falls back to the client's
+    // string rather than printing a confident NGN 0. An order with no lines
+    // at all has no figure either, so it keeps that string too.
+    const priced = stored.length > 0 && (s.total > 0 || s.unpriced === 0);
+    return { ...row, priced_total: priced ? s.total : null, priced_unpriced: s.unpriced };
+  });
+  return json({ orders, total: count.results[0].n });
 }
 
 async function handleUpdateOrder(request, env, orderNumber) {

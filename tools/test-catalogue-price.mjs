@@ -437,5 +437,53 @@ const spent = countedEnv(4);
   eq('roster read fails: the order is still accepted', r.res.status, 200);
 }
 
+{
+  // The admin list prints what the invoice is worth, not orders.total — the
+  // visitor's own typed string, which reads "0" on a fully priced order.
+  const hmacHex = async (secret, msg) => {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg));
+    return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const exp = String(Date.now() + 60000);
+  const token = `${exp}.${await hmacHex('s', exp)}`;
+
+  const rows = [
+    { order_number: 'A', total: '0', lines_json: JSON.stringify([
+      { d: 'Meat Pie', q: 3, p: 1000 }, { d: 'Chicken', q: 2, p: 2500 }]) },
+    { order_number: 'B', total: '25000', lines_json: JSON.stringify([
+      { d: 'Meat Pie', q: 1, p: 1000 }, { d: 'Unknown Thing', q: 1, p: null }]) },
+    { order_number: 'C', total: '40000', lines_json: JSON.stringify([
+      { d: 'Unknown Thing', q: 1, p: null }]) },
+    { order_number: 'D', total: '1000', lines_json: JSON.stringify([]) },
+    { order_number: 'E', total: '', items: 'Meat Pie\nChicken' },
+  ];
+  const env = {
+    SESSION_SECRET: 's',
+    DB: {
+      prepare: (sql) => ({
+        bind: () => ({
+          all: async () => ({ results: /COUNT\(\*\)/.test(sql) ? [{ n: rows.length }] : rows }),
+        }),
+      }),
+    },
+  };
+  const res = await mod.default.fetch(
+    req('/api/orders', { method: 'GET' }, { Authorization: `Bearer ${token}` }), env, nothing);
+  eq('the authenticated list answers 200', res.status, 200);
+  const listed = (await res.json()).orders;
+  const pick = (n) => listed.find((o) => o.order_number === n);
+  eq('a fully priced order reports the invoice figure, not the typed "0"',
+    [pick('A').priced_total, pick('A').priced_unpriced], [8000, 0]);
+  eq('a partly priced order reports its subtotal and its unpriced count',
+    [pick('B').priced_total, pick('B').priced_unpriced], [1000, 1]);
+  eq('a wholly unpriced order reports no figure at all',
+    [pick('C').priced_total, pick('C').priced_unpriced], [null, 1]);
+  eq('an order with no lines reports no figure either', pick('D').priced_total, null);
+  eq('an order carrying only the items blob is read as unpriced lines',
+    [pick('E').priced_total, pick('E').priced_unpriced], [null, 2]);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

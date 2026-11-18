@@ -13,6 +13,17 @@ const SESSION_MS = 15 * 60 * 1000;
 const API = (CONFIG.ordersApi || '').replace(/\/+$/, '');
 
 const $ = (id)=> document.getElementById(id);
+
+// What the order is worth, as the invoice computes it — never o.total, which
+// is the visitor's own typed string and reads "0" on a fully priced order.
+// Rows with no catalogue price yet keep that string as the quote on request.
+function orderTotal(o){
+ if(o.priced_total == null) return o.total || '';
+ return o.priced_unpriced
+ ? `${fmtNaira(o.priced_total)} + ${o.priced_unpriced} unpriced`
+ : fmtNaira(o.priced_total);
+}
+
 let orders = [];
 let selectedNo = null;
 let searchTimer;
@@ -162,7 +173,7 @@ function renderList(){
       el('div', {}, el('div', { class:'no', text:o.order_number }),
         el('div', { class:'who', text:`${o.name || '(no name)'} · ${o.order_type || ''}` }),
         ...(badge ? [badge] : [])),
-      el('div', { class:'meta' }, el('div', { class:'total', text:o.total || '' }), el('div', { text:fmtDate(o.received_at) }), el('span', { class:`pill ${o.status.replace(/\s/g, '')}`, text:o.status }))
+      el('div', { class:'meta' }, el('div', { class:'total', text:orderTotal(o) }), el('div', { text:fmtDate(o.received_at) }), el('span', { class:`pill ${o.status.replace(/\s/g, '')}`, text:o.status }))
     );
     const open = ()=>{ selectedNo = o.order_number; renderList(); renderDetail(o); };
     row.addEventListener('click', open);
@@ -230,7 +241,7 @@ function renderDetail(o){
       ['Type', o.order_type], ['Customer', o.name], ['Phone', o.phone],
       ['Delivery', o.delivery], ['Address', o.address], ['Date needed', o.date_needed],
       ['Event', o.event_type], ['Guests', o.guests], ['Service', o.service_type],
-      ['Total', o.total], ['Notes', o.notes],
+      ['Total', orderTotal(o)], ['Notes', o.notes],
     ]),
     el('div', { class:'sub', text:'Items' }),
     el('div', { class:'items', text:o.items || '(none recorded)' }),
@@ -261,7 +272,8 @@ function printReceipt(o){
     r.append(m ? el('div', { class:'item' }, el('span', { text:m[1] }), el('span', { text:m[2] })) : el('div', { text }));
   });
   r.append(line());
-  if(o.total) r.append(el('div', { class:'tot' }, el('span', { text:'TOTAL' }), el('span', { text:o.total })));
+  const shown = orderTotal(o);
+if(shown) r.append(el('div', { class:'tot' }, el('span', { text:'TOTAL' }), el('span', { text:shown })));
   if(o.notes) r.append(el('div', { text:`Notes: ${o.notes}` }));
   r.append(line(), el('div', { class:'c', text:'Thank you for choosing La Crème' }));
   window.print();
