@@ -10,7 +10,7 @@
    Secrets (wrangler secret put): ADMIN_PASSWORD, SESSION_SECRET
 ============================================================ */
 
-import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, renderInvoice, loadSettings } from './invoice.js';
+import { parseInvoiceChatIds, serializeLines, parseStoredLines, summariseLines, renderInvoice, loadSettings, assigneeLabel } from './invoice.js';
 import {
   money, parseCommand, parseOrderNumber, parsePriceEntry, formatLines,
   formatPriceCard, formatApproveCard, newQuoteId, callbackData, parseCallbackData,
@@ -259,16 +259,78 @@ async function sendDocument(env, chatId, bytes, filename, caption) {
   }
 }
 
+// @Lacremebotuyo's own id. It sits inside the bot token, so a mistyped env
+// var can land it in a recipient list, and every send to it fails. Filtered
+// out of the fan-out below rather than trusted not to be configured.
+const TELEGRAM_BOT_SELF_ID = '9049885698';
+
 // Spec §7.1a: invoices go to TELEGRAM_INVOICE_CHAT_IDS — never to the
 // upload-alert chat. The owner's own chats are added too, since the owner
 // reviews pending prices; the two lists are usually overlapping (the owner
 // IS the operator), hence the dedupe: one PDF per chat, not one per list.
-function invoiceRecipients(env) {
+async function invoiceRecipients(env) {
+  const staff = await loadStaff(env);
   return [...new Set([
+    ...staff.map(s => s.chat_id),
     ...parseInvoiceChatIds(env.TELEGRAM_INVOICE_CHAT_IDS),
     ...parseInvoiceChatIds(env.TELEGRAM_OWNER_CHAT_IDS),
-  ])].slice(0, 20);
+  // A row without a usable id, or the bot itself, would be a send that always
+  // fails; drop both before the cap rather than spending a slot on them.
+  ])].filter(id => id && String(id) !== TELEGRAM_BOT_SELF_ID).slice(0, 20);
 }
+
+// ---------- staff roster ----------
+//
+// A rep sends /join, the bot hands back their chat id, the owner runs
+// /approve <id> <name>, and from then on every order is sent to them. Which
+// rep actually works an order is a round robin over the roster, so two reps
+// do not both start the same order while a third sits idle.
+
+const STAFF_ROTATION_KEY = 'staff_rotation';
+const MAX_STAFF = 20;          // matches the invoice fan-out cap
+const MAX_STAFF_NAME = 40;
+const STAFF_ID_RE = /^-?\d{5,20}$/;
+
+// Never throws: a broken roster must not stop an order being taken. Losing it
+// costs the assignee label and the extra recipients, not the sale.
+async function loadStaff(env) {
+  try {
+    const { results } = await env.DB.prepare(
+      'SELECT chat_id, name FROM staff WHERE active = 1 ORDER BY added_at, chat_id'
+    ).all();
+    return results || [];
+  } catch (err) {
+    console.error(`staff: load failed (${err && err.name ? err.name : 'error'})`);
+    return [];
+  }
+}
+
+// The counter lives in D1 `settings` rather than memory because isolates do
+// not share state and are recycled freely - D1 is the only thing here that is
+// both shared and durable. The read-then-write is not atomic, which costs at
+// worst two simultaneous orders landing on the same rep; not worth a
+// transaction to avoid.
+async function nextAssignee(env) {
+  const staff = await loadStaff(env);
+  if (!staff.length) return null;
+  let idx = 0;
+  try {
+    const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?')
+      .bind(STAFF_ROTATION_KEY).first();
+    idx = Math.abs(parseInt(row && row.value, 10) || 0);
+    const next = String((idx + 1) % staff.length);
+    await env.DB.prepare(
+      'INSERT INTO settings (key, value) VALUES (?, ?) ' +
+      'ON CONFLICT(key) DO UPDATE SET value = ?'
+    ).bind(STAFF_ROTATION_KEY, next, next).run();
+  } catch (err) {
+    // Rotation is a nicety: assignment still happens, just always to the
+    // first rep, which is a fair outcome when the counter is unavailable.
+    console.error(`staff: rotation failed (${err && err.name ? err.name : 'error'})`);
+  }
+  return staff[idx % staff.length];
+}
+
 
 // The invoice reached nobody. Post the summary to the upload-alert chat so
 // the order is not invisible — that chat has a human on the end of it and is
@@ -303,7 +365,7 @@ export const allowPlaceholderSettings = (env) =>
   !!(env && env.ENVIRONMENT === 'development' && env.ALLOW_PLACEHOLDER_SETTINGS === 'true');
 
 async function sendInvoiceToCompany(env, order, caption) {
-  const ids = invoiceRecipients(env);
+  const ids = await invoiceRecipients(env);
   if (!ids.length) {
     // Was a silent return: the order succeeded and no invoice existed
     // anywhere. Now the operator is told (P-2 / B-2).
@@ -422,11 +484,25 @@ async function processTelegramUpdate(env, raw) {
     const chatId = String(chat.id);
     const userId = String(from && from.id != null ? from.id : chatId);
 
-    // Authorise by chat id, not by who sent it: only the invoice and owner
-    // lists may see order data, and anyone else gets one line with none.
-    if (!invoiceRecipients(env).includes(chatId)) {
+    // Authorise by chat id, not by who sent it: only the roster, the invoice
+    // list and the owner list may see order data. /join is the one command
+    // that has to work before authorisation, or nobody could ever be added.
+    const early = parseCommand(msg && msg.text);
+    if (early && early.command === 'join') {
+      await handleJoinRequest(env, chatId, early.args);
+      return;
+    }
+
+    if (!(await invoiceRecipients(env)).includes(chatId)) {
       console.error(`bot: unauthorised chat ${chatId}`);
-      await sendChatMessage(env, chatId, 'This bot is not authorised to discuss orders here.');
+      // Hand them their own id here: the owner needs it to run /approve, and
+      // a rep has no way to look it up from inside Telegram.
+      await sendChatMessage(env, chatId, [
+        'This bot is not authorised to discuss orders here.',
+        '',
+        `Your chat id: ${chatId}`,
+        'Send /join to request access.',
+      ].join('\n'));
       return;
     }
 
@@ -506,6 +582,7 @@ const HELP_TEXT = [
   '/approve - mark a priced invoice final',
   '/prices - list the catalogue (add a category, e.g. /prices soups)',
   '/update-price - change a catalogue price (owner)',
+  '/staff - who gets orders',
   '/cancel - abandon what you were doing',
 ].join('\n');
 
@@ -536,6 +613,118 @@ async function showOrderForEdit(env, chatId, userId, orderNumber) {
   ].join('\n') + note);
 }
 
+// ---------- staff commands ----------
+
+// /join works before authorisation - it is how someone gets authorised. The
+// chat id is echoed back because it is the one thing the owner needs and the
+// rep has no way to look it up from inside Telegram.
+async function handleJoinRequest(env, chatId, args) {
+  const name = String(args || '').trim().slice(0, MAX_STAFF_NAME);
+  if (!STAFF_ID_RE.test(String(chatId))) {
+    return sendChatMessage(env, chatId, 'This chat cannot be added to the roster.');
+  }
+  const already = (await loadStaff(env)).find(s => String(s.chat_id) === String(chatId));
+  if (already) {
+    return sendChatMessage(env, chatId,
+      'You are already on the roster as ' + already.name + '. Orders are sent to you here.');
+  }
+
+  const owners = parseInvoiceChatIds(env.TELEGRAM_OWNER_CHAT_IDS)
+    .filter(id => String(id) !== TELEGRAM_BOT_SELF_ID);
+  if (!owners.length) {
+    // No owner configured means nobody can approve, so say so plainly rather
+    // than promising a notification that will never arrive.
+    return sendChatMessage(env, chatId,
+      'Your chat id: ' + chatId + '\nAn owner must be set in TELEGRAM_OWNER_CHAT_IDS before a rep can be approved.');
+  }
+
+  const ask = [
+    'New staff request.',
+    '',
+    'Chat id: ' + chatId,
+    'Name given: ' + (name || '(none)'),
+    '',
+    'Approve with: /approve ' + chatId + ' ' + (name || '<name>'),
+  ].join('\n');
+  for (const owner of owners) await sendChatMessage(env, owner, ask);
+
+  return sendChatMessage(env, chatId, [
+    'Request sent to the owner.',
+    '',
+    'Your chat id: ' + chatId,
+    name ? 'Your name: ' + name : 'Send /join <your name> if you want it recorded.',
+  ].join('\n'));
+}
+
+// /approve is overloaded on purpose: an order number approves an invoice, a
+// chat id plus a name adds a rep. An order number always carries a '-' after
+// the date (20261109-131600456-TB) and a chat id never does, so
+// parseOrderNumber decides which one the operator meant.
+async function approveStaff(env, chatId, staffChatId, rawName) {
+  if (!isOwnerChat(env, chatId)) {
+    return sendChatMessage(env, chatId, 'Only the owner can add staff.');
+  }
+  const name = String(rawName || '').trim().slice(0, MAX_STAFF_NAME);
+  if (!name) return sendChatMessage(env, chatId, 'Give them a name: /approve <chat_id> <name>');
+
+  const roster = await loadStaff(env);
+  const known = roster.some(s => String(s.chat_id) === String(staffChatId));
+  if (!known && roster.length >= MAX_STAFF) {
+    return sendChatMessage(env, chatId,
+      'The roster is full (' + MAX_STAFF + '). Remove someone with /remove <chat_id> first.');
+  }
+
+  try {
+    await env.DB.prepare(
+      'INSERT INTO staff (chat_id, name, active, added_at, added_by) VALUES (?, ?, 1, ?, ?) ' +
+      'ON CONFLICT(chat_id) DO UPDATE SET name = ?, active = 1'
+    ).bind(String(staffChatId), name, new Date().toISOString(), String(chatId), name).run();
+  } catch (err) {
+    console.error('staff: approve failed (' + (err && err.name ? err.name : 'error') + ')');
+    // The most likely cause by far is that schema-staff.sql has not been
+    // applied yet, so name that rather than a generic failure.
+    return sendChatMessage(env, chatId, 'Could not save that. Has worker/schema-staff.sql been applied?');
+  }
+
+  await sendChatMessage(env, staffChatId,
+    'You have been added to the roster as ' + name + '. Orders will be sent to you here.');
+  return sendChatMessage(env, chatId,
+    name + ' (' + staffChatId + ') is on the roster. Every new order is sent to them, and the rotation now names them.');
+}
+
+async function removeStaff(env, chatId, rawId) {
+  if (!isOwnerChat(env, chatId)) {
+    return sendChatMessage(env, chatId, 'Only the owner can remove staff.');
+  }
+  const id = String(rawId || '').trim();
+  if (!STAFF_ID_RE.test(id)) return sendChatMessage(env, chatId, 'Give a chat id: /remove <chat_id>');
+  try {
+    const res = await env.DB.prepare('UPDATE staff SET active = 0 WHERE chat_id = ?').bind(id).run();
+    const changed = res && res.meta ? res.meta.changes : 0;
+    return sendChatMessage(env, chatId, changed
+      ? id + ' is off the roster. Their past orders keep their name on them.'
+      : id + ' was not on the roster.');
+  } catch (err) {
+    console.error('staff: remove failed (' + (err && err.name ? err.name : 'error') + ')');
+    return sendChatMessage(env, chatId, 'Could not remove that.');
+  }
+}
+
+async function showStaff(env, chatId) {
+  const roster = await loadStaff(env);
+  if (!roster.length) {
+    return sendChatMessage(env, chatId,
+      'No staff on the roster yet. A rep sends /join, then you run /approve <chat_id> <name>.');
+  }
+  return sendChatMessage(env, chatId, [
+    'On the roster:',
+    '',
+    ...roster.map((s, i) => (i + 1) + '. ' + s.name + ' - ' + s.chat_id),
+    '',
+    'New orders are shared out in that order, one each.',
+  ].join('\n'));
+}
+
 async function handleBotMessage(env, chatId, userId, text) {
   const cmd = parseCommand(text);
 
@@ -552,6 +741,13 @@ async function handleBotMessage(env, chatId, userId, text) {
       return sendChatMessage(env, chatId, 'Which order? Send the order number, e.g. 20261109-131600456-TB.');
     }
     if (cmd.command === 'approve') {
+      // /approve <chat_id> <name> adds a rep; /approve <order number> runs the
+      // invoice flow below. Tested first because a chat id is never a valid
+      // order number, so the two can never be confused.
+      const staffArg = /^(-?\d{5,20})\s+(.+)$/.exec(String(cmd.args || '').trim());
+      if (staffArg && !parseOrderNumber(staffArg[1])) {
+        return approveStaff(env, chatId, staffArg[1], staffArg[2]);
+      }
       const no = cmd.args ? parseOrderNumber(cmd.args) : null;
       if (cmd.args && !no) return sendChatMessage(env, chatId, 'That does not look like an order number.');
       if (no) return startApprove(env, chatId, userId, no);
@@ -568,6 +764,12 @@ async function handleBotMessage(env, chatId, userId, text) {
         return sendChatMessage(env, chatId, 'Only the owner can change catalogue prices.');
       }
       return startUpdatePrice(env, chatId, userId, cmd.args);
+    }
+    if (cmd.command === 'staff') {
+      return showStaff(env, chatId);
+    }
+    if (cmd.command === 'remove') {
+      return removeStaff(env, chatId, cmd.args);
     }
     return sendChatMessage(env, chatId, HELP_TEXT);
   }
@@ -1150,7 +1352,9 @@ function alertOrderRate(env, { ip, device, used, order }) {
     '',
     preview,
     '',
-    'The visitor was offered a challenge. Their order is still in their browser.',
+    env.TURNSTILE_SECRET
+      ? 'The visitor was offered a challenge. Their order is still in their browser.'
+      : 'WARNING: TURNSTILE_SECRET is unset, so no challenge can pass. This visitor cannot self-serve - they must use the WhatsApp link.',
   ].join('\n'));
 }
 
@@ -1160,9 +1364,9 @@ async function handleCreateOrder(request, env, ctx) {
   if (raw.length > MAX_BODY_BYTES) return json({ error: 'Too large' }, 413);
   let o;
   try { o = JSON.parse(raw); } catch (e) { return json({ error: 'Bad request' }, 400); }
- // The client sends its id in the body (config.js logOrder), because a
- // sendBeacon cannot set headers. Missing or junk ids fall back to the IP.
- const device = String((o && o.deviceId) || '').trim().slice(0, MAX_DEVICE_ID);
+  // The client sends its id in the body (config.js logOrder), because a
+  // sendBeacon cannot set headers. Missing or junk ids fall back to the IP.
+  const device = String((o && o.deviceId) || '').trim().slice(0, MAX_DEVICE_ID);
   if (!o || !ORDER_NO_RE.test(String(o.orderNumber || ''))) return json({ error: 'Bad order number' }, 400);
 
   // Per-device limit, checked before any pricing or D1 write. A resend may
@@ -1171,7 +1375,7 @@ async function handleCreateOrder(request, env, ctx) {
   //
   // Fails closed: if the counter cannot be read the order is refused rather
   // than let through unthrottled.
-   const key = `order:${device || ip}`;
+  const key = `order:${device || ip}`;
   let used;
   try {
     used = await rateLimited(key, env, ORDER_LIMIT, ORDER_WINDOW_MS, true);
@@ -1280,6 +1484,17 @@ async function handleCreateOrder(request, env, ctx) {
 
   const nowIso = new Date().toISOString();
 
+  // Who owns this one. Null when no rep is active - the order still lands, it
+  // just arrives unowned rather than being held back for a roster that is not
+  // staffed. The name is stored rather than the chat id, because removing a
+  // rep promises their past orders keep their name on them.
+  let rep = null;
+  try {
+    rep = await nextAssignee(env);
+  } catch (err) {
+    console.error('staff: assign failed');
+  }
+
   // Clip once, then use the same values for the row and for the document.
   // The invoice used to be rendered from the raw request body while D1 kept
   // clipped values, so the PDF and the admin panel could disagree about the
@@ -1305,18 +1520,21 @@ async function handleCreateOrder(request, env, ctx) {
     revised: 0,                    // the cart's own document is v1
     price_status: priceStatus,
     spec_key: specKey,
+    assigned_to: rep ? rep.name : null,
   };
 
   const info = await env.DB.prepare(
     `INSERT OR IGNORE INTO orders
       (order_number, received_at, order_type, name, phone, delivery, address, date_needed,
-       event_type, guests, service_type, items, total, notes, lines_json, price_status, spec_key)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       event_type, guests, service_type, items, total, notes, lines_json, price_status, spec_key,
+       assigned_to)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(
     stored.order_number, stored.received_at, stored.order_type, stored.name,
     stored.phone, stored.delivery, stored.address, stored.date_needed,
     stored.event_type, stored.guests, stored.service_type, stored.items,
-    stored.total, stored.notes, stored.lines_json, stored.price_status, stored.spec_key
+    stored.total, stored.notes, stored.lines_json, stored.price_status, stored.spec_key,
+    stored.assigned_to
   ).run();
 
   // changes === 0 means the order number already existed: logOrder's
@@ -1350,6 +1568,9 @@ async function handleCreateOrder(request, env, ctx) {
       `${stored.name || 'Customer'} - ${totalText}`,
       // The operator's cue that this one is not ready to forward.
       priceStatus === 'pending' ? 'PENDING PRICE REVIEW - set a price before sending.' : null,
+      // Same wording as the line on the PDF. Everyone in the group sees it;
+      // the rep whose name is on it knows the order is theirs to move.
+      assigneeLabel(stored.assigned_to, stored.received_at),
     ].filter(Boolean).join('\n');
 
     // Rendered from `stored`, the same values the row was written with, so

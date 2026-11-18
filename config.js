@@ -147,9 +147,9 @@ function logOrder(order, onResult){
   // text/plain keeps this a "simple" request, so the browser doesn't
   // need a CORS preflight before the order is sent.
   // The device id rides in the body, not a header: sendBeacon below cannot
- // set headers, and a beacon-sent order must be counted against the device
- // just like a fetched one. The Worker reads order.deviceId.
- const body = JSON.stringify({ ...order, deviceId: deviceId() });
+  // set headers, and a beacon-sent order must be counted against the device
+  // just like a fetched one. The Worker reads order.deviceId.
+  const body = JSON.stringify({ ...order, deviceId: deviceId() });
   const report = (err, info)=>{ if(typeof onResult === 'function') onResult(err || null, info || {}); };
   try{
     // sendBeacon is fire-and-forget: it reports nothing back, so it is only

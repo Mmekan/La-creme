@@ -45,19 +45,29 @@ function makeEnv({
   catalogue = MENU,
   throwOnCake = false,
   throwOnMenu = false,
+  throwOnStaff = false,
+  staff = [],
 } = {}) {
   const calls = [];
   const env = { calls };
+  // Only `settings` needs to remember, and only the rotation counter does.
+  const settings = new Map();
   const prepare = (sql) => ({
     bind: (...a) => {
       calls.push({ sql, args: a, bound: true });
       return {
-        run: async () => ({ meta: { changes: 1 } }),
+        run: async () => {
+          if (/INTO settings/.test(sql)) settings.set(a[0], a[1]);
+          return { meta: { changes: 1 } };
+        },
         // The rate limiter reads COUNT(*) through bind(); a bare [] made it
         // throw. Nothing has been counted yet, so 0 is the truthful answer.
         all: async () => ({ results: [{ n: 0 }] }),
         first: async () => {
           calls.push({ sql, args: a, bound: true, first: true });
+          if (/FROM settings WHERE key/.test(sql)) {
+            return settings.has(a[0]) ? { value: settings.get(a[0]) } : null;
+          }
           if (!/SELECT price FROM product_prices WHERE item_key/.test(sql)) return null;
           if (throwOnCake) throw new Error('d1 down');
           return cakePrice != null && a[0] === CAKE_KEY ? { price: cakePrice } : null;
@@ -65,9 +75,13 @@ function makeEnv({
       };
     },
     run: async () => ({ meta: { changes: 1 } }),
-    // The menu lookup is the one query issued without bind().
+    // The menu and staff lookups are the queries issued without bind().
     all: async () => {
       calls.push({ sql, args: [], bound: false });
+      if (/FROM staff WHERE active = 1/.test(sql)) {
+        if (throwOnStaff) throw new Error('d1 down');
+        return { results: staff };
+      }
       if (!/FROM product_prices/.test(sql)) return { results: [] };
       if (throwOnMenu) throw new Error('d1 down');
       const cakeExcluded = /category <>/ .test(sql);
@@ -102,6 +116,7 @@ async function post(made, over) {
     res,
     lines: JSON.parse(at('lines_json')),
     status: at('price_status'),
+    assignedTo: at('assigned_to'),
     // The version insert binds (order_number, created_at, lines_json,
     // total) — total is the last bound parameter.
     versionTotal: version ? Number(version.args[version.args.length - 1]) : null,
@@ -386,6 +401,40 @@ const spent = countedEnv(4);
   const ok = await mod.default.fetch(
     req('/api/orders', { method: 'POST', body: body({ lines: [] }) }), spent, nothing);
   eq('order 5 is still accepted', ok.status, 200);
+}
+
+/* ======================================================================
+   Staff rotation — the round robin over the roster
+   ====================================================================== */
+
+{
+  const staff = [{ chat_id: '111', name: 'Ada' }, { chat_id: '222', name: 'Bola' }];
+  const made = makeEnv({ staff });
+  const a = await post(made, { lines: [line({ d: 'Meat Pie' })] });
+  const b = await post(made, { lines: [line({ d: 'Meat Pie' })] });
+  const c = await post(made, { lines: [line({ d: 'Meat Pie' })] });
+  eq('the first order goes to the first rep', a.assignedTo, 'Ada');
+  eq('the second goes to the next rep', b.assignedTo, 'Bola');
+  eq('the third wraps back round', c.assignedTo, 'Ada');
+  eq('the name is stored, not the chat id', c.assignedTo !== '111', true);
+}
+
+{
+  // An empty roster is not an error: the order lands unowned.
+  const made = makeEnv();
+  const r = await post(made, { lines: [line({ d: 'Meat Pie' })] });
+  eq('no rep: the order is unassigned', r.assignedTo, null);
+  eq('no rep: the order is still accepted', r.res.status, 200);
+  eq('no rep: nothing is written to the rotation counter',
+    r.calls.filter((x) => /INTO settings/.test(x.sql)).length, 0);
+}
+
+{
+  // A broken roster must not cost a sale.
+  const made = makeEnv({ throwOnStaff: true });
+  const r = await post(made, { lines: [line({ d: 'Meat Pie' })] });
+  eq('roster read fails: the order is unassigned', r.assignedTo, null);
+  eq('roster read fails: the order is still accepted', r.res.status, 200);
 }
 
 console.log(`${pass} passed, ${fail} failed`);

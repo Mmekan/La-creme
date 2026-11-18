@@ -260,7 +260,7 @@ function money(n) {
 
 // UTC on purpose: received_at is written as an ISO string, and the
 // printed date must not shift with whoever's clock renders it.
-function fmtDate(iso) {
+export function fmtDate(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return String(iso || '').slice(0, 10);
   return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -283,6 +283,17 @@ function fmtDateText(value) {
     })
     .filter(Boolean)
     .join(', ');
+}
+
+// The one line that names a rep, shared by the PDF and the Telegram caption so
+// the two never word it differently. Plain ASCII per CLAUDE.md, and the date
+// comes from the order rather than from the moment of printing, so a re-sent
+// invoice does not claim to have been processed today. It lives here rather
+// than in index.js because the renderer needs it, and index.js already imports
+// from this file, not the other way round.
+export function assigneeLabel(name, receivedAt) {
+  if (!name) return null;
+  return `Processed by ${name} - ${fmtDate(receivedAt)}`;
 }
 
 // Spec §6.6: everything must render. These characters have no glyph in a
@@ -416,15 +427,17 @@ export function renderInvoice(order) {
 
   const header = (first) => {
     if (first) {
-      const lp = drawLogo(MARGIN, y - 40, 40);
-      const cx = MARGIN + lp + 16;
+      // No logo in the letterhead by the owner's request: the business
+      // name now starts at the left margin and owns that corner itself.
+      const cx = MARGIN;
 
       right(COL_AMT_R, y - 13, 'INVOICE', FONT_B, 15, RED);
       right(COL_AMT_R, y - 27, `No. ${o.order_number || ''}`, FONT_R, 9, BLACK);
       right(COL_AMT_R, y - 39, `Issued ${fmtDate(o.received_at)}`, FONT_R, 9, BLACK);
 
-      // The business name sits on the order-number line and shares the
-      // logo's left column, so the two sides of the header read as one band.
+      // The business name sits on the order-number line, at the left margin
+      // the logo used to occupy, so the two sides of the header read as one
+      // band.
       text(cx, y - 27, companyName, FONT_B, 17, RED);
       let cy = y - 41;
       const contactW = COL_AMT_R - cx - 150;
@@ -478,6 +491,10 @@ export function renderInvoice(order) {
       }
       const needed = fmtDateText(o.date_needed);
       if (needed) { text(MARGIN, y, `Needed: ${needed}`, FONT_R, 9, BLACK); y -= 11; }
+ // Blank on orders that predate the roster, and on any order taken while no
+ // rep was active - omitted rather than invented.
+ const rep = assigneeLabel(o.assigned_to, o.received_at);
+ if (rep) { text(MARGIN, y, rep, FONT_R, 9, BLACK); y -= 11; }
 
       y -= 6;
       hrule(y, MARGIN, COL_AMT_R, GOLD, 0.8);
