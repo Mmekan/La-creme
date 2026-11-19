@@ -78,8 +78,8 @@ Masonry-style grid with responsive column count (`columnsForWidth`, `layoutBlock
   development defaults only; `resolveSettings()` blanks any value that is
   empty or still a placeholder and reports it in `missing`, and the renderer
   stamps `BUSINESS DETAILS NOT CONFIGURED - DO NOT SEND TO CUSTOMER`.
-- **The business details live in D1 `settings`** (`projectstate.md`, BUG-2,
-  closed 2026-11-18). Never hardcode them, and never weaken the guard: a key
+- **The business details live in D1 `settings`** (`projectstate.md`, since
+  2026-11-18). Never hardcode them, and never weaken the guard: a key
   that is empty or still a development placeholder must blank and stamp
   DO NOT SEND rather than print a demo account.
 - `projectstate.md` is the single live memory file — update it after a task,

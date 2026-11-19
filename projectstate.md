@@ -62,7 +62,7 @@ a second run errors `duplicate column name`, which is expected and safe. A
 Verified against the remote: `orders` has `price_status`, `spec_key`,
 `lines_json`, `revised`; `settings` and `invoice_versions` exist with the
 expected columns; `product_prices` = 34 rows. `settings` holds the owner's
-real business details, so the DO NOT SEND band is gone (BUG-2 closed).
+real business details, so the DO NOT SEND band is gone.
 
 ### D4 — the site is Sonnet
 
@@ -144,16 +144,6 @@ quantity selectors on mobile paints a faint blue rectangle slightly *below*
 the tapped spot and selects nothing. Suspects: tap-highlight offset from the
 real hit area, or a listener on a wrapper that the visual sits outside of.
 Next step is an instrumented page on the owner's real device.
-
-## BUG-2 (resolved 2026-11-18): business details
-
-The owner supplied the bank name, account number, phone and address; they
-are in the D1 `settings` table (keys in `SETTING_KEYS`,
-`worker/invoice.js`), so `resolveSettings()` reports nothing missing and no
-invoice carries the red `DO NOT SEND TO CUSTOMER` band any more. The
-fail-safe itself stays: any key that is empty or still a development
-placeholder is blanked and re-stamps the band rather than printing a demo
-account.
 
 ---
 
