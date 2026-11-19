@@ -1,8 +1,8 @@
 # Project State — La Crème
 
-**Updated:** 2026-11-18 (D0 and D1 done; D2–D6 awaiting approval)
-**HEAD:** `f55d445` · branch `invoice-revision`, **19 commits ahead of
-`origin/invoice-revision`, unpushed** · `main` untouched and behind.
+**Updated:** 2026-11-19 (D0–D6 done; everything deployed)
+**HEAD:** `4c1504f` · `invoice-revision` pushed, `main` fast-forwarded to the
+same commit and live on Sonnet.
 
 This is the only live memory file. Update it after each task.
 
@@ -21,11 +21,26 @@ touch the remote and each needs explicit approval.**
 |---|---|---|
 | **D0** | Close the audit holes: auth fails closed, order rate limit, per-device gate | **done** (`fb3048d`, `02e1219`) |
 | D1 | Apply the three schema files to remote D1 | **done** 2026-11-18, verified |
-| D2 | `setWebhook` onto the existing secret | not started — needs approval |
-| D3 | Deploy the Worker | not started — needs approval |
-| D4 | Ship the static site | not started — it is Sonnet, git-connected (see below) |
-| D5 | One real end-to-end order | not started |
-| D6 | Push the branch; merging to `main` is what ships D4 | not started |
+| D2 | `setWebhook` onto the existing secret | **done** 2026-11-19, secret verified |
+| D3 | Deploy the Worker | **done** 2026-11-19 (`8681316e`) |
+| D4 | Ship the static site | **done** 2026-11-19 — `main` → Sonnet |
+| D5 | One real end-to-end order | **done** 2026-11-19 (below) |
+| D6 | Push the branch; merging to `main` is what ships D4 | **done** 2026-11-19 |
+
+### D2, D3, D5 — done 2026-11-19
+
+- **D2**: `setWebhook` reported "already set" to `.../api/tg/<secret>`; a
+  POST probe returned 200 for the right secret and 404 for a wrong one, so
+  the deployed secret matches.
+- **D3**: `wrangler deploy` → version `8681316e`; `/api/prices` and
+  `/api/gallery` return 200, `/api/orders` 401 unauthenticated.
+- **D5**: order `20261119-120000101-TT` (Meat Pie x2, sent with a bogus
+  `NGN 999,999` total) stored `price_status = priced`, and
+  `invoice_versions` v1 holds `total = 2000` from the catalogue — the
+  visitor's string was ignored. A second order (`...102-TT`) was replayed
+  under `wrangler tail`: outcome `ok`, status 200, no logged errors.
+  Delivery itself is the owner's to confirm; two PDFs should be in the
+  owner chat.
 
 ### D0 — what it covers
 
@@ -47,10 +62,9 @@ touch the remote and each needs explicit approval.**
   Telegram alert on every refusal.
 - Turnstile is fully configured: widget `la-creme-order-protection`, site
   key `0x4AAAAAAGG8LsW-btDaKwPe` at `index.js:1987`, and
-  `TURNSTILE_SECRET` set on the Worker. The key pair is real, but
-  **nothing can pass until D3 deploys the `verifyTurnstile()` code** —
-  the live Worker predates it, so a challenged visitor is stuck on the gate
-  and the WhatsApp link is their way through.
+  `TURNSTILE_SECRET` set on the Worker. The key pair is real and, since D3
+  (2026-11-19), the deployed Worker verifies it — a challenged visitor can
+  solve the challenge instead of being stuck on the gate.
 
 ### D1 — applied and verified 2026-11-18
 
@@ -84,10 +98,12 @@ LF throughout.
 
 ---
 
-## Remote state — measured 2026-11-16
+## Remote state — measured 2026-11-19
 
-**Last code deploy: 2026-10-09 11:41 UTC.** The live Worker has no PDF, no
-bot, and `/api/prices` returns 401.
+**Last code deploy: 2026-11-19** (`8681316e`). The live Worker now has the
+PDF, the bot and Turnstile: `/api/prices` and `/api/gallery` return 200,
+`/api/orders` 401 unauthenticated, and `/api/tg/<secret>` answers 200 for
+the right secret and 404 for a wrong one.
 
 **Remote D1 carries the invoice schema** (applied 2026-11-18): `orders`
 (with `price_status`, `spec_key`, `lines_json`, `revised`), `login_attempts`,
@@ -109,9 +125,8 @@ What is missing is deployment, not configuration — see D3.
 
 ## Open questions for the user
 
-1. **`TELEGRAM_INVOICE_CHAT_IDS`** — the owner's personal chat, or a
-   company/rep chat id? Blocks D2.
-2. **Go-ahead for D2 and D3** — both write to the remote.
+1. **`TELEGRAM_INVOICE_CHAT_IDS`** — still unset. Invoices reach the owner
+   through `TELEGRAM_OWNER_CHAT_IDS`; setting it adds the company/rep chat.
 
 ---
 
