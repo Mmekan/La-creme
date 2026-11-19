@@ -31,7 +31,9 @@ bucket_name = "la-creme-media"
 # wrangler wants the single [triggers] table here — [[triggers]] (array of
 # tables) fails config validation.
 [triggers]
-crons = ["23 3 * * *"]
+# 03:23 UTC retention sweep, and 23:00 UTC = 00:00 Lagos for the daily
+# order report (WAT is UTC+1, no DST).
+crons = ["23 3 * * *", "0 23 * * *"]
 
 # Secrets (never put these in this file), set with:
 #   npx wrangler secret put ADMIN_PASSWORD

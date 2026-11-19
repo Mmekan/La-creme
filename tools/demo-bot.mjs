@@ -105,7 +105,7 @@ let id = 9000;
 const next = () => ++id;
 
 // ---- The happy path, as an owner would do it ----
-await step('OWNER: /edit-invoice', msg(OWNER, OWNER, '/edit-invoice', next()));
+await step('OWNER: /editinvoice', msg(OWNER, OWNER, '/editinvoice', next()));
 await step(`OWNER: ${ORDER_CAKE}`, msg(OWNER, OWNER, ORDER_CAKE, next()));
 await step('OWNER: 1 = 45000  (proposes, does not save)', msg(OWNER, OWNER, '1 = 45000', next()));
 console.log('  ...DB before the button press:',
@@ -123,7 +123,7 @@ await step('OWNER: presses "Approve and send"', press(OWNER, OWNER, `q:approve:$
 
 // ---- A custom cake: no catalogue button, and approval is refused while unpriced ----
 await step('OPERATOR: /approve ' + ORDER_CUSTOM + '  (still unpriced)', msg(OPERATOR, OPERATOR, '/approve ' + ORDER_CUSTOM, next()));
-await step(`OPERATOR: /edit-invoice ${ORDER_CUSTOM}`, msg(OPERATOR, OPERATOR, '/edit-invoice ' + ORDER_CUSTOM, next()));
+await step(`OPERATOR: /editinvoice ${ORDER_CUSTOM}`, msg(OPERATOR, OPERATOR, '/editinvoice ' + ORDER_CUSTOM, next()));
 await step('OPERATOR: 1 = 120000', msg(OPERATOR, OPERATOR, '1 = 120000', next()));
 const opQuote = quoteFor(OPERATOR, OPERATOR);
 const opUpdate = next();
@@ -137,8 +137,8 @@ await step('Operator presses an already-used button', press(OPERATOR, OPERATOR, 
 // ---- Two admins, one chat, separate sessions ----
 // Both of these are sent from the SAME chat (333) by two different users, so
 // the reply labels cannot tell them apart — hence the titles.
-await step('OWNER (user 333, chat 333): /edit-invoice', msg(OWNER, OWNER, '/edit-invoice', next()));
-await step('OPERATOR (user 444, same chat 333): /edit-invoice', msg(OWNER, OPERATOR, '/edit-invoice', next()));
+await step('OWNER (user 333, chat 333): /editinvoice', msg(OWNER, OWNER, '/editinvoice', next()));
+await step('OPERATOR (user 444, same chat 333): /editinvoice', msg(OWNER, OPERATOR, '/editinvoice', next()));
 await step('OPERATOR: names a different order', msg(OWNER, OPERATOR, ORDER_CUSTOM, next()));
 console.log('  ...both sessions in chat 333:',
   JSON.stringify(d1(`SELECT user_id, step, order_no FROM bot_state WHERE chat_id='${OWNER}' ORDER BY user_id`)));

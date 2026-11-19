@@ -15,7 +15,12 @@ import {
   money, parseCommand, parseOrderNumber, parsePriceEntry, formatLines,
   formatPriceCard, formatApproveCard, newQuoteId, callbackData, parseCallbackData,
   catalogueKeyFor, catalogueLabel, isOwnerChat, parseUpdatePrice,
+  lagosDayWindow, dailyReportText,
 } from './bot.js';
+
+// 00:00 Lagos time. WAT is UTC+1 with no DST, so the cron is fixed at
+// 23:00 UTC and covers the Lagos day that just ended.
+const DAILY_REPORT_CRON = '0 23 * * *';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 30 * 1024;
@@ -260,7 +265,7 @@ async function sendDocument(env, chatId, bytes, filename, caption) {
   }
 }
 
-// @Lacremebotuyo's own id. It sits inside the bot token, so a mistyped env
+// @Lacremeuyobot's own id. It sits inside the bot token, so a mistyped env
 // var can land it in a recipient list, and every send to it fails. Filtered
 // out of the fan-out below rather than trusted not to be configured.
 const TELEGRAM_BOT_SELF_ID = '9049885698';
@@ -579,10 +584,10 @@ function auditStatement(env, entry) {
 
 const HELP_TEXT = [
   'Commands:',
-  '/edit-invoice - set a price on an order',
+  '/editinvoice - set a price on an order',
   '/approve - mark a priced invoice final',
   '/prices - list the catalogue (add a category, e.g. /prices soups)',
-  '/update-price - change a catalogue price (owner)',
+  '/updateprice - change a catalogue price (owner)',
   '/staff - who gets orders',
   '/cancel - abandon what you were doing',
 ].join('\n');
@@ -596,7 +601,7 @@ async function showOrderForEdit(env, chatId, userId, orderNumber) {
   const order = await loadOrder(env, orderNumber);
   if (!order) {
     await clearBotState(env, chatId, userId);
-    return sendChatMessage(env, chatId, `No order ${orderNumber}. Send /edit-invoice to try another.`);
+    return sendChatMessage(env, chatId, `No order ${orderNumber}. Send /editinvoice to try another.`);
   }
   const lines = parseStoredLines(order);
   const { unpriced } = summariseLines(lines);
@@ -777,7 +782,7 @@ async function handleBotMessage(env, chatId, userId, text) {
 
   const state = await getBotState(env, chatId, userId);
   if (state && state.expired) {
-    return sendChatMessage(env, chatId, 'That request timed out after 15 minutes. Send /edit-invoice to start again.');
+    return sendChatMessage(env, chatId, 'That request timed out after 15 minutes. Send /editinvoice to start again.');
   }
   if (!state) return sendChatMessage(env, chatId, HELP_TEXT);
 
@@ -816,7 +821,7 @@ async function handleBotMessage(env, chatId, userId, text) {
 async function priceCakeFromCatalogue(env, lines, specKey) {
   if (!Array.isArray(lines) || !lines.some(l => l && l.cake)) return null;
 
-  // The same key /edit-invoice's "Save price" writes, built by the one
+  // The same key /editinvoice's "Save price" writes, built by the one
   // helper that owns that format — not re-derived here.
   const key = catalogueKeyFor({ order_type: 'Cake', spec_key: specKey }, null);
   // Long keys cannot exist: the site clips specKey to 200 chars.
@@ -832,7 +837,7 @@ async function priceCakeFromCatalogue(env, lines, specKey) {
 }
 
 // Prints the catalogue as "key  NGN x" so the owner can copy a key straight
-// into /update-price. One category at a time: cake keys accumulate (one per
+// into /updateprice. One category at a time: cake keys accumulate (one per
 // distinct spec), so a single flat list would eventually outgrow a Telegram
 // message. MAX_CATALOGUE_LINES caps even that, since a category can grow too.
 const MAX_CATALOGUE_LINES = 40;
@@ -903,7 +908,7 @@ async function showCatalogue(env, chatId, category) {
   ).all();
   const rows = results || [];
   if (!rows.length) {
-    return sendChatMessage(env, chatId, 'The catalogue is empty. /update-price adds the first price.');
+    return sendChatMessage(env, chatId, 'The catalogue is empty. /updateprice adds the first price.');
   }
 
   const categories = [...new Set(rows.map(r => r.category))];
@@ -928,7 +933,7 @@ async function showCatalogue(env, chatId, category) {
     ...shown.map(r => `${r.item_key}  ${money(r.price)}`),
     ...(picked.length > shown.length ? [`... and ${picked.length - shown.length} more`] : []),
     '',
-    'Change one with /update-price <key> <price>, e.g. /update-price afang:10L 62000',
+    'Change one with /updateprice <key> <price>, e.g. /updateprice afang:10L 62000',
   ].join('\n'));
 }
 
@@ -1085,7 +1090,7 @@ async function handleBotCallback(env, chatId, userId, data) {
   if (!pressed) return;
 
   const state = await getBotState(env, chatId, userId);
-  const nothing = 'That button has expired or does not belong to this conversation. Send /edit-invoice to start again.';
+  const nothing = 'That button has expired or does not belong to this conversation. Send /editinvoice to start again.';
   if (!state || state.expired || state.step !== 'confirm' || !state.payload) {
     return sendChatMessage(env, chatId, nothing);
   }
@@ -1113,7 +1118,7 @@ async function applyPrice(env, chatId, userId, orderNumber, payload, scope) {
   const index = payload.index;
   if (index < 0 || index >= lines.length || lines[index].p !== payload.oldP) {
     await clearBotState(env, chatId, userId);
-    return sendChatMessage(env, chatId, 'That order changed while you were confirming. Nothing was saved - send /edit-invoice to start again.');
+    return sendChatMessage(env, chatId, 'That order changed while you were confirming. Nothing was saved - send /editinvoice to start again.');
   }
 
   let written = payload.newP;
@@ -1584,6 +1589,15 @@ const { total, unpriced, allPriced } = summariseLines(lines);
     // Rendered from `stored`, the same values the row was written with, so
     // the delivered PDF and the admin panel describe one order rather than
     // two versions of it (P-1).
+    // The worker chat hears about every order as it lands; the PDF goes to
+    // the invoice recipients separately. Fire-and-forget like the PDF, so
+    // a Telegram outage never costs the order.
+    ctx.waitUntil(sendChatMessage(env, env.TELEGRAM_CHAT_ID, [
+      `New order ${stored.order_number}`,
+      `${stored.name || 'Customer'}${stored.phone ? ' - ' + stored.phone : ''}`,
+      `${stored.order_type || 'order'}: ${totalText}`,
+    ].join('\n')));
+
     ctx.waitUntil(sendInvoiceToCompany(env, stored, caption));
   }
   return json({ ok: true });
@@ -1892,6 +1906,42 @@ async function handleRetryUpload(env, id) {
 // Approved and Pending are never candidates: a mis-click has to stay
 // recoverable for the full 30 days (see the comment on handleUpdateUpload),
 // and a Pending item is still waiting on review.
+// The day's orders for TELEGRAM_CHAT_ID. Totals come from each order's
+// latest invoice version, so the report agrees with the PDF and the admin
+// list rather than with the visitor's typed string.
+async function dailyReport(env) {
+  const span = lagosDayWindow();
+  // received_at is always an ISO string, so string comparison is correct.
+  const { results } = await env.DB.prepare(
+    `SELECT o.order_number, o.name, o.price_status,
+            (SELECT v.total FROM invoice_versions v
+              WHERE v.order_number = o.order_number
+              ORDER BY v.version DESC LIMIT 1) AS total
+       FROM orders o
+      WHERE o.received_at >= ? AND o.received_at < ?
+      ORDER BY o.received_at`
+  ).bind(span.start, span.end).all();
+  await sendChatMessage(env, env.TELEGRAM_CHAT_ID, dailyReportText(results || [], span));
+}
+
+// One entry point for both crons, so each schedule can be exercised on its
+// own without the other's side effects.
+export async function runScheduled(event, env, ctx) {
+  if (event && event.cron === DAILY_REPORT_CRON) {
+    try {
+      await dailyReport(env);
+    } catch (err) {
+      console.error('daily report failed:', err);
+    }
+    return;
+  }
+  try {
+    await retentionSweep(env);
+  } catch (err) {
+    console.error('retention sweep failed:', err);
+  }
+}
+
 async function retentionSweep(env) {
   // received_at is always written as new Date().toISOString(), so a plain
   // string comparison against another ISO-8601 cutoff is correct.
@@ -2010,10 +2060,6 @@ export default {
   // always flushed to this invocation's logs before it returns; the catch
   // keeps an unexpected throw from becoming an unhandled rejection.
   async scheduled(event, env, ctx) {
-    try {
-      await retentionSweep(env);
-    } catch (err) {
-      console.error('retention sweep failed:', err);
-    }
+    await runScheduled(event, env, ctx);
   },
 };

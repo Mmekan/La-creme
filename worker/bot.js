@@ -49,7 +49,52 @@ export function money(n) {
   return 'NGN ' + String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-// "/edit-invoice@Mekabot 20261109-131600456-TB" -> { command, args }.
+// WAT is UTC+1 all year and has never observed DST, so the Lagos day is
+// fixed arithmetic, not a timezone lookup. The window is the Lagos calendar
+// day that ended at `now`; the report fires at 00:00 Lagos (23:00 UTC), so
+// at run time `now` sits on the next day's boundary.
+export const LAGOS_OFFSET_MS = 60 * 60 * 1000;
+
+// A cron that fires a minute early must still report the day it was aimed
+// at, so the boundary is read as if the run were slightly in the future.
+const LAGOS_RUN_GRACE_MS = 2 * 60 * 1000;
+
+export function lagosDayWindow(now = new Date()) {
+  const lagos = new Date(now.getTime() + LAGOS_OFFSET_MS + LAGOS_RUN_GRACE_MS);
+  const startOfToday = Date.UTC(lagos.getUTCFullYear(), lagos.getUTCMonth(), lagos.getUTCDate());
+  const startOfDay = startOfToday - 24 * 60 * 60 * 1000;
+  return {
+    start: new Date(startOfDay - LAGOS_OFFSET_MS).toISOString(),
+    end: new Date(startOfToday - LAGOS_OFFSET_MS).toISOString(),
+    day: new Date(startOfDay).toISOString().slice(0, 10),
+  };
+}
+
+// The day's orders as one message. Each row carries the latest invoice
+// total (null when none was written) and the order's price_status.
+// Capped so a freak day cannot push the text past Telegram's 4096 limit.
+export const DAILY_REPORT_MAX_LINES = 30;
+
+export function dailyReportText(rows, span) {
+  const list = (Array.isArray(rows) ? rows : []).filter(Boolean);
+  const head = `Daily report - ${span.day}`;
+  if (!list.length) return `${head}\n\nNo orders today.`;
+  const priced = list.filter(r => r.price_status === 'priced' && r.total != null);
+  const revenue = priced.reduce((sum, r) => sum + Number(r.total || 0), 0);
+  const shown = list.slice(0, DAILY_REPORT_MAX_LINES);
+  return [
+    head,
+    `${list.length} order${list.length === 1 ? '' : 's'}, ${priced.length} priced` +
+      (list.length > priced.length ? `, ${list.length - priced.length} pending` : ''),
+    `Revenue: ${money(revenue)}`,
+    '',
+    ...shown.map(r => `${r.order_number} - ${r.name || 'no name'} - ` +
+      (r.price_status === 'priced' && r.total != null ? money(r.total) : 'price pending')),
+    list.length > shown.length ? `+${list.length - shown.length} more` : null,
+  ].filter(v => v !== null).join('\n');
+}
+
+// "/editinvoice@Lacremeuyobot 20261109-131600456-TB" -> { command, args }.
 // The @suffix is how Telegram addresses a bot in a group, and the command
 // must still be recognised there.
 export function parseCommand(text) {
@@ -147,7 +192,7 @@ export function formatApproveCard({ orderNo, total, version, unpriced }) {
       `CANNOT APPROVE YET - ${unpriced.length} line${unpriced.length > 1 ? 's are' : ' is'} still unpriced:`,
       ...unpriced.map(n => `- line ${n}`),
       ``,
-      'Set those prices first with /edit-invoice.',
+      'Set those prices first with /editinvoice.',
     ].join('\n');
   }
   return [...head, ``, 'Approving marks this invoice final and sends the PDF again.'].join('\n');
@@ -178,25 +223,25 @@ export function catalogueKeyFor(order, line) {
   return `cake:${order.spec_key}`;
 }
 
-// Spec §8: /update-price is owner-tier only. Chat-id based, like every other
+// Spec §8: /updateprice is owner-tier only. Chat-id based, like every other
 // bot authorisation — a group does not inherit admin rights by membership.
 export function isOwnerChat(env, chatId) {
   return parseInvoiceChatIds(env && env.TELEGRAM_OWNER_CHAT_IDS).includes(String(chatId));
 }
 
-// `/update-price afang:10L 1 = 62000` → one catalogue row to write, or an
+// `/updateprice afang:10L 1 = 62000` → one catalogue row to write, or an
 // error. Mirrors parsePriceEntry's grammar so operators type one format:
 // "key price" with an optional "n =" in front, and "-" to clear.
 export function parseUpdatePrice(args) {
   const s = String(args || '').trim();
-  if (!s) return { error: `Send it as: /update-price afang:10L 1 = 62000${UPDATE_PRICE_HINT}` };
+  if (!s) return { error: `Send it as: /updateprice afang:10L 1 = 62000${UPDATE_PRICE_HINT}` };
   // "<key>", then the price, which may carry parsePriceEntry's optional
   // "<n> =" prefix. The key is taken as typed, NOT lowercased: it is a
   // lookup into product_prices ('afang:10L'), and "afang:10l" would just
   // report "no such item".
   const [key, ...priceParts] = s.split(/\s+/);
   const rest = priceParts.join(' ').replace(/^\d{1,3}\s*=\s*/, '');
-  if (!rest) return { error: `Send it as: /update-price afang:10L 62000${UPDATE_PRICE_HINT}` };
+  if (!rest) return { error: `Send it as: /updateprice afang:10L 62000${UPDATE_PRICE_HINT}` };
 
   const itemKey = key;
   const index = 1;

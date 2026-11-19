@@ -72,7 +72,7 @@ if (!OFFLINE) {
     body: JSON.stringify({
       // Unique per run: the Worker de-duplicates updates by id.
       update_id: Date.now(),
-      message: { message_id: 1, from: { id: 999 }, chat: { id: 999 }, text: '/update-price afang:10L 70000' },
+      message: { message_id: 1, from: { id: 999 }, chat: { id: 999 }, text: '/updateprice afang:10L 70000' },
     }),
   });
   if (tg.status !== 200) { console.error(`webhook returned ${tg.status}`); process.exit(1); }
@@ -130,7 +130,7 @@ if (OFFLINE) {
   eq('the page loaded with no errors', pageErrors, []);
 
   // The seeded catalogue says 30/60k; the seed test below changes 10L to
-  // 70,000 with /update-price before running this.
+  // 70,000 with /updateprice before running this.
   const afangChip = page.locator('.menu-item[data-item-id="afang"] [data-role="size"] .liter-chip[data-label="10L"]');
   eq('Afang 10L shows the catalogue figure', (await afangChip.textContent()).trim(), '10L (₦70,000)');
   const egusiChip = page.locator('.menu-item[data-item-id="egusi"] [data-role="size"] .liter-chip[data-label="10L"]');

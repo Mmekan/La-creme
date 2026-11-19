@@ -15,10 +15,12 @@ const eq = (name, got, want) => {
 };
 
 // --- commands -----------------------------------------------------------
-eq('command plain', B.parseCommand('/edit-invoice'), { command: 'edit-invoice', args: '' });
+eq('command plain', B.parseCommand('/editinvoice'), { command: 'editinvoice', args: '' });
 eq('command @suffix in groups', B.parseCommand('/approve@Mekabot 20261109-131600456-TB'),
   { command: 'approve', args: '20261109-131600456-TB' });
 eq('command text is not a command', B.parseCommand('hello'), null);
+eq('update command is one word', B.parseCommand('/updateprice afang:10L 62000'),
+  { command: 'updateprice', args: 'afang:10L 62000' });
 
 // --- price entry --------------------------------------------------------
 eq('price plain', B.parsePriceEntry('2 = 4500'), { index: 2, price: 4500 });
@@ -93,6 +95,27 @@ eq('second owner chat allowed', B.isOwnerChat(ownerEnv, '555'), true);
 eq('invoice-only chat refused', B.isOwnerChat({ TELEGRAM_INVOICE_CHAT_IDS: '999' }, '999'), false);
 eq('no owner list refuses everyone', B.isOwnerChat({}, '-100123'), false);
 eq('no env refuses everyone', B.isOwnerChat(undefined, '-100123'), false);
+
+// --- daily report --------------------------------------------------------
+// 23:00 UTC is 00:00 Lagos the next morning: the window must be the Lagos
+// day that just ended, expressed back in UTC.
+const w = B.lagosDayWindow(new Date('2026-11-19T23:00:00.000Z'));
+eq('window starts at Lagos midnight', w.start, '2026-11-18T23:00:00.000Z');
+eq('window ends at Lagos midnight', w.end, '2026-11-19T23:00:00.000Z');
+eq('window labels the Lagos day', w.day, '2026-11-19');
+const wEarly = B.lagosDayWindow(new Date('2026-11-19T22:59:00.000Z'));
+eq('a run a minute early covers the same day', wEarly, w);
+
+const row = (over = {}) => ({
+  order_number: '20261119-120000101-TT', name: 'Ada', price_status: 'priced', total: 8000, ...over,
+});
+eq('empty day says so', B.dailyReportText([], w), 'Daily report - 2026-11-19\n\nNo orders today.');
+eq('one priced order', B.dailyReportText([row()], w),
+  'Daily report - 2026-11-19\n1 order, 1 priced\nRevenue: NGN 8,000\n\n20261119-120000101-TT - Ada - NGN 8,000');
+eq('pending orders are not revenue', B.dailyReportText([row(), row({ order_number: 'X', price_status: 'pending', total: null })], w),
+  'Daily report - 2026-11-19\n2 orders, 1 priced, 1 pending\nRevenue: NGN 8,000\n\n20261119-120000101-TT - Ada - NGN 8,000\nX - Ada - price pending');
+const many = Array.from({ length: B.DAILY_REPORT_MAX_LINES + 2 }, (_, i) => row({ order_number: 'N' + i }));
+eq('a long day is capped', B.dailyReportText(many, w).endsWith('+2 more'), true);
 
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

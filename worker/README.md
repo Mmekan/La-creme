@@ -23,7 +23,7 @@ npx wrangler d1 execute la-creme-orders --remote --file=schema-pricing.sql
 npx wrangler d1 execute la-creme-orders --remote --file=schema-bot.sql
 npx wrangler secret put ADMIN_PASSWORD     # the password you'll log in with
 npx wrangler secret put SESSION_SECRET     # any long random string
-npx wrangler secret put TELEGRAM_BOT_TOKEN # Mekabot
+npx wrangler secret put TELEGRAM_BOT_TOKEN # @Lacremeuyobot (id 9049885698) - NOT Mekabot
 npx wrangler secret put TELEGRAM_CHAT_ID   # upload alerts
 npx wrangler secret put TELEGRAM_INVOICE_CHAT_IDS  # invoices, comma-separated chat ids
 npx wrangler secret put TELEGRAM_OWNER_CHAT_IDS    # owner chats, also invoiced

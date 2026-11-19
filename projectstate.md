@@ -11,8 +11,8 @@ This is the only live memory file. Update it after each task.
 ## Where the work stands
 
 Phases 0–6 (the customer's 14-item change list) and R1–R3.5 (PDF invoice,
-pricing, bot) are **built and committed**. Nothing is deployed: the live
-Worker is the 2026-10-09 build and predates all of it.
+pricing, bot) are **built, committed and deployed** — the live Worker is the
+2026-11-19 build (`8681316e`), and the site on `main` is the same commit.
 
 Work is now organised as a deployment plan, D0 → D6. **D0 was local; D1–D6
 touch the remote and each needs explicit approval.**
@@ -41,6 +41,39 @@ touch the remote and each needs explicit approval.**
   under `wrangler tail`: outcome `ok`, status 200, no logged errors.
   Delivery itself is the owner's to confirm; two PDFs should be in the
   owner chat.
+
+### Daily report + instant order notifications — 2026-11-19
+
+Both go to `TELEGRAM_CHAT_ID` (the owner's chat). The invoice recipients are
+untouched: the PDF still goes to the staff roster plus
+`TELEGRAM_INVOICE_CHAT_IDS` / `TELEGRAM_OWNER_CHAT_IDS`.
+
+- **Instant notification**: every stored order posts one short message
+  (number, name + phone, order type + the same total text the PDF caption
+  uses) from `handleCreateOrder`, fire-and-forget beside the PDF send.
+- **Daily report**: cron `0 23 * * *` = 00:00 Africa/Lagos (WAT is UTC+1, no
+  DST) covers the **complete previous Lagos day**. Totals come from each
+  order's latest `invoice_versions` row, so the report agrees with the PDF
+  and the admin list, not with the visitor's typed string. Capped at 30
+  lines with a `+N more` tail.
+- `lagosDayWindow()` reads the boundary with a 2-minute forward bias, so a
+  cron that fires slightly early still reports the day it was aimed at.
+- **The 03:23 UTC retention sweep is unchanged** and still runs.
+- `runScheduled(event, env, ctx)` dispatches on `event.cron`; an unknown
+  cron falls through to the sweep, never to the report.
+- `tools/test-cron.mjs` runs each schedule on its own and asserts the other
+  one's work did not happen (report sends one message and never touches
+  `upload_items`; sweep touches `upload_items` and sends nothing).
+
+**Command renames**: `/edit-invoice` → `/editinvoice`, `/updateprice` for
+the price command. The hyphen was never the fault — the reply went to the
+wrong bot because the Worker's `TELEGRAM_BOT_TOKEN` held another bot's
+token (see below) — but the owner wants one-word commands throughout.
+
+**Token fix**: `TELEGRAM_BOT_TOKEN` was replaced with the `@Lacremeuyobot`
+token (id `9049885698`) from `worker/.dev.vars`. The repo's own README had
+told the operator to install "Mekabot"'s token, which is why replies landed
+in an unrelated bot's chat. Not yet re-verified with a live reply.
 
 ### D0 — what it covers
 
@@ -119,7 +152,7 @@ The webhook verifies against the secret now, so D2 is only `setWebhook`.
 What is missing is deployment, not configuration — see D3.
 
 **Never use `9049885698` as an invoice recipient** — that is
-`@Lacremebotuyo` itself, and a bot cannot send a document to itself.
+`@Lacremeuyobot` itself, and a bot cannot send a document to itself.
 
 ---
 
