@@ -78,9 +78,17 @@ Bot commands, for chats in `TELEGRAM_INVOICE_CHAT_IDS` or
 
 | Command | What it does |
 |---|---|
-| `/edit-invoice` | Asks for an order number, lists its lines, then accepts `2 = 4500` (or `2 = -` for unpriced). Nothing is written until the confirmation card's button is pressed |
+| `/editinvoice` | Asks for an order number, lists its lines, then accepts `2 = 4500` (or `2 = -` for unpriced). Nothing is written until the confirmation card's button is pressed |
 | `/approve` | Marks a fully-priced invoice final and resends the PDF. Refused while any line is unpriced |
+| `/updateprice` | Owner only. Changes what every future order costs: `/updateprice <key> <price>` |
 | `/cancel` | Abandons the current step |
+
+Staff who are not yet authorised send `/join` (optionally `/join <name>`); the
+bot forwards their chat id to the owner, who runs `/approve <chat_id> <name>`.
+The owner cannot join or approve their own chat id, an owner chat cannot be
+added to the roster, and a rep already on the roster is told so instead of
+being added twice. `/staff` lists the roster and `/remove <chat_id>` drops
+someone from it.
 
 A price change offers **Save price** (order + `product_prices`, so the next
 identical cake is priced too) or **This order only**. Custom and wedding cakes

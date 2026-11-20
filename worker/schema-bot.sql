@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_order ON audit_log(order_number);
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at DESC);
 
 -- Spec §5.3. R2.4 needs this so "Save price" can remember a price for the
--- next identical order; R3 adds GET /api/prices and /update-price on top.
+-- next identical order; R3 adds GET /api/prices and /updateprice on top.
 -- Creating the table here changes no site behaviour on its own.
 CREATE TABLE IF NOT EXISTS product_prices (
   item_key   TEXT PRIMARY KEY,       -- 'cake:<spec_key>', 'afang:5L', 'sc-plate-standard'

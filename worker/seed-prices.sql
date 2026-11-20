@@ -2,7 +2,7 @@
 -- nothing on day one. Requires schema-bot.sql (it creates the table).
 --
 -- INSERT OR IGNORE, so re-running never overwrites a price the owner has
--- since changed with /update-price; delete a row to re-seed it.
+-- since changed with /updateprice; delete a row to re-seed it.
 --
 -- Labels are matched word-for-word against the invoice line description
 -- (R3.4d), so a label must not carry words the site never prints. The

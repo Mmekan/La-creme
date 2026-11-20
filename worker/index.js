@@ -634,6 +634,14 @@ async function handleJoinRequest(env, chatId, args) {
     return sendChatMessage(env, chatId,
       'You are already on the roster as ' + already.name + '. Orders are sent to you here.');
   }
+  // The owner approves requests — asking to join their own roster is a
+  // misunderstanding, not a request. Answer it where it was asked instead
+  // of forwarding it to themselves.
+  if (isOwnerChat(env, chatId)) {
+    return sendChatMessage(env, chatId,
+      'You are the owner — no approval needed.\n\nYour chat id: ' + chatId +
+      '\nNew orders already reach you here.');
+  }
 
   const owners = parseInvoiceChatIds(env.TELEGRAM_OWNER_CHAT_IDS)
     .filter(id => String(id) !== TELEGRAM_BOT_SELF_ID);
@@ -673,9 +681,25 @@ async function approveStaff(env, chatId, staffChatId, rawName) {
   const name = String(rawName || '').trim().slice(0, MAX_STAFF_NAME);
   if (!name) return sendChatMessage(env, chatId, 'Give them a name: /approve <chat_id> <name>');
 
+  // Approving yourself adds a duplicate identity, not a rep: you are
+  // already the owner, and every order already reaches you here.
+  if (String(staffChatId) === String(chatId)) {
+    return sendChatMessage(env, chatId,
+      'That is your own chat id — you are already the owner. Give the rep\'s chat id instead: /approve <chat_id> <name>');
+  }
+  // An owner chat on the roster would receive every order twice (once as
+  // staff, once as owner) and could approve its own join request.
+  if (isOwnerChat(env, staffChatId)) {
+    return sendChatMessage(env, chatId,
+      staffChatId + ' is an owner chat — owners already get every order, no approval needed.');
+  }
   const roster = await loadStaff(env);
-  const known = roster.some(s => String(s.chat_id) === String(staffChatId));
-  if (!known && roster.length >= MAX_STAFF) {
+  const known = roster.find(s => String(s.chat_id) === String(staffChatId));
+  if (known) {
+    return sendChatMessage(env, chatId,
+      known.name + ' (' + staffChatId + ') is already on the roster. To rename them, run /approve ' + staffChatId + ' <new name>.');
+  }
+  if (roster.length >= MAX_STAFF) {
     return sendChatMessage(env, chatId,
       'The roster is full (' + MAX_STAFF + '). Remove someone with /remove <chat_id> first.');
   }
@@ -739,7 +763,9 @@ async function handleBotMessage(env, chatId, userId, text) {
       await clearBotState(env, chatId, userId);
       return sendChatMessage(env, chatId, 'Cancelled. Nothing was changed.');
     }
-    if (cmd.command === 'edit-invoice') {
+    // 'edit-invoice' is the retired spelling, kept so old muscle memory
+    // still works; the help text only advertises /editinvoice.
+    if (cmd.command === 'editinvoice' || cmd.command === 'edit-invoice') {
       const no = cmd.args ? parseOrderNumber(cmd.args) : null;
       if (cmd.args && !no) return sendChatMessage(env, chatId, 'That does not look like an order number.');
       if (no) return showOrderForEdit(env, chatId, userId, no);
@@ -748,10 +774,13 @@ async function handleBotMessage(env, chatId, userId, text) {
     }
     if (cmd.command === 'approve') {
       // /approve <chat_id> <name> adds a rep; /approve <order number> runs the
-      // invoice flow below. Tested first because a chat id is never a valid
-      // order number, so the two can never be confused.
+      // invoice flow below. The staff branch is tested first and decided by
+      // shape alone: digits plus a name can only be a chat id (a bare order
+      // number never has a space after it). parseOrderNumber must NOT be the
+      // test here — its shape accepts bare digits, which would send every
+      // numeric chat id down the invoice path instead.
       const staffArg = /^(-?\d{5,20})\s+(.+)$/.exec(String(cmd.args || '').trim());
-      if (staffArg && !parseOrderNumber(staffArg[1])) {
+      if (staffArg) {
         return approveStaff(env, chatId, staffArg[1], staffArg[2]);
       }
       const no = cmd.args ? parseOrderNumber(cmd.args) : null;
@@ -763,7 +792,8 @@ async function handleBotMessage(env, chatId, userId, text) {
     if (cmd.command === 'prices') {
       return showCatalogue(env, chatId, cmd.args);
     }
-    if (cmd.command === 'update-price') {
+    // Same retired-spelling deal as edit-invoice above.
+    if (cmd.command === 'updateprice' || cmd.command === 'update-price') {
       // Owner-only (spec §8). The invoice tier may price one order; only the
       // owner may change what every future order costs.
       if (!isOwnerChat(env, chatId)) {

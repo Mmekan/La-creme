@@ -117,5 +117,139 @@ eq('pending orders are not revenue', B.dailyReportText([row(), row({ order_numbe
 const many = Array.from({ length: B.DAILY_REPORT_MAX_LINES + 2 }, (_, i) => row({ order_number: 'N' + i }));
 eq('a long day is capped', B.dailyReportText(many, w).endsWith('+2 more'), true);
 
+// --- dispatch: handleBotMessage through the real webhook path -------------
+// Drives the Worker's default export with a signed /api/tg/<secret> POST,
+// exactly as Telegram delivers it: secret in the path, work after the ack.
+// sendChatMessage has no token here, so replies print instead of sending —
+// capture the first line (console.log `telegram(skip) <chat> <first line>`)
+// to assert on what the operator would have read.
+const worker = (await import('../worker/index.js')).default;
+
+// Real Telegram chat ids are 9-10 digits; STAFF_ID_RE demands 5-20, so the
+// fixtures use realistic lengths throughout.
+const OWNER = '555111222';
+const REP = '777333444';
+const STRANGER = '999444333';
+const INVOICE = '888222111';
+const makeTgEnv = (over = {}) => ({
+  TELEGRAM_WEBHOOK_SECRET: 's3cret',
+  TELEGRAM_OWNER_CHAT_IDS: OWNER,
+  DB: {
+    prepare: (sql) => ({
+      bind: (...args) => ({
+        all: async () => ({ results: over.staff || [] }),
+        first: async () => (over.order && /FROM orders/.test(sql) ? over.order : null),
+        run: async () => ({ meta: { changes: 1 } }),
+      }),
+      all: async () => ({ results: over.staff || [] }),
+      first: async () => (over.order && /FROM orders/.test(sql) ? over.order : null),
+      run: async () => ({ meta: { changes: over.changes == null ? 1 : over.changes } }),
+    }),
+    batch: async () => {},
+  },
+  ...over.extra,
+});
+
+const tgReplies = [];
+const origLog = console.log;
+const updateId = { n: 5000 };
+async function sendTg(text, { chatId = OWNER, userId = OWNER, tgEnv } = {}) {
+  const env = tgEnv || makeTgEnv();
+  tgReplies.length = 0;
+  console.log = (...a) => {
+    const m = /^telegram\(skip\) (\S+) (.*)/.exec(String(a[0]));
+    if (m) tgReplies.push({ chat: m[1], first: m[2] });
+    else origLog(...a);
+  };
+  let res;
+  try {
+    const body = JSON.stringify({
+      update_id: updateId.n++,
+      message: { chat: { id: Number(chatId) }, from: { id: Number(userId) }, text },
+    });
+    const req = new Request('https://x/api/tg/s3cret', { method: 'POST', body });
+    // The webhook acks first and works after it via ctx.waitUntil: collect
+    // the detached promise and await it, or assertions race the reply.
+    const pending = [];
+    res = await worker.fetch(req, env, { waitUntil: (p) => { pending.push(p); return p; } });
+    await Promise.all(pending);
+  } finally {
+    console.log = origLog;
+  }
+  return { status: res.status, replies: [...tgReplies] };
+}
+const firstLines = (r) => r.replies.map((x) => x.first);
+
+// /editinvoice parks an 'order' conversation; the old spelling still works.
+{
+  const r = await sendTg('/editinvoice');
+  eq('editinvoice asks for the order', firstLines(r), ['Which order? Send the order number, e.g. 20261109-131600456-TB.']);
+}
+{
+  const r = await sendTg('/edit-invoice');
+  eq('retired edit-invoice still asks for the order', firstLines(r), ['Which order? Send the order number, e.g. 20261109-131600456-TB.']);
+}
+// /updateprice with no args shows the catalogue prompt, not the help text.
+{
+  const tgEnv = makeTgEnv({ staff: [], extra: {} });
+  const r = await sendTg('/updateprice', { tgEnv });
+  eq('updateprice opens the catalogue flow', firstLines(r), ['The catalogue is empty. /updateprice adds the first price.']);
+}
+{
+  const r = await sendTg('/update-price');
+  eq('retired update-price opens the catalogue flow', firstLines(r), ['The catalogue is empty. /updateprice adds the first price.']);
+}
+// A stranger never reaches the command at all — the auth gate fires first.
+{
+  const tgEnv = makeTgEnv();
+  const r = await sendTg('/updateprice afang:10L 62000', { chatId: STRANGER, userId: STRANGER, tgEnv });
+  eq('stranger is refused before dispatch', firstLines(r), ['This bot is not authorised to discuss orders here.']);
+}
+// An authorised invoice-tier chat is refused the catalogue flow itself.
+{
+  const tgEnv = makeTgEnv({ staff: [], extra: { TELEGRAM_INVOICE_CHAT_IDS: INVOICE } });
+  const r = await sendTg('/updateprice afang:10L 62000', { chatId: INVOICE, userId: INVOICE, tgEnv });
+  eq('non-owner cannot updateprice', firstLines(r), ['Only the owner can change catalogue prices.']);
+}
+
+// --- join/approve identity guards ----------------------------------------
+const staffEnv = (staff) => makeTgEnv({ staff: staff.map((s) => ({ chat_id: s[0], name: s[1] })) });
+// Staff re-join: no new request goes to the owner.
+{
+  const tgEnv = staffEnv([[REP, 'Ada']]);
+  const r = await sendTg('/join', { chatId: REP, userId: REP, tgEnv });
+  eq('staff re-join is recognised', firstLines(r), ['You are already on the roster as Ada. Orders are sent to you here.']);
+}
+// Owner self-join: answered in place, nothing forwarded to themselves.
+{
+  const tgEnv = staffEnv([]);
+  const r = await sendTg('/join Boss', { tgEnv });
+  eq('owner self-join needs no approval', firstLines(r), ['You are the owner — no approval needed.']);
+}
+// Owner self-approve: rejected before touching the roster.
+{
+  const tgEnv = staffEnv([]);
+  const r = await sendTg(`/approve ${OWNER} Boss`, { tgEnv });
+  eq('owner cannot approve themselves', firstLines(r), [`That is your own chat id — you are already the owner. Give the rep's chat id instead: /approve <chat_id> <name>`]);
+}
+// Approving a second owner chat: rejected, they already get everything.
+{
+  const tgEnv = makeTgEnv({ staff: [], extra: { TELEGRAM_OWNER_CHAT_IDS: `${OWNER}, 556111222`, TELEGRAM_WEBHOOK_SECRET: 's3cret' } });
+  const r = await sendTg('/approve 556111222 Rep', { tgEnv });
+  eq('owner chat needs no roster spot', firstLines(r), ['556111222 is an owner chat — owners already get every order, no approval needed.']);
+}
+// Approving an enrolled rep again: named, not duplicated; rename path shown.
+{
+  const tgEnv = staffEnv([[REP, 'Ada']]);
+  const r = await sendTg(`/approve ${REP} Ada`, { tgEnv });
+  eq('double approve names the existing rep', firstLines(r), [`Ada (${REP}) is already on the roster. To rename them, run /approve ${REP} <new name>.`]);
+}
+// Approving a fresh rep still notifies the rep.
+{
+  const tgEnv = staffEnv([]);
+  const r = await sendTg(`/approve ${REP} Ada`, { tgEnv });
+  eq('fresh approve welcomes the rep', firstLines(r).includes('You have been added to the roster as Ada. Orders will be sent to you here.'), true);
+}
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
